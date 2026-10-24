@@ -1,5 +1,8 @@
 name: Build APK
 
+permissions:
+  contents: write
+
 on:
   push:
   workflow_dispatch:
@@ -38,6 +41,14 @@ jobs:
             exit $RC
           fi
 
+      - name: Build 32-bit stub (lets the APK install on armeabi-v7a devices)
+        continue-on-error: true
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi26-clang"
+          mkdir -p app/src/main/jniLibs/armeabi-v7a
+          "$CC" -shared -fPIC -O2 -o app/src/main/jniLibs/armeabi-v7a/libstub32.so native/stub32.c
+
       - name: Build OpenAL Soft (arm64)
         continue-on-error: true
         run: |
@@ -71,3 +82,21 @@ jobs:
         with:
           name: ${{ env.NAME }}
           path: out/*.apk
+
+      - name: GitHub release (important versions only)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="$(cat VERSION | tr -d '[:space:]')"
+          TAG="AKP-$VER"
+          if [ -f RELEASE_NOTES.md ] && head -1 RELEASE_NOTES.md | grep -qx "version: $VER"; then
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "release $TAG already exists"
+            else
+              tail -n +2 RELEASE_NOTES.md > /tmp/notes.md
+              gh release create "$TAG" "out/$NAME.apk" --target "$GITHUB_SHA" --title "Mobilix Launcher $VER" --notes-file /tmp/notes.md
+            fi
+          else
+            echo "no release notes for $VER, skipping release"
+          fi

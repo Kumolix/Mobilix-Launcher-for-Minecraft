@@ -11,7 +11,7 @@ android {
         applicationId = "dev.mclauncher"
         minSdk = 28
         targetSdk = 28
-        versionCode = 22
+        versionCode = 23
         versionName = rootProject.file("VERSION").readText().trim()
     }
 

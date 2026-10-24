@@ -235,7 +235,11 @@ class MainActivity : Activity() {
         root.addView(playBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)))
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             playBtn.isEnabled = false
-            Toast.makeText(this, tr("Нужен 64-битный процессор (arm64). На этом устройстве игра не запустится.", "A 64-bit (arm64) CPU is required. The game cannot run on this device."), Toast.LENGTH_LONG).show()
+            android.app.AlertDialog.Builder(this)
+                .setTitle(tr("Устройство не поддерживается", "Device not supported"))
+                .setMessage(tr("Нужна 64-битная система (arm64). Здесь работает 32-битная, поэтому Minecraft (Java 21) запустить нельзя. Лаунчер откроется, но кнопка «Играть» отключена.",
+                    "A 64-bit (arm64) system is required. This device runs a 32-bit one, so Minecraft (Java 21) cannot start. The launcher opens, but Play is disabled."))
+                .setPositiveButton("OK", null).show()
         } else {
             val es = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).deviceConfigurationInfo.reqGlEsVersion
             if (es < 0x30002) Toast.makeText(this, tr("Видеочип поддерживает OpenGL ES ниже 3.2: игра может не запуститься или работать плохо.", "GPU supports OpenGL ES below 3.2: the game may not run or may run poorly."), Toast.LENGTH_LONG).show()
@@ -425,6 +429,11 @@ class MainActivity : Activity() {
             prefs.edit().putString("theme", if (i == 1) "light" else "dark").apply()
             recreate()
         })
+        col.addView(TextView(this).apply { text = tr("Многопоточная загрузка", "Multi-threaded download"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("multiDl", true)) 1 else 0) { i ->
+            prefs.edit().putBoolean("multiDl", i == 1).apply()
+        })
+        col.addView(note(tr("Скачивает файлы игры в 16 потоков вместо 3: намного быстрее. Если интернет нестабилен или появляются ошибки загрузки, выключите.", "Downloads game files in 16 threads instead of 3: much faster. Turn off if your connection is unstable or downloads fail.")))
         col.addView(TextView(this).apply { text = tr("Управление движением", "Movement control"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Крестовина (WASD)", "D-pad (WASD)"), tr("Джойстик", "Joystick")), if (prefs.getBoolean("joystick", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("joystick", i == 1).apply(); writeGameSettings()
@@ -1119,6 +1128,19 @@ class MainActivity : Activity() {
     }
 
     private fun start() {
+        if (findJava(runtimeDir()) == null) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle(tr("Первый запуск", "First launch"))
+                .setMessage(tr("Первый запуск долгий: скачиваются Java, библиотеки и ресурсы игры (около 400 МБ), это займёт несколько минут (примерно 3–5). Лучше подключиться к Wi‑Fi и не закрывать лаунчер. Дальше игра будет запускаться быстро.",
+                    "The first launch is slow: Java, libraries and game assets (about 400 MB) are downloaded, which takes a few minutes (roughly 3–5). Use Wi‑Fi and keep the launcher open. Later launches are fast."))
+                .setPositiveButton(tr("Продолжить", "Continue")) { _, _ -> startNow() }
+                .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+            return
+        }
+        startNow()
+    }
+
+    private fun startNow() {
         setBusy(true)
         Thread {
             try {
@@ -1937,7 +1959,7 @@ class MainActivity : Activity() {
             val done = AtomicInteger(0)
             val total = pending.size
             val failedList = java.util.Collections.synchronizedList(ArrayList<Task>())
-            val pool = Executors.newFixedThreadPool(6)
+            val pool = Executors.newFixedThreadPool(if (prefs.getBoolean("multiDl", true)) 16 else 3)
             val futures = pending.map { t ->
                 pool.submit(Runnable {
                     if (!download(t.url, t.dest, t.sha1)) failedList.add(t)
