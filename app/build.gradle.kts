@@ -11,16 +11,16 @@ android {
         applicationId = "dev.mobilix.launcher"
         minSdk = 28
         targetSdk = 34
-        versionCode = 26
+        versionCode = 27
         versionName = rootProject.file("VERSION").readText().trim()
     }
 
     signingConfigs {
         create("fixed") {
             storeFile = file("mobilix.keystore")
-            storePassword = "simplemc123"
-            keyAlias = "simplemc"
-            keyPassword = "simplemc123"
+            storePassword = "Bym0BYstEWkLlt8cR0OMwUSv"
+            keyAlias = "mobilix"
+            keyPassword = "Bym0BYstEWkLlt8cR0OMwUSv"
         }
     }
     buildTypes {
