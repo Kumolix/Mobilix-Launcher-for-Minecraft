@@ -24,6 +24,7 @@ Kumolix не собирает, не обрабатывает и не храни�
 * Сама игра Minecraft принадлежит Mojang и работает по политике конфиденциальности Mojang/Microsoft.
 * Журналы запуска (launcher.log, game.log) лежат только на устройстве, нигде не отправляются и могут содержать путь к файлам и ник; вы сами решаете, показывать ли их кому-то.
 * Разрешения: интернет (загрузки), служба переднего плана и уведомления (чтобы загрузка не прерывалась), блокировка сна (на время загрузки). Приложение не читает контакты, местоположение, камеру, микрофон, фото и файлы вне своей папки.
+* Вход через Ely.by (по желанию): логин и пароль отправляются напрямую на серверы Ely.by и в приложении не сохраняются; на устройстве хранится только токен сессии. Для работы скина и входа на серверах Ely.by скачивается открытый компонент authlib-injector с GitHub. Ely.by действует по своей политике конфиденциальности.
 * Вход через Microsoft (в планах): вход пойдёт напрямую между вашим устройством и Microsoft/Xbox/Mojang, токены будут храниться только на устройстве.
 
 ## 4. Передача данных третьим лицам
@@ -68,6 +69,7 @@ The app works fully anonymously. No registration or accounts are required. Setti
 * The Minecraft game itself belongs to Mojang and follows the Mojang/Microsoft privacy policy.
 * Launch logs (launcher.log, game.log) stay on the device, are never sent anywhere and may contain file paths and your nickname; you decide whether to share them.
 * Permissions: internet, foreground service and notifications, wake lock (downloads only). The app does not read contacts, location, camera, microphone, photos or files outside its own folder.
+* Ely.by sign-in (optional): your login and password go directly to Ely.by servers and are not saved in the app; only a session token is stored on the device. For skins and Ely.by servers the open-source authlib-injector component is downloaded from GitHub. Ely.by follows its own privacy policy.
 * Microsoft sign-in (planned): it will go directly between your device and Microsoft/Xbox/Mojang; tokens will be stored only on the device.
 
 ## 4. Sharing with third parties

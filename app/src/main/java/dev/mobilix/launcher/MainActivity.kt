@@ -107,8 +107,8 @@ class MainActivity : Activity() {
             }
             col.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
-        link("GitHub", if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else "Kumolix/Minecraft-Launcher-for-Android",
-            "https://github.com/Kumolix/Minecraft-Launcher-for-Android", updateVer != null)
+        link("GitHub", if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else "Kumolix/Mobilix-Launcher-for-Minecraft",
+            "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", updateVer != null)
         link("TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
         link("Telegram", "@mobilix_launcher", "https://t.me/mobilix_launcher")
         link(tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
@@ -116,7 +116,7 @@ class MainActivity : Activity() {
     }
 
     private fun openGithub() {
-        try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Kumolix/Minecraft-Launcher-for-Android"))) } catch (_: Exception) {}
+        try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft"))) } catch (_: Exception) {}
     }
 
     private fun verParts(v: String): List<Int>? = try { v.trim().split(".").map { it.toInt() } } catch (_: Exception) { null }
@@ -124,7 +124,7 @@ class MainActivity : Activity() {
     /** Сверяет номер версии в репозитории с установленной; при новой показывает метку на главном экране и подсвечивает GitHub в меню. */
     private fun checkUpdate() {
         try {
-            val remote = fetchText("https://raw.githubusercontent.com/Kumolix/Minecraft-Launcher-for-Android/main/VERSION").trim()
+            val remote = fetchText("https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/main/VERSION").trim()
             val cur = packageManager.getPackageInfo(packageName, 0).versionName ?: return
             val r = verParts(remote) ?: return
             val c = verParts(cur) ?: return
@@ -151,7 +151,8 @@ class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("launcher", MODE_PRIVATE)
     internal fun lang() = prefs.getString("lang", "ru") ?: "ru"
     internal fun tr(ru: String, en: String) = if (lang() == "en") en else ru
-    internal fun nickName() = prefs.getString("nick", NICK) ?: NICK
+    internal fun elyOn() = !prefs.getString("ely_token", "").isNullOrEmpty()
+    internal fun nickName() = if (elyOn()) (prefs.getString("ely_name", NICK) ?: NICK) else (prefs.getString("nick", NICK) ?: NICK)
     internal fun dpi(v: Int) = dp(v)
 
     /** Фон кнопки: при нажатии и в выключенном состоянии темнеет. */
@@ -828,6 +829,19 @@ class MainActivity : Activity() {
                 Toast.makeText(this, tr("Ник сохранён", "Nickname saved"), Toast.LENGTH_SHORT).show()
             }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        if (elyOn()) {
+            col.addView(TextView(this).apply {
+                text = tr("Ely.by: ", "Ely.by: ") + nickName(); textSize = 15f; setTextColor(Th.accent); setPadding(0, dp(24), 0, dp(4))
+            })
+            col.addView(Button(this).apply {
+                text = tr("Выйти", "Sign out"); isAllCaps = false; setTextColor(0xFFFF6B6B.toInt()); background = sel(0xFF4A0D0D.toInt())
+                setOnClickListener { elyLogout(true); nickText.text = nickName(); openPage(tr("Аккаунт", "Account"), accountPage()) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(4) })
+        } else {
+            col.addView(btn(tr("Войти через Ely.by", "Sign in with Ely.by"), 0xFF14301D.toInt()) {
+                elyDialog { openPage(tr("Аккаунт", "Account"), accountPage()) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(24) })
+        }
         // кнопка Microsoft по их правилам: белый фон, рамка, логотип слева
         val ms = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
@@ -837,7 +851,7 @@ class MainActivity : Activity() {
         }
         ms.addView(MsLogoView(this), LinearLayout.LayoutParams(dp(21), dp(21)))
         ms.addView(TextView(this).apply { text = tr("Войти через Microsoft", "Sign in with Microsoft"); textSize = 15f; setTextColor(0xFF5E5E5E.toInt()); setPadding(dp(12), 0, 0, 0) })
-        col.addView(ms, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(28) })
+        col.addView(ms, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(12) })
         col.addView(TextView(this).apply {
             text = tr("Скин применяется и в игре: лаунчер подставляет его как стандартный скин (ресурспак Mobilix-skin). Ширина рук в игре зависит от UUID игрока.",
                 "The skin is also applied in-game as the default skin (Mobilix-skin resource pack). Arm width in-game depends on the player UUID.")
@@ -845,6 +859,98 @@ class MainActivity : Activity() {
         })
         sv.addView(col)
         return sv
+    }
+
+    // ---------- Ely.by ----------
+    private val ELY_AUTH = "https://authserver.ely.by/auth"
+
+    private fun postJson(url: String, body: JSONObject): Pair<Int, String> {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.requestMethod = "POST"; c.doOutput = true
+        c.connectTimeout = 15000; c.readTimeout = 30000
+        c.setRequestProperty("Content-Type", "application/json"); c.setRequestProperty("User-Agent", "Mobilix/1.8")
+        c.outputStream.use { it.write(body.toString().toByteArray()) }
+        val code = c.responseCode
+        val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        return code to text
+    }
+
+    private fun clientToken(): String = prefs.getString("ely_client", null) ?: java.util.UUID.randomUUID().toString().replace("-", "").also { prefs.edit().putString("ely_client", it).apply() }
+
+    /** Проверяет токен Ely.by, при необходимости обновляет. false: нужен новый вход. */
+    private fun elyEnsureSession(): Boolean {
+        return try {
+            val tok = prefs.getString("ely_token", "") ?: ""
+            if (postJson("$ELY_AUTH/validate", JSONObject().put("accessToken", tok)).first in 200..299) return true
+            val (c, t) = postJson("$ELY_AUTH/refresh", JSONObject().put("accessToken", tok).put("clientToken", clientToken()))
+            if (c !in 200..299) return false
+            prefs.edit().putString("ely_token", JSONObject(t).getString("accessToken")).apply()
+            true
+        } catch (_: Exception) { true } // нет сети: пробуем запуститься с текущим токеном
+    }
+
+    private fun elyLogout(tell: Boolean) {
+        prefs.edit().remove("ely_token").remove("ely_uuid").remove("ely_name").apply()
+        if (tell) Toast.makeText(this, tr("Вы вышли из Ely.by", "Signed out of Ely.by"), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun elyLogin(user: String, pass: String, onDone: (String?) -> Unit) {
+        Thread {
+            var err: String? = null
+            try {
+                val (code, text) = postJson("$ELY_AUTH/authenticate", JSONObject().put("username", user).put("password", pass)
+                    .put("clientToken", clientToken()).put("requestUser", true))
+                if (code in 200..299) {
+                    val j = JSONObject(text)
+                    val prof = j.getJSONObject("selectedProfile")
+                    prefs.edit().putString("ely_token", j.getString("accessToken")).putString("ely_uuid", prof.getString("id"))
+                        .putString("ely_name", prof.getString("name")).apply()
+                    // скин аккаунта становится скином в лаунчере
+                    try { importSkinNow("ely", prof.getString("name")) } catch (_: Exception) {}
+                } else {
+                    val m = try { JSONObject(text).optString("errorMessage") } catch (_: Exception) { "" }
+                    err = if (m.contains("two factor", true)) "2FA" else if (code == 401 || code == 403) tr("Неверный логин или пароль", "Wrong login or password") else (m.ifEmpty { "HTTP $code" })
+                }
+            } catch (e: Exception) { err = tr("Нет связи с Ely.by", "Cannot reach Ely.by") }
+            runOnUiThread { onDone(err) }
+        }.start()
+    }
+
+    private fun elyDialog(after: () -> Unit) {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), 0) }
+        val u = android.widget.EditText(this).apply { hint = tr("Ник или email Ely.by", "Ely.by nickname or email"); setSingleLine(true) }
+        val p = android.widget.EditText(this).apply {
+            hint = tr("Пароль", "Password"); setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val f = android.widget.EditText(this).apply { hint = tr("Код двухфакторной защиты (если включена)", "2FA code (if enabled)"); setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_NUMBER }
+        box.addView(u); box.addView(p); box.addView(f)
+        android.app.AlertDialog.Builder(this).setTitle(tr("Вход через Ely.by", "Sign in with Ely.by")).setView(box)
+            .setPositiveButton(tr("Войти", "Sign in")) { _, _ ->
+                val pass = p.text.toString() + (if (f.text.isNotEmpty()) ":" + f.text else "")
+                elyLogin(u.text.toString().trim(), pass) { err ->
+                    if (err == null) { Toast.makeText(this, tr("Вход выполнен", "Signed in"), Toast.LENGTH_SHORT).show(); nickText.text = nickName(); after() }
+                    else if (err == "2FA") Toast.makeText(this, tr("Включена двухфакторная защита: введите код в третье поле", "2FA is on: enter the code in the third field"), Toast.LENGTH_LONG).show()
+                    else Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+    }
+
+    /** authlib-injector (открытый, AGPL-3.0): подменяет серверы авторизации и скинов на Ely.by. */
+    private fun ensureAuthlib(): File? {
+        val f = File(filesDir, "authlib-injector.jar")
+        if (f.exists() && f.length() > 10000) return f
+        return try {
+            val rel = JSONObject(fetchText("https://api.github.com/repos/yushijinhun/authlib-injector/releases/latest"))
+            val assets = rel.getJSONArray("assets")
+            var url: String? = null
+            for (i in 0 until assets.length()) {
+                val a = assets.getJSONObject(i)
+                if (a.getString("name").endsWith(".jar")) { url = a.getString("browser_download_url"); break }
+            }
+            if (url == null) null else { downloadBig(url, f); f }
+        } catch (e: Exception) { log("authlib-injector: не скачался ($e)"); null }
     }
 
     /** Скачивает скин игрока по нику: source = "ely" или "mojang". */
@@ -856,38 +962,42 @@ class MainActivity : Activity() {
         Toast.makeText(this, tr("Загрузка скина…", "Downloading skin…"), Toast.LENGTH_SHORT).show()
         Thread {
             try {
-                var url: String
-                var slim = false
-                if (source == "ely") {
-                    url = "https://skinsystem.ely.by/skins/$nickIn.png"
-                    try {
-                        val t = JSONObject(fetchText("https://skinsystem.ely.by/textures/$nickIn")).getJSONObject("SKIN")
-                        url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
-                    } catch (_: Exception) {}
-                } else {
-                    val id = JSONObject(fetchText("https://api.mojang.com/users/profiles/minecraft/$nickIn")).getString("id")
-                    val props = JSONObject(fetchText("https://sessionserver.mojang.com/session/minecraft/profile/$id")).getJSONArray("properties")
-                    val value = String(android.util.Base64.decode(props.getJSONObject(0).getString("value"), android.util.Base64.DEFAULT))
-                    val t = JSONObject(value).getJSONObject("textures").getJSONObject("SKIN")
-                    url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
-                }
-                val c = URL(url).openConnection() as HttpURLConnection
-                c.connectTimeout = 15000; c.readTimeout = 30000
-                c.setRequestProperty("User-Agent", "Mobilix/1.7")
-                val bytes = c.inputStream.use { it.readBytes() }
-                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                if (bmp == null || bmp.width != 64 || (bmp.height != 64 && bmp.height != 32)) throw RuntimeException("not a 64x64 skin")
-                File(filesDir, "skin_custom.png").writeBytes(bytes)
-                prefs.edit().putBoolean("slim", slim).apply()
-                runOnUiThread {
-                    skinView.slim = slim; skinView.setSkin(bmp)
-                    accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
-                    Toast.makeText(this, tr("Скин загружен", "Skin loaded") + (if (slim) tr(" (стройный)", " (slim)") else ""), Toast.LENGTH_SHORT).show()
-                }
+                importSkinNow(source, nickIn)
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this, tr("Скин не найден или нет сети", "Skin not found or no network"), Toast.LENGTH_LONG).show() }
             }
         }.start()
+    }
+
+    private fun importSkinNow(source: String, nickIn: String) {
+        var url: String
+        var slim = false
+        if (source == "ely") {
+            url = "https://skinsystem.ely.by/skins/$nickIn.png"
+            try {
+                val t = JSONObject(fetchText("https://skinsystem.ely.by/textures/$nickIn")).getJSONObject("SKIN")
+                url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
+            } catch (_: Exception) {}
+        } else {
+            val id = JSONObject(fetchText("https://api.mojang.com/users/profiles/minecraft/$nickIn")).getString("id")
+            val props = JSONObject(fetchText("https://sessionserver.mojang.com/session/minecraft/profile/$id")).getJSONArray("properties")
+            val value = String(android.util.Base64.decode(props.getJSONObject(0).getString("value"), android.util.Base64.DEFAULT))
+            val t = JSONObject(value).getJSONObject("textures").getJSONObject("SKIN")
+            url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
+        }
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 15000; c.readTimeout = 30000
+        c.setRequestProperty("User-Agent", "Mobilix/1.8")
+        val bytes = c.inputStream.use { it.readBytes() }
+        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        if (bmp == null || bmp.width != 64 || (bmp.height != 64 && bmp.height != 32)) throw RuntimeException("not a 64x64 skin")
+        File(filesDir, "skin_custom.png").writeBytes(bytes)
+        prefs.edit().putBoolean("slim", slim).apply()
+        runOnUiThread {
+            skinView.slim = slim; skinView.setSkin(bmp)
+            accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
+            Toast.makeText(this, tr("Скин загружен", "Skin loaded") + (if (slim) tr(" (стройный)", " (slim)") else ""), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun skinFile(): File? {
@@ -1488,6 +1598,10 @@ class MainActivity : Activity() {
         val mgPath = ensureMobileGlues()
 
         // 6. Команда запуска
+        if (elyOn() && !elyEnsureSession()) {
+            log("Сессия Ely.by истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
+            elyLogout(false)
+        }
         applySkinPack(gameDir)
         val repl = mapOf(
             "auth_player_name" to nickName(),
@@ -1497,11 +1611,11 @@ class MainActivity : Activity() {
             "game_directory" to gameDir.path,
             "assets_root" to assetsDir.path,
             "assets_index_name" to indexId,
-            "auth_uuid" to skinUuid(),
-            "auth_access_token" to "0",
+            "auth_uuid" to (if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()),
+            "auth_access_token" to (if (elyOn()) prefs.getString("ely_token", "0")!! else "0"),
             "clientid" to "0",
             "auth_xuid" to "0",
-            "user_type" to "legacy",
+            "user_type" to (if (elyOn()) "mojang" else "legacy"),
             "version_type" to "release",
             "natives_directory" to natives.path,
             "launcher_name" to "Mobilix",
@@ -1538,6 +1652,11 @@ class MainActivity : Activity() {
         if (mgPath != null) cmd.add("-Dorg.lwjgl.opengl.libname=$mgPath")
         cmd.add("-Dorg.lwjgl.util.Debug=true")
         cmd.add("-Dorg.lwjgl.util.DebugLoader=true")
+        if (elyOn()) {
+            val agent = ensureAuthlib()
+            if (agent != null && File(rt, "lib/libinstrument.so").exists()) cmd.add("-javaagent:${agent.path}=https://authserver.ely.by/api/authlib-injector")
+            else log("ВНИМАНИЕ: authlib-injector не подключён (нет файла или libinstrument.so): скин и вход на серверах Ely.by могут не работать.")
+        }
         cmd.addAll(jvmArgs)
         cmd.add(v.getString("mainClass"))
         cmd.addAll(gameArgs)

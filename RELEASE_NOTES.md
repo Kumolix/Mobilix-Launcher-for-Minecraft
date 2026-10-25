@@ -1,12 +1,10 @@
-version: 1.7.5
+version: 1.8.0
 EN: What's new
-- Key combinations: one button can press several keys at once (for example Alt + F4 or 9 + left mouse button). Edit a button in the controls layout and use "Add a key to the combination"
-- Skins: import a skin by nickname from Ely.by or Mojang, plus quick links to the Ely.by and SkinMC catalogs (Account page)
-- User agreement and privacy policy (RU/EN), link at the very bottom of the menu
-- Controls layout files from older versions keep working
+- Sign in with Ely.by (like ElyPrism): your Ely.by nickname and skin are used in the launcher and in the game, no Azure or card needed. Account page → "Sign in with Ely.by". The sign-out button is dark red
+- The repository is now Mobilix-Launcher-for-Minecraft, all links updated
+- Key combinations, skin import by nickname, user agreement link (from 1.7.5)
 
 RU: Что нового?
-- Комбинации кнопок: одна кнопка может нажимать сразу несколько клавиш (например Alt + F4 или 9 + ЛКМ). Откройте кнопку в раскладке управления и нажмите «Добавить клавишу к комбинации»
-- Скины: импорт скина по нику с Ely.by или Mojang и быстрые ссылки на каталоги Ely.by и SkinMC (страница «Аккаунт»)
-- Пользовательское соглашение и политика конфиденциальности (RU/EN), ссылка в самом низу меню
-- Раскладки управления из прошлых версий продолжают работать
+- Вход через Ely.by (как в ElyPrism): ник и скин Ely.by используются в лаунчере и в игре, без Azure и карты. Страница «Аккаунт» → «Войти через Ely.by». Кнопка выхода тёмно-красная
+- Репозиторий теперь Mobilix-Launcher-for-Minecraft, все ссылки обновлены
+- Комбинации кнопок, импорт скина по нику, ссылка на соглашение (с 1.7.5)
