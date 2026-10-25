@@ -1,4 +1,4 @@
-package dev.mclauncher
+package dev.mobilix.launcher
 
 import android.app.Notification
 import android.app.NotificationChannel

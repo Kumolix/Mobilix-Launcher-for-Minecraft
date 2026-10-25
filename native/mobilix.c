@@ -89,7 +89,7 @@ static jint create_jvm(JNIEnv* env, jstring javaHome, jobjectArray opts, JavaVM*
 
 
 // Запуск main(String[]) внутри процесса. Блокирует до завершения игры.
-JNIEXPORT jstring JNICALL Java_dev_mclauncher_Native_runMain(JNIEnv* env, jclass cls, jstring javaHome,
+JNIEXPORT jstring JNICALL Java_dev_mobilix_launcher_Native_runMain(JNIEnv* env, jclass cls, jstring javaHome,
         jobjectArray opts, jstring mainClass, jobjectArray gameArgs) {
     char e[512];
     JavaVM* jvm = NULL; JNIEnv* jenv = NULL;
@@ -117,16 +117,16 @@ JNIEXPORT jstring JNICALL Java_dev_mclauncher_Native_runMain(JNIEnv* env, jclass
     return mk(env, "Игра завершилась");
 }
 
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_setSurface(JNIEnv* env, jclass cls, jobject surface, jint w, jint h) {
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_setSurface(JNIEnv* env, jclass cls, jobject surface, jint w, jint h) {
     ANativeWindow* win = ANativeWindow_fromSurface(env, surface);
     smc_set_surface(win, w, h);
 }
 
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_pushEvent(JNIEnv* env, jclass cls, jint type, jdouble a, jdouble b, jint c) {
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_pushEvent(JNIEnv* env, jclass cls, jint type, jdouble a, jdouble b, jint c) {
     smc_push_event(type, a, b, c);
 }
 
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_setGlLib(JNIEnv* env, jclass cls, jstring path) {
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_setGlLib(JNIEnv* env, jclass cls, jstring path) {
     const char* p = (*env)->GetStringUTFChars(env, path, NULL);
     smc_set_gl_lib(p);
     (*env)->ReleaseStringUTFChars(env, path, p);
@@ -146,12 +146,12 @@ static void* pump(void* arg) {
     }
     return NULL;
 }
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_chdir(JNIEnv* env, jclass cls, jstring path) {
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_chdir(JNIEnv* env, jclass cls, jstring path) {
     const char* p = (*env)->GetStringUTFChars(env, path, NULL);
     chdir(p);
     (*env)->ReleaseStringUTFChars(env, path, p);
 }
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_redirectOutput(JNIEnv* env, jclass cls, jstring path) {
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_redirectOutput(JNIEnv* env, jclass cls, jstring path) {
     const char* p = (*env)->GetStringUTFChars(env, path, NULL);
     g_logf = fopen(p, "w");
     (*env)->ReleaseStringUTFChars(env, path, p);
@@ -165,9 +165,9 @@ JNIEXPORT void JNICALL Java_dev_mclauncher_Native_redirectOutput(JNIEnv* env, jc
 }
 
 extern void smc_surface_lost(void);
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_surfaceLost(JNIEnv* env, jclass cls) { smc_surface_lost(); }
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_surfaceLost(JNIEnv* env, jclass cls) { smc_surface_lost(); }
 extern int smc_cursor_mode(void);
-JNIEXPORT jint JNICALL Java_dev_mclauncher_Native_cursorMode(JNIEnv* env, jclass cls) { return smc_cursor_mode(); }
+JNIEXPORT jint JNICALL Java_dev_mobilix_launcher_Native_cursorMode(JNIEnv* env, jclass cls) { return smc_cursor_mode(); }
 
 extern void smc_set_fps(int fps);
-JNIEXPORT void JNICALL Java_dev_mclauncher_Native_setFpsCap(JNIEnv* env, jclass cls, jint fps) { smc_set_fps(fps); }
+JNIEXPORT void JNICALL Java_dev_mobilix_launcher_Native_setFpsCap(JNIEnv* env, jclass cls, jint fps) { smc_set_fps(fps); }

@@ -4,14 +4,14 @@ plugins {
 }
 
 android {
-    namespace = "dev.mclauncher"
+    namespace = "dev.mobilix.launcher"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "dev.mclauncher"
+        applicationId = "dev.mobilix.launcher"
         minSdk = 28
         targetSdk = 34
-        versionCode = 25
+        versionCode = 26
         versionName = rootProject.file("VERSION").readText().trim()
     }
 

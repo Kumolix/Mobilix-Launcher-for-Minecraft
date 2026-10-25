@@ -1,4 +1,4 @@
-package dev.mclauncher
+package dev.mobilix.launcher
 
 import android.app.AlertDialog
 import android.content.Context

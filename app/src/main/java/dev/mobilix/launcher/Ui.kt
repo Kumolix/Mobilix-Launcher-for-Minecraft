@@ -1,4 +1,4 @@
-package dev.mclauncher
+package dev.mobilix.launcher
 
 import android.content.Context
 import android.graphics.Canvas
