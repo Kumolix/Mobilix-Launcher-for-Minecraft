@@ -68,6 +68,23 @@ jobs:
             echo "::warning::openal build failed rc=$RC: $(tail -c 1500 /tmp/oal-build.log | tr '\n' '|')"
           fi
 
+      - name: Prepare signing key (from GitHub Secrets)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > app/mobilix.keystore
+            echo "SIGNED_OK=yes" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Secrets KEYSTORE_B64 / KEYSTORE_PASSWORD are missing: building with a throwaway key (the APK will NOT update an installed Mobilix) and skipping the release"
+            rm -f app/mobilix.keystore
+            keytool -genkeypair -keystore app/mobilix.keystore -alias mobilix -keyalg RSA -keysize 2048 -validity 30 -storepass throwaway -keypass throwaway -dname "CN=throwaway" >/dev/null 2>&1
+            echo "KEYSTORE_PASSWORD=throwaway" >> "$GITHUB_ENV"
+            echo "SIGNED_OK=no" >> "$GITHUB_ENV"
+          fi
+          echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-throwaway}" >> "$GITHUB_ENV"
+
       - name: Build debug APK
         run: gradle assembleRelease --no-daemon
 
@@ -84,6 +101,7 @@ jobs:
           path: out/*.apk
 
       - name: GitHub release (important versions only)
+        if: env.SIGNED_OK == 'yes'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
