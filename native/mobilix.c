@@ -1,4 +1,4 @@
-// SimpleMC: нативный мост (этап 3).
+// Mobilix: нативный мост (этап 3).
 //  - eglClear: проверка, что из процесса можно рисовать на экран через EGL/GLES
 //  - startJvm: запуск Java (libjvm.so) внутри процесса приложения
 #include <jni.h>
@@ -14,7 +14,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-#define TAG "SimpleMC"
+#define TAG "Mobilix"
 #define LOG(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #ifndef JNI_VERSION_1_8
 #define JNI_VERSION_1_8 0x00010008
@@ -142,7 +142,7 @@ static void* pump(void* arg) {
         if (n <= 0) break;
         buf[n] = 0;
         if (g_logf) { fwrite(buf, 1, n, g_logf); fflush(g_logf); }
-        __android_log_write(ANDROID_LOG_INFO, "SimpleMC-Game", buf);
+        __android_log_write(ANDROID_LOG_INFO, "Mobilix-Game", buf);
     }
     return NULL;
 }

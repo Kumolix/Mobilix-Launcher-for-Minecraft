@@ -38,7 +38,7 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
 
 /**
- * SimpleMC Launcher, этап 2.
+ * Mobilix Launcher.
  * Ник Player (офлайн), версия 1.21.3.
  * Скачивает файлы игры, ставит Java-рантайм, проверяет `java -version` и пробует запустить игру.
  * Графики и ввода (GLFW/LWJGL под Android) пока нет, поэтому игра дойдёт до ошибки окна: это ожидаемо.

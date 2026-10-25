@@ -26,7 +26,7 @@ import java.io.RandomAccessFile
 /** Мост к нативному коду. Загружается только в процессе игры. */
 object Native {
     init {
-        System.loadLibrary("simplemc")
+        System.loadLibrary("mobilix")
     }
 
     @JvmStatic external fun setFpsCap(fps: Int)

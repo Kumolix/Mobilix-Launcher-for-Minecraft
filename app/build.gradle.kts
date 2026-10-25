@@ -11,13 +11,13 @@ android {
         applicationId = "dev.mclauncher"
         minSdk = 28
         targetSdk = 34
-        versionCode = 24
+        versionCode = 25
         versionName = rootProject.file("VERSION").readText().trim()
     }
 
     signingConfigs {
         create("fixed") {
-            storeFile = file("simplemc.keystore")
+            storeFile = file("mobilix.keystore")
             storePassword = "simplemc123"
             keyAlias = "simplemc"
             keyPassword = "simplemc123"

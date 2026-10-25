@@ -12,7 +12,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LOG(...) __android_log_print(ANDROID_LOG_INFO, "SimpleMC-GLFW", __VA_ARGS__)
+#define LOG(...) __android_log_print(ANDROID_LOG_INFO, "Mobilix-GLFW", __VA_ARGS__)
 #define EXPORT __attribute__((visibility("default")))
 
 typedef struct { int width, height, redBits, greenBits, blueBits, refreshRate; } VidMode;
@@ -87,7 +87,7 @@ EXPORT int glfwInit(void) {
 EXPORT void glfwTerminate(void) { LOG("glfwTerminate"); }
 EXPORT void glfwInitHint(int h, int v) {}
 EXPORT void glfwGetVersion(int* a, int* b, int* c) { if (a) *a = 3; if (b) *b = 3; if (c) *c = 8; }
-EXPORT const char* glfwGetVersionString(void) { return "3.3.8 SimpleMC (Android EGL)"; }
+EXPORT const char* glfwGetVersionString(void) { return "3.3.8 Mobilix (Android EGL)"; }
 EXPORT int glfwGetError(const char** d) { if (d) *d = NULL; return 0; }
 EXPORT errfun glfwSetErrorCallback(errfun f) { errfun o = G.err; G.err = f; return o; }
 EXPORT int glfwGetPlatform(void) { return 0x60005; }

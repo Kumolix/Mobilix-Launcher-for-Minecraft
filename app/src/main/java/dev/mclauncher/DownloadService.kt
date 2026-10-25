@@ -30,7 +30,7 @@ class DownloadService : Service() {
         startForeground(1, n)
         if (wl == null) {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "simplemc:download").apply { acquire(3 * 60 * 60 * 1000L) }
+            wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mobilix:download").apply { acquire(3 * 60 * 60 * 1000L) }
         }
         return START_NOT_STICKY
     }
