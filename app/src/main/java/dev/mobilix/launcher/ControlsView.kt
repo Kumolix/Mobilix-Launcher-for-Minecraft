@@ -30,8 +30,14 @@ class Btn(
 ) {
     var pressed = false
     var on = false
-    fun toJson() = JSONObject().put("l", label).put("k", kind).put("c", code).put("x", cx.toDouble())
-        .put("y", cy.toDouble()).put("w", w).put("h", h).put("t", toggle)
+    /** Дополнительные действия комбинации (тип, код): нажимаются вместе с основным. */
+    val extra = ArrayList<IntArray>()
+    fun toJson(): JSONObject {
+        val o = JSONObject().put("l", label).put("k", kind).put("c", code).put("x", cx.toDouble())
+            .put("y", cy.toDouble()).put("w", w).put("h", h).put("t", toggle)
+        if (extra.isNotEmpty()) o.put("e", JSONArray().also { a -> extra.forEach { a.put(JSONArray().put(it[0]).put(it[1])) } })
+        return o
+    }
 }
 
 /** Имена клавиш для назначения: (название, тип, код GLFW). */
@@ -136,8 +142,10 @@ class ControlsView(ctx: Context) : View(ctx) {
                 buttons.clear()
                 for (i in 0 until a.length()) {
                     val o = a.getJSONObject(i)
-                    buttons.add(Btn(o.getString("l"), o.getInt("k"), o.getInt("c"), o.getDouble("x").toFloat(),
-                        o.getDouble("y").toFloat(), o.getInt("w"), o.getInt("h"), o.optBoolean("t")))
+                    val nb = Btn(o.getString("l"), o.getInt("k"), o.getInt("c"), o.getDouble("x").toFloat(),
+                        o.getDouble("y").toFloat(), o.getInt("w"), o.getInt("h"), o.optBoolean("t"))
+                    o.optJSONArray("e")?.let { e -> for (q in 0 until e.length()) { val p = e.getJSONArray(q); nb.extra.add(intArrayOf(p.getInt(0), p.getInt(1))) } }
+                    buttons.add(nb)
                 }
                 val ver = j.optInt("v", 0)
                 if (ver < 2) migrate()
@@ -290,17 +298,24 @@ class ControlsView(ctx: Context) : View(ctx) {
         }
     }
 
-    private fun fire(b: Btn, down: Boolean) {
-        if (b.kind == K_HIDE) { if (down && !editing) { hidden = !hidden; invalidate() }; return }
-        if (b.kind == K_KEYBOARD) { if (down && !editing) toggleKeyboard(); return }
+    private fun fireOne(kind: Int, code: Int, down: Boolean) {
         try {
-            when (b.kind) {
-                K_KEY -> Native.pushEvent(1, b.code.toDouble(), 0.0, if (down) 1 else 0)
-                K_MOUSE -> Native.pushEvent(4, b.code.toDouble(), 0.0, if (down) 1 else 0)
-                K_SCROLL -> if (down) Native.pushEvent(5, 0.0, b.code.toDouble(), 0)
+            when (kind) {
+                K_KEY -> Native.pushEvent(1, code.toDouble(), 0.0, if (down) 1 else 0)
+                K_MOUSE -> Native.pushEvent(4, code.toDouble(), 0.0, if (down) 1 else 0)
+                K_SCROLL -> if (down) Native.pushEvent(5, 0.0, code.toDouble(), 0)
             }
         } catch (_: Throwable) {
         }
+    }
+
+    private fun fire(b: Btn, down: Boolean) {
+        if (b.kind == K_HIDE) { if (down && !editing) { hidden = !hidden; invalidate() }; return }
+        if (b.kind == K_KEYBOARD) { if (down && !editing) toggleKeyboard(); return }
+        if (b.extra.isEmpty()) { fireOne(b.kind, b.code, down); return }
+        // комбинация: нажимаем по порядку, отпускаем в обратном
+        val all = listOf(intArrayOf(b.kind, b.code)) + b.extra
+        if (down) all.forEach { fireOne(it[0], it[1], true) } else all.asReversed().forEach { fireOne(it[0], it[1], false) }
     }
 
     private fun press(b: Btn, down: Boolean) {
@@ -427,14 +442,27 @@ class ControlsView(ctx: Context) : View(ctx) {
             text = "Клавиша: ${keyName(b.kind, b.code)}"
             setOnClickListener { pickKey(b, this) }
         }
+        val comboInfo = TextView(ctx)
+        fun comboText() { comboInfo.text = if (b.extra.isEmpty()) "Комбинация: нет" else "Комбинация: " + (listOf(keyName(b.kind, b.code)) + b.extra.map { keyName(it[0], it[1]) }).joinToString(" + ") }
+        comboText()
+        val addBtn = android.widget.Button(ctx).apply {
+            text = "Добавить клавишу к комбинации (например Alt + F4)"
+            setOnClickListener {
+                val names = KEY_CHOICES.filter { it.second == K_KEY || it.second == K_MOUSE || it.second == K_SCROLL }
+                AlertDialog.Builder(ctx).setTitle("Добавить к комбинации").setItems(names.map { it.first }.toTypedArray()) { _, i ->
+                    if (b.extra.size < 4) { b.extra.add(intArrayOf(names[i].second, names[i].third)); comboText(); save() }
+                }.show()
+            }
+        }
+        val clrBtn = android.widget.Button(ctx).apply { text = "Очистить комбинацию"; setOnClickListener { b.extra.clear(); comboText(); save() } }
         val tg = CheckBox(ctx).apply { text = "Фиксировать (нажал — включено, ещё раз — выключено)"; isChecked = b.toggle }
-        box.addView(name); box.addView(keyBtn)
+        box.addView(name); box.addView(keyBtn); box.addView(comboInfo); box.addView(addBtn); box.addView(clrBtn)
         box.addView(seek(ctx, "Ширина", 24, 200, b.w) { b.w = it })
         box.addView(seek(ctx, "Высота", 24, 200, b.h) { b.h = it })
         box.addView(tg)
         AlertDialog.Builder(ctx).setTitle("Кнопка").setView(box)
             .setPositiveButton("Готово") { _, _ ->
-                b.label = name.text.toString().ifEmpty { "?" }
+                b.label = name.text.toString().ifEmpty { if (b.extra.isEmpty()) "?" else (listOf(keyName(b.kind, b.code)) + b.extra.map { keyName(it[0], it[1]) }).joinToString("+") { n -> n.take(3) } }
                 b.toggle = tg.isChecked
                 if (!b.toggle) b.on = false
                 save(); invalidate()

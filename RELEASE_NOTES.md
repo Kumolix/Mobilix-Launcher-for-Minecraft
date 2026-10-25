@@ -1,20 +1,12 @@
-version: 1.7.4
+version: 1.7.5
 EN: What's new
-- Play Protect: the app now targets a modern Android version, so it no longer warns that it "was built for an older version of Android"
-- New package name (dev.mobilix.launcher) and a new permanent signing key: this is installed as a new app, delete the old one first (game files will be downloaded again)
-- Release build (not debug) with a privacy policy (no data is collected), link on the Social page
-- Forge installation now runs inside the built-in Java (required by modern Android)
-- Multi-threaded download (16 threads), can be turned off in Settings → Launcher
-- Warning before the first launch; the download no longer resets when the screen is rotated
-- The app can be installed on 32-bit devices and explains why the game cannot run there
-- All remaining "SimpleMC" names replaced with Mobilix
+- Key combinations: one button can press several keys at once (for example Alt + F4 or 9 + left mouse button). Edit a button in the controls layout and use "Add a key to the combination"
+- Skins: import a skin by nickname from Ely.by or Mojang, plus quick links to the Ely.by and SkinMC catalogs (Account page)
+- User agreement and privacy policy (RU/EN), link at the very bottom of the menu
+- Controls layout files from older versions keep working
 
 RU: Что нового?
-- Play Protect: приложение рассчитано на современный Android, поэтому больше не пишет, что оно «создано для более ранней версии Android»
-- Новое имя пакета (dev.mobilix.launcher) и новый постоянный ключ подписи: ставится как новое приложение, старое сначала удалите (файлы игры скачаются заново)
-- Релизная сборка (не debug), политика конфиденциальности (данные не собираются), ссылка на странице «Соцсети»
-- Установка Forge теперь идёт во встроенной Java (так требует современный Android)
-- Многопоточная загрузка (16 потоков), отключается в Настройки → Лаунчер
-- Предупреждение перед первым запуском; загрузка не сбрасывается при повороте экрана
-- Приложение ставится на 32-битные устройства и объясняет, почему игра там не запустится
-- Остатки названия «SimpleMC» заменены на Mobilix
+- Комбинации кнопок: одна кнопка может нажимать сразу несколько клавиш (например Alt + F4 или 9 + ЛКМ). Откройте кнопку в раскладке управления и нажмите «Добавить клавишу к комбинации»
+- Скины: импорт скина по нику с Ely.by или Mojang и быстрые ссылки на каталоги Ely.by и SkinMC (страница «Аккаунт»)
+- Пользовательское соглашение и политика конфиденциальности (RU/EN), ссылка в самом низу меню
+- Раскладки управления из прошлых версий продолжают работать

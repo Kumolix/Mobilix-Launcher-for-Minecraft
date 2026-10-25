@@ -1,39 +1,89 @@
-# Privacy Policy — Mobilix Launcher
+# Политика конфиденциальности Mobilix Launcher
 
-Last updated: 2026-10-25
+Kumolix не собирает, не обрабатывает и не хранит персональные данные пользователей при использовании приложения Mobilix Launcher. Mobilix — независимый проект с открытым кодом и не связан с Mojang, Microsoft и Minecraft.
 
-## English
+## 1. Кто отвечает за данные
 
-Mobilix is a free, open-source launcher for Minecraft: Java Edition. It is not affiliated with Mojang or Microsoft.
+Контролёр данных: Kumolix (независимый разработчик).
+Контакты для вопросов: kumolix.me@gmail.com, Telegram https://t.me/mobilix_launcher, GitHub https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft
 
-**Data we collect.** None. Mobilix has no servers, no accounts, no analytics, no advertising and no trackers. The developer receives no data from your device.
+## 2. Какие данные не собираются
 
-**Data stored on your device.** Settings (theme, language, game options), the nickname you type, a skin image you choose, controls layout, and downloaded game files. All of it stays in the app's private storage on your device and is removed when you uninstall the app or use "Delete downloads".
+Мы не запрашиваем и не фиксируем:
+* имена, email, телефоны, адреса;
+* идентификаторы устройств, IP-адреса, геолокацию;
+* поведенческие данные (просмотры экранов, время в сессиях и т.п.);
+* платёжные, биометрические и любые другие персональные данные.
 
-**Network access.** The app connects to the internet only to download files you ask for, from: Mojang/Microsoft servers (game files), GitHub (Java runtime, native libraries, update check), Fabric and Forge servers (mod loaders), Modrinth or its mirror (mod catalog). These services may see your IP address under their own privacy policies.
+Приложение работает полностью анонимно. Регистрация и учётные записи не требуются. Настройки, ник, скин, раскладка управления и скачанные файлы игры хранятся только на вашем устройстве, в личной папке приложения, и удаляются вместе с приложением или через «Удалить скачанное».
 
-**Permissions.** Internet (downloads), foreground service and notifications (to keep downloads running and show progress), wake lock (to avoid sleep during downloads). The app does not read your contacts, location, camera, microphone, photos or files outside its own folder.
+## 3. Исключения
 
-**Microsoft sign-in (planned).** If added, sign-in goes directly between your device and Microsoft/Xbox/Mojang. Tokens are stored only on your device.
+* Сторонние библиотеки. В приложении используются только библиотеки Apache Commons Compress и XZ for Java для распаковки архивов. Они не работают с сетью и ничего не собирают. Аналитики, рекламы и отчётов о сбоях в приложении нет.
+* Загрузки. Чтобы скачать нужные вам файлы, приложение обращается к серверам: Mojang/Microsoft (файлы игры), GitHub (Java, библиотеки, проверка обновлений), Fabric и Forge (загрузчики модов), Modrinth и его зеркала (каталог модов), а также Ely.by и Mojang, если вы сами импортируете скин по нику (на сервер уходит введённый ник). Эти сервисы могут видеть ваш IP-адрес и действуют по своим политикам конфиденциальности.
+* Сама игра Minecraft принадлежит Mojang и работает по политике конфиденциальности Mojang/Microsoft.
+* Журналы запуска (launcher.log, game.log) лежат только на устройстве, нигде не отправляются и могут содержать путь к файлам и ник; вы сами решаете, показывать ли их кому-то.
+* Разрешения: интернет (загрузки), служба переднего плана и уведомления (чтобы загрузка не прерывалась), блокировка сна (на время загрузки). Приложение не читает контакты, местоположение, камеру, микрофон, фото и файлы вне своей папки.
+* Вход через Microsoft (в планах): вход пойдёт напрямую между вашим устройством и Microsoft/Xbox/Mojang, токены будут храниться только на устройстве.
 
-**Children.** The app does not knowingly collect any data from anyone.
+## 4. Передача данных третьим лицам
 
-**Contact.** Open an issue at https://github.com/Kumolix/Minecraft-Launcher-for-Android or write in Telegram: https://t.me/mobilix_launcher
+Мы не передаём никакие данные третьим лицам.
 
-## Русский
+## 5. Права пользователя
 
-Mobilix — бесплатный лаунчер с открытым кодом для Minecraft: Java Edition. Он не связан с Mojang и Microsoft.
+Поскольку данные не собираются, запросы на доступ, исправление, удаление или перенос данных не требуются. Если у вас появятся вопросы о приватности, свяжитесь с нами по контактам из раздела 1.
 
-**Какие данные собираем.** Никакие. У Mobilix нет серверов, аккаунтов, аналитики, рекламы и трекеров. Разработчик не получает данных с вашего устройства.
+## 6. Изменения в политике
 
-**Что хранится на устройстве.** Настройки (тема, язык, параметры игры), введённый ник, выбранное изображение скина, раскладка управления, скачанные файлы игры. Всё лежит в личной папке приложения и удаляется при удалении приложения или через «Удалить скачанное».
+Мы можем обновлять эту политику. Существенные изменения будут анонсированы в приложении или на странице проекта на GitHub.
 
-**Сеть.** Приложение выходит в интернет только чтобы скачать нужные вам файлы: с серверов Mojang/Microsoft (файлы игры), GitHub (Java, нативные библиотеки, проверка обновлений), Fabric и Forge (загрузчики модов), Modrinth или его зеркала (каталог модов). Эти сервисы могут видеть ваш IP-адрес согласно своим политикам.
+## 7. Юридические нюансы
 
-**Разрешения.** Интернет (загрузки), служба переднего плана и уведомления (чтобы загрузка не прерывалась и был виден прогресс), блокировка сна (на время загрузки). Приложение не читает контакты, местоположение, камеру, микрофон, фото и файлы вне своей папки.
+Эта политика подготовлена в соответствии с требованиями GDPR.
 
-**Вход через Microsoft (в планах).** Если появится, вход идёт напрямую между вашим устройством и Microsoft/Xbox/Mojang. Токены хранятся только на устройстве.
+Дата вступления в силу: 25.10.2026
 
-**Дети.** Приложение не собирает данные ни о ком.
+---
 
-**Связь.** Issue на https://github.com/Kumolix/Minecraft-Launcher-for-Android или Telegram: https://t.me/mobilix_launcher
+# Mobilix Launcher Privacy Policy
+
+Kumolix does not collect, process or store personal data of users of the Mobilix Launcher app. Mobilix is an independent open-source project and is not affiliated with Mojang, Microsoft or Minecraft.
+
+## 1. Data controller
+
+Controller: Kumolix (independent developer).
+Contact: kumolix.me@gmail.com, Telegram https://t.me/mobilix_launcher, GitHub https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft
+
+## 2. Data that is not collected
+
+We do not request or record: names, emails, phone numbers, addresses; device identifiers, IP addresses, location; behavioural data (screen views, session time); payment, biometric or any other personal data.
+
+The app works fully anonymously. No registration or accounts are required. Settings, nickname, skin, controls layout and downloaded game files stay on your device, in the app's private folder, and are removed with the app or via "Delete downloads".
+
+## 3. Exceptions
+
+* Third-party libraries: only Apache Commons Compress and XZ for Java (archive extraction). They do not use the network and collect nothing. There is no analytics, advertising or crash reporting.
+* Downloads: to fetch files you ask for, the app contacts Mojang/Microsoft (game files), GitHub (Java, libraries, update check), Fabric and Forge (mod loaders), Modrinth and its mirrors (mod catalog), and Ely.by and Mojang if you import a skin by nickname (the nickname you type is sent). These services may see your IP address and follow their own privacy policies.
+* The Minecraft game itself belongs to Mojang and follows the Mojang/Microsoft privacy policy.
+* Launch logs (launcher.log, game.log) stay on the device, are never sent anywhere and may contain file paths and your nickname; you decide whether to share them.
+* Permissions: internet, foreground service and notifications, wake lock (downloads only). The app does not read contacts, location, camera, microphone, photos or files outside its own folder.
+* Microsoft sign-in (planned): it will go directly between your device and Microsoft/Xbox/Mojang; tokens will be stored only on the device.
+
+## 4. Sharing with third parties
+
+We do not share any data with third parties.
+
+## 5. User rights
+
+Since no data is collected, requests to access, correct, delete or transfer data are not applicable. For privacy questions, use the contacts in section 1.
+
+## 6. Changes
+
+We may update this policy. Significant changes will be announced in the app or on the GitHub project page.
+
+## 7. Legal notes
+
+This policy is prepared in line with GDPR requirements.
+
+Effective date: 2026-10-25

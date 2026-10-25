@@ -47,6 +47,7 @@ class MainActivity : Activity() {
 
     companion object {
         const val NICK = "Player"
+        const val AGREEMENT_URL = "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md"
         const val DEFAULT_MIRROR = "https://api.modrinth.black/v2"
         const val VERSION = "1.21.3"
         const val MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
@@ -110,7 +111,7 @@ class MainActivity : Activity() {
             "https://github.com/Kumolix/Minecraft-Launcher-for-Android", updateVer != null)
         link("TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
         link("Telegram", "@mobilix_launcher", "https://t.me/mobilix_launcher")
-        link(tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Minecraft-Launcher-for-Android/blob/main/PRIVACY.md")
+        link(tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
         return col
     }
 
@@ -282,6 +283,14 @@ class MainActivity : Activity() {
         ghItem = item("Соцсети", "Social") { openPage(tr("Соцсети", "Social"), socialPage()) }
         item("Язык", "Language") { chooseLanguage() }
         drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+        drawer.addView(TextView(this).apply {
+            text = tr("Пользовательское соглашение", "User agreement"); textSize = 13f; setTextColor(Th.dim)
+            paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(28), 0, dp(16), 0); isClickable = true
+            setOnClickListener {
+                try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(AGREEMENT_URL))) } catch (_: Exception) {}
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         rootFrame.addView(drawer, FrameLayout.LayoutParams(drawerW, ViewGroup.LayoutParams.MATCH_PARENT))
 
         hamb = HamburgerView(this).apply { setOnClickListener { setDrawer(!drawerOpen) } }
@@ -780,6 +789,28 @@ class MainActivity : Activity() {
             skinFile()?.let { accountSkin?.setSkin(android.graphics.BitmapFactory.decodeFile(it.path)) }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         col.addView(TextView(this).apply {
+            text = tr("Скин по нику (Ely.by или Mojang)", "Skin by nickname (Ely.by or Mojang)"); textSize = 14f; setTextColor(Th.dim); setPadding(0, dp(20), 0, dp(4))
+        })
+        val skinNick = android.widget.EditText(this).apply {
+            hint = tr("Ник игрока", "Player nickname"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true)
+            filters = arrayOf(android.text.InputFilter.LengthFilter(16))
+        }
+        col.addView(skinNick)
+        val impRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        impRow.addView(btn("Ely.by", 0xFF14301D.toInt()) { importSkin("ely", skinNick.text.toString().trim()) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        impRow.addView(btn("Mojang", 0xFF14301D.toInt()) { importSkin("mojang", skinNick.text.toString().trim()) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+        col.addView(impRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        val catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun open(url: String) { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {} }
+        catRow.addView(btn(tr("Каталог Ely.by", "Ely.by catalog"), 0xFF0F2416.toInt()) { open("https://ely.by/skins") }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        catRow.addView(btn("SkinMC", 0xFF0F2416.toInt()) { open("https://skinmc.net/") }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
+        col.addView(catRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
+        col.addView(TextView(this).apply {
+            text = tr("В каталогах скачайте скин PNG и загрузите его кнопкой «Загрузить скин». Импорт по нику отправляет ник на сервер выбранного сервиса.",
+                "Download a PNG skin from a catalog and load it with “Upload skin”. Import by nickname sends the nickname to the chosen service.")
+            textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(6), 0, 0)
+        })
+        col.addView(TextView(this).apply {
             text = tr("Ник (офлайн-режим)", "Nickname (offline mode)"); textSize = 14f; setTextColor(Th.dim); setPadding(0, dp(24), 0, dp(4))
         })
         val nick = android.widget.EditText(this).apply {
@@ -814,6 +845,49 @@ class MainActivity : Activity() {
         })
         sv.addView(col)
         return sv
+    }
+
+    /** Скачивает скин игрока по нику: source = "ely" или "mojang". */
+    private fun importSkin(source: String, nickIn: String) {
+        if (!Regex("[A-Za-z0-9_]{3,16}").matches(nickIn)) {
+            Toast.makeText(this, tr("Введите ник: 3–16 символов, латиница, цифры и _", "Enter a nickname: 3–16 chars, letters, digits and _"), Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(this, tr("Загрузка скина…", "Downloading skin…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                var url: String
+                var slim = false
+                if (source == "ely") {
+                    url = "https://skinsystem.ely.by/skins/$nickIn.png"
+                    try {
+                        val t = JSONObject(fetchText("https://skinsystem.ely.by/textures/$nickIn")).getJSONObject("SKIN")
+                        url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
+                    } catch (_: Exception) {}
+                } else {
+                    val id = JSONObject(fetchText("https://api.mojang.com/users/profiles/minecraft/$nickIn")).getString("id")
+                    val props = JSONObject(fetchText("https://sessionserver.mojang.com/session/minecraft/profile/$id")).getJSONArray("properties")
+                    val value = String(android.util.Base64.decode(props.getJSONObject(0).getString("value"), android.util.Base64.DEFAULT))
+                    val t = JSONObject(value).getJSONObject("textures").getJSONObject("SKIN")
+                    url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
+                }
+                val c = URL(url).openConnection() as HttpURLConnection
+                c.connectTimeout = 15000; c.readTimeout = 30000
+                c.setRequestProperty("User-Agent", "Mobilix/1.7")
+                val bytes = c.inputStream.use { it.readBytes() }
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp == null || bmp.width != 64 || (bmp.height != 64 && bmp.height != 32)) throw RuntimeException("not a 64x64 skin")
+                File(filesDir, "skin_custom.png").writeBytes(bytes)
+                prefs.edit().putBoolean("slim", slim).apply()
+                runOnUiThread {
+                    skinView.slim = slim; skinView.setSkin(bmp)
+                    accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
+                    Toast.makeText(this, tr("Скин загружен", "Skin loaded") + (if (slim) tr(" (стройный)", " (slim)") else ""), Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this, tr("Скин не найден или нет сети", "Skin not found or no network"), Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 
     private fun skinFile(): File? {
