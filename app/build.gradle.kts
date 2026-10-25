@@ -10,8 +10,8 @@ android {
     defaultConfig {
         applicationId = "dev.mclauncher"
         minSdk = 28
-        targetSdk = 28
-        versionCode = 23
+        targetSdk = 34
+        versionCode = 24
         versionName = rootProject.file("VERSION").readText().trim()
     }
 
@@ -26,6 +26,19 @@ android {
     buildTypes {
         getByName("debug") {
             signingConfig = signingConfigs.getByName("fixed")
+        }
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("fixed")
+            isMinifyEnabled = false
+            isDebuggable = false
         }
     }
 

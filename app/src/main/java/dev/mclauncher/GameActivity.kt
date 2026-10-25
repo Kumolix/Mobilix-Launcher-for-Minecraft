@@ -216,7 +216,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
     private fun runGame() {
         try {
             val dataDir = getExternalFilesDir(null) ?: filesDir
-            val launchFile = File(dataDir, "launch.json")
+            val launchFile = File(dataDir, if (mode == "installer") "installer.json" else "launch.json")
             if (!launchFile.exists()) {
                 say("Нет launch.json. Сначала нажмите «Играть» в главном окне.")
                 return
@@ -253,7 +253,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
                 }
             }
 
-            val log = File(dataDir, "game.log")
+            val log = File(dataDir, if (mode == "installer") "installer.log" else "game.log")
             gameLog = log
             Native.redirectOutput(log.path)
             runOnUiThread { handler.post(tailer) }
@@ -264,6 +264,10 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             say("Запуск Minecraft в процессе...")
             val r = Native.runMain(j.getString("javaHome"), opts.toTypedArray(), j.getString("main"), args)
             say(r)
+            if (mode == "installer") {
+                try { File(dataDir, "installer.done").writeText(r) } catch (_: Exception) {}
+                runOnUiThread { finish() }
+            }
         } catch (e: Throwable) {
             say("ОШИБКА игры: $e")
         }

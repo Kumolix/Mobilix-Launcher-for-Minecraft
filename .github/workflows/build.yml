@@ -69,13 +69,13 @@ jobs:
           fi
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleRelease --no-daemon
 
       - name: Name the APK
         run: |
           NAME="Mobilix-launcher-v-$(cat VERSION)"
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/$NAME.apk"
+          cp app/build/outputs/apk/release/app-release.apk "out/$NAME.apk"
           echo "NAME=$NAME" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v5
@@ -89,7 +89,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VER="$(cat VERSION | tr -d '[:space:]')"
-          TAG="AKP-$VER"
+          TAG="APK-$VER"
           if [ -f RELEASE_NOTES.md ] && head -1 RELEASE_NOTES.md | grep -qx "version: $VER"; then
             if gh release view "$TAG" >/dev/null 2>&1; then
               echo "release $TAG already exists"

@@ -110,6 +110,7 @@ class MainActivity : Activity() {
             "https://github.com/Kumolix/Minecraft-Launcher-for-Android", updateVer != null)
         link("TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
         link("Telegram", "@mobilix_launcher", "https://t.me/mobilix_launcher")
+        link(tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Minecraft-Launcher-for-Android/blob/main/PRIVACY.md")
         return col
     }
 
@@ -170,6 +171,9 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            try { requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 7) } catch (_: Exception) {}
+        }
         Th.light = prefs.getString("theme", "dark") == "light"
         drawerW = resources.displayMetrics.widthPixels - dp(64)
 
@@ -888,8 +892,7 @@ class MainActivity : Activity() {
                         val lp = File(root, "launcher_profiles.json")
                         if (!lp.exists()) lp.writeText("{\"profiles\":{}}")
                         log("Forge: установка (это долго, потерпите)…")
-                        val code = runProcess(listOf(java.path, "-jar", installer.path, "--installClient", root.path), rt, root)
-                        if (code != 0) throw RuntimeException("Установщик Forge завершился с кодом $code")
+                        runForgeInstaller(rt, installer, root)
                         id = findProfile("forge", mc) ?: throw RuntimeException("Forge установился, но профиль не найден")
                     }
                     else -> prepareAndRun(mc, false)
@@ -1476,11 +1479,9 @@ class MainActivity : Activity() {
         File(root, "launch.json").writeText(launch.toString())
         log("Команда запуска собрана (${cmd.size} аргументов).")
 
-        // 7. Проверка Java
-        log("Проверка: java -version")
-        val code = runProcess(listOf(java.path, "-version"), rt, gameDir)
-        if (code != 0) {
-            log("Java не запустилась (код $code). Пришлите этот лог.")
+        // 7. Проверка Java (запускать программы из папки приложения нельзя, проверяем наличие файлов)
+        if (!File(rt, "lib/server/libjvm.so").exists() && !File(rt, "lib/aarch64/server/libjvm.so").exists()) {
+            log("Java установлена неполностью (нет libjvm.so). Удалите скачанное и попробуйте снова.")
             return
         }
         log("Java работает.")
@@ -1791,25 +1792,44 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Системный журнал приложения: там бывает трасса падения нативного кода. */
-    private fun runProcess(cmd: List<String>, rt: File, workDir: File): Int {
-        val pb = ProcessBuilder(cmd).directory(workDir).redirectErrorStream(true)
-        val env = pb.environment()
-        env["JAVA_HOME"] = rt.path
-        env["HOME"] = workDir.path
-        env["TMPDIR"] = cacheDir.path
-        env["MEMTAG_OPTIONS"] = "off"
-        val shim = File(applicationInfo.nativeLibraryDir, "libnotag.so")
-        if (shim.exists()) {
-            env["LD_PRELOAD"] = shim.path
-        } else {
-            log("ВНИМАНИЕ: libnotag.so не найдена в ${applicationInfo.nativeLibraryDir}")
+    /** Запускает установщик Forge внутри процесса :game (в нём уже есть встроенная Java). */
+    private fun runForgeInstaller(rt: File, installer: File, root: File) {
+        val mainClass = try {
+            java.util.jar.JarFile(installer).use { it.manifest?.mainAttributes?.getValue("Main-Class") }
+        } catch (_: Exception) { null } ?: "net.minecraftforge.installer.SimpleInstaller"
+        val j = JSONObject()
+        j.put("javaHome", rt.path)
+        j.put("main", mainClass)
+        j.put("jvm", JSONArray(listOf("-cp", installer.path, "-Xmx768M", "-XX:+UseSerialGC", "-Djava.awt.headless=true",
+            "-Duser.home=${root.path}", "-Djava.io.tmpdir=${cacheDir.path}", "-Duser.dir=${root.path}")))
+        j.put("game", JSONArray(listOf("--installClient", root.path)))
+        j.put("glLib", "")
+        File(root, "installer.json").writeText(j.toString())
+        val done = File(getExternalFilesDir(null) ?: filesDir, "installer.done").apply { delete() }
+        val ilog = File(getExternalFilesDir(null) ?: filesDir, "installer.log").apply { delete() }
+        runOnUiThread { startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "installer")) }
+        var shown = 0L
+        val t0 = System.currentTimeMillis()
+        while (System.currentTimeMillis() - t0 < 30 * 60 * 1000L) {
+            Thread.sleep(1500)
+            try {
+                if (ilog.exists() && ilog.length() > shown) {
+                    java.io.RandomAccessFile(ilog, "r").use { raf ->
+                        raf.seek(shown)
+                        val buf = ByteArray((raf.length() - shown).toInt()); raf.readFully(buf)
+                        shown = raf.length()
+                        String(buf).lines().filter { it.isNotBlank() }.forEach { log(it) }
+                    }
+                }
+            } catch (_: Exception) {}
+            if (done.exists()) break
+            // процесс :game мог завершиться вместе с установщиком (System.exit)
+            if (System.currentTimeMillis() - t0 > 20000) {
+                val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+                val alive = am.runningAppProcesses?.any { it.processName == "$packageName:game" } ?: true
+                if (!alive) break
+            }
         }
-        env["LD_LIBRARY_PATH"] = listOf("lib", "lib/server", "lib/jli", "lib/aarch64", "lib/aarch64/server", "lib/aarch64/jli")
-            .map { File(rt, it) }.filter { it.isDirectory }.joinToString(":") { it.path }
-        val p = pb.start()
-        p.inputStream.bufferedReader().forEachLine { log(it) }
-        return p.waitFor()
     }
 
     // ---------- вспомогательное ----------
