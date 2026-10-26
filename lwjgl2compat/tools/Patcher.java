@@ -20,7 +20,7 @@ public class Patcher {
     static final Pattern HOLDER = Pattern.compile(
         "org/lwjgl/opengl/(GL\\d+|ARB\\w+|EXT\\w+|NV\\w+|AMD\\w+|KHR\\w+|APPLE\\w+|IBM\\w+|SGI\\w+|SUN\\w+|INTEL\\w+|OES\\w+|GREMEDY\\w+|HP\\w+|INGR\\w+|MESA\\w+|OVR\\w+|PGI\\w+|REND\\w+|S3\\w+|3DFX\\w+)"
         + "|org/lwjgl/openal/(AL\\d+|ALC\\d+|EXT\\w+|EFX\\d+|SOFT\\w+)");
-    static final Pattern SUFFIX = Pattern.compile("^(.*?)(?:[fdis]|ub|us|ui|i64|ui64)?v$");
+    static final Pattern SUFFIX = Pattern.compile("^(.*?)(?:[fdis]|ub|us|ui|i64|ui64)?v((?:ARB|EXT|NV|AMD|KHR|OES|SGIS|APPLE)?)$");
 
     static final class M { final String name, desc; M(String n, String d) { name = n; desc = d; } 
         @Override public boolean equals(Object o) { return o instanceof M && ((M) o).name.equals(name) && ((M) o).desc.equals(desc); }
@@ -86,7 +86,7 @@ public class Patcher {
                             if (!hasBuffer(m.desc)) continue;
                             Matcher mt = SUFFIX.matcher(m.name);
                             if (!mt.matches()) continue;
-                            String alias = mt.group(1);
+                            String alias = mt.group(1) + mt.group(2);
                             if (alias.length() < 3) continue;
                             M am = new M(alias, m.desc);
                             if (have.contains(am)) continue;
