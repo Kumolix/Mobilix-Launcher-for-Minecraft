@@ -1538,7 +1538,7 @@ class MainActivity : Activity() {
         log("Нужна Java: $javaMajor")
         val legacy = JSONObject(versionJsonFile.readText()).optJSONObject("arguments") == null
         if (legacy && child != null) throw RuntimeException("Forge и другие загрузчики для версий 1.12.2 и ниже пока не поддерживаются")
-        val oldGl = legacy // 1.8.3: legacy || javaMajor < 16
+        val oldGl = legacy || javaMajor < 16
         if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
         else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
         val newLwjgl = "3.3.3"
