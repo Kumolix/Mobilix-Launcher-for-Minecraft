@@ -77,6 +77,7 @@ public final class Display {
 		GLFW.glfwSwapInterval(vsync ? 1 : 0);
 		created = true;
 		mode = new DisplayMode(width, height, 32, 60);
+		resizedPending = true; // окно имеет реальный размер экрана, игра должна подстроиться
 		try {
 			if (!Mouse.isCreated()) Mouse.create();
 			if (!Keyboard.isCreated()) Keyboard.create();
