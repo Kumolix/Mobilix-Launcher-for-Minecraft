@@ -1518,6 +1518,22 @@ class MainActivity : Activity() {
         log("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MODEL}, ${Build.SUPPORTED_ABIS.joinToString()}")
         log("Папка данных: ${root.path}")
         log("Профиль $profile (игра $baseVer), ник ${nickName()}")
+        try {
+            val gl = File(root, "game.log")
+            if (gl.exists()) {
+                val noise = Regex("^\\s*(Possible|Possible solutions|a\\)|b\\)|\\[LWJGL\\]|Module:|Loaded from|JRE:|JVM:|OS:)")
+                val tail = gl.readLines().filter { it.isNotBlank() && !noise.containsMatchIn(it) && !it.contains("Incompatible Java and native") }.takeLast(40)
+                log("=== Конец лога прошлого запуска игры ===")
+                tail.forEach { log("  $it") }
+            }
+            root.listFiles()?.filter { it.isDirectory && it.name.startsWith("game") }?.forEach { d ->
+                val cr = File(d, "crash-reports").listFiles()?.maxByOrNull { it.lastModified() }
+                if (cr != null && System.currentTimeMillis() - cr.lastModified() < 30 * 60 * 1000) {
+                    log("=== Отчёт о крэше ${d.name}/${cr.name} ===")
+                    cr.readLines().take(45).forEach { log("  $it") }
+                }
+            }
+        } catch (_: Exception) {}
         root.listFiles()?.filter { it.isDirectory && (it.name == "game" || it.name.startsWith("game-")) }?.forEach { d ->
             val hs = File(d, "hs_err.log")
             if (hs.exists()) {
