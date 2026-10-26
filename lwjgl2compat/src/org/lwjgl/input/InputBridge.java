@@ -1,0 +1,123 @@
+package org.lwjgl.input;
+
+/** Общие данные ввода и таблица клавиш GLFW -> LWJGL 2 (Mobilix). */
+public final class InputBridge {
+	public static final Object LOCK = new Object();
+	private static final int[] m = new int[512];
+	static {
+		m[32] = Keyboard.KEY_SPACE;
+		m[39] = Keyboard.KEY_APOSTROPHE;
+		m[44] = Keyboard.KEY_COMMA;
+		m[45] = Keyboard.KEY_MINUS;
+		m[46] = Keyboard.KEY_PERIOD;
+		m[47] = Keyboard.KEY_SLASH;
+		m[48] = Keyboard.KEY_0;
+		m[49] = Keyboard.KEY_1;
+		m[50] = Keyboard.KEY_2;
+		m[51] = Keyboard.KEY_3;
+		m[52] = Keyboard.KEY_4;
+		m[53] = Keyboard.KEY_5;
+		m[54] = Keyboard.KEY_6;
+		m[55] = Keyboard.KEY_7;
+		m[56] = Keyboard.KEY_8;
+		m[57] = Keyboard.KEY_9;
+		m[59] = Keyboard.KEY_SEMICOLON;
+		m[61] = Keyboard.KEY_EQUALS;
+		m[65] = Keyboard.KEY_A;
+		m[66] = Keyboard.KEY_B;
+		m[67] = Keyboard.KEY_C;
+		m[68] = Keyboard.KEY_D;
+		m[69] = Keyboard.KEY_E;
+		m[70] = Keyboard.KEY_F;
+		m[71] = Keyboard.KEY_G;
+		m[72] = Keyboard.KEY_H;
+		m[73] = Keyboard.KEY_I;
+		m[74] = Keyboard.KEY_J;
+		m[75] = Keyboard.KEY_K;
+		m[76] = Keyboard.KEY_L;
+		m[77] = Keyboard.KEY_M;
+		m[78] = Keyboard.KEY_N;
+		m[79] = Keyboard.KEY_O;
+		m[80] = Keyboard.KEY_P;
+		m[81] = Keyboard.KEY_Q;
+		m[82] = Keyboard.KEY_R;
+		m[83] = Keyboard.KEY_S;
+		m[84] = Keyboard.KEY_T;
+		m[85] = Keyboard.KEY_U;
+		m[86] = Keyboard.KEY_V;
+		m[87] = Keyboard.KEY_W;
+		m[88] = Keyboard.KEY_X;
+		m[89] = Keyboard.KEY_Y;
+		m[90] = Keyboard.KEY_Z;
+		m[91] = Keyboard.KEY_LBRACKET;
+		m[92] = Keyboard.KEY_BACKSLASH;
+		m[93] = Keyboard.KEY_RBRACKET;
+		m[96] = Keyboard.KEY_GRAVE;
+		m[256] = Keyboard.KEY_ESCAPE;
+		m[257] = Keyboard.KEY_RETURN;
+		m[258] = Keyboard.KEY_TAB;
+		m[259] = Keyboard.KEY_BACK;
+		m[260] = Keyboard.KEY_INSERT;
+		m[261] = Keyboard.KEY_DELETE;
+		m[262] = Keyboard.KEY_RIGHT;
+		m[263] = Keyboard.KEY_LEFT;
+		m[264] = Keyboard.KEY_DOWN;
+		m[265] = Keyboard.KEY_UP;
+		m[266] = Keyboard.KEY_PRIOR;
+		m[267] = Keyboard.KEY_NEXT;
+		m[268] = Keyboard.KEY_HOME;
+		m[269] = Keyboard.KEY_END;
+		m[280] = Keyboard.KEY_CAPITAL;
+		m[281] = Keyboard.KEY_SCROLL;
+		m[282] = Keyboard.KEY_NUMLOCK;
+		m[283] = Keyboard.KEY_SYSRQ;
+		m[284] = Keyboard.KEY_PAUSE;
+		m[290] = Keyboard.KEY_F1;
+		m[291] = Keyboard.KEY_F2;
+		m[292] = Keyboard.KEY_F3;
+		m[293] = Keyboard.KEY_F4;
+		m[294] = Keyboard.KEY_F5;
+		m[295] = Keyboard.KEY_F6;
+		m[296] = Keyboard.KEY_F7;
+		m[297] = Keyboard.KEY_F8;
+		m[298] = Keyboard.KEY_F9;
+		m[299] = Keyboard.KEY_F10;
+		m[300] = Keyboard.KEY_F11;
+		m[301] = Keyboard.KEY_F12;
+		m[302] = Keyboard.KEY_F13;
+		m[303] = Keyboard.KEY_F14;
+		m[304] = Keyboard.KEY_F15;
+		m[320] = Keyboard.KEY_NUMPAD0;
+		m[321] = Keyboard.KEY_NUMPAD1;
+		m[322] = Keyboard.KEY_NUMPAD2;
+		m[323] = Keyboard.KEY_NUMPAD3;
+		m[324] = Keyboard.KEY_NUMPAD4;
+		m[325] = Keyboard.KEY_NUMPAD5;
+		m[326] = Keyboard.KEY_NUMPAD6;
+		m[327] = Keyboard.KEY_NUMPAD7;
+		m[328] = Keyboard.KEY_NUMPAD8;
+		m[329] = Keyboard.KEY_NUMPAD9;
+		m[330] = Keyboard.KEY_DECIMAL;
+		m[331] = Keyboard.KEY_DIVIDE;
+		m[332] = Keyboard.KEY_MULTIPLY;
+		m[333] = Keyboard.KEY_SUBTRACT;
+		m[334] = Keyboard.KEY_ADD;
+		m[335] = Keyboard.KEY_NUMPADENTER;
+		m[336] = Keyboard.KEY_NUMPADEQUALS;
+		m[340] = Keyboard.KEY_LSHIFT;
+		m[341] = Keyboard.KEY_LCONTROL;
+		m[342] = Keyboard.KEY_LMENU;
+		m[343] = Keyboard.KEY_LMETA;
+		m[344] = Keyboard.KEY_RSHIFT;
+		m[345] = Keyboard.KEY_RCONTROL;
+		m[346] = Keyboard.KEY_RMENU;
+		m[347] = Keyboard.KEY_RMETA;
+		m[348] = Keyboard.KEY_APPS;
+	}
+	private InputBridge() {}
+
+	/** Код клавиши LWJGL 2 по коду GLFW; 0, если неизвестна. */
+	public static int toLwjgl(int glfwKey) {
+		return glfwKey >= 0 && glfwKey < m.length ? m[glfwKey] : 0;
+	}
+}

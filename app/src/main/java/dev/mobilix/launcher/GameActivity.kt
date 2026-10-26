@@ -259,6 +259,10 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             runOnUiThread { handler.post(tailer) }
 
             try { Native.setFpsCap(gs().optInt("fps", 0)) } catch (_: Throwable) {}
+            j.optJSONObject("env")?.let { e ->
+                val it2 = e.keys()
+                while (it2.hasNext()) { val k = it2.next(); try { android.system.Os.setenv(k, e.getString(k), true) } catch (_: Throwable) {} }
+            }
             val gl = j.optString("glLib", "")
             if (gl.isNotEmpty()) Native.setGlLib(gl)
             say("Запуск Minecraft в процессе...")

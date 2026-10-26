@@ -68,6 +68,37 @@ jobs:
             echo "::warning::openal build failed rc=$RC: $(tail -c 1500 /tmp/oal-build.log | tr '\n' '|')"
           fi
 
+      - name: Build gl4es (renderer for old Minecraft versions)
+        continue-on-error: true
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
+          git clone --depth 1 https://github.com/ptitSeb/gl4es.git /tmp/gl4es > /tmp/gl4es-build.log 2>&1
+          cmake -S /tmp/gl4es -B /tmp/gl4es/build -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=26 -DCMAKE_BUILD_TYPE=Release -DANDROID=ON -DNOX11=ON -DNO_GBM=ON \
+            -DNOEGL=ON -DNO_INIT_CONSTRUCTOR=ON -DDEFAULT_ES=2 -DUSE_ANDROID_LOG=ON >> /tmp/gl4es-build.log 2>&1 &&
+          cmake --build /tmp/gl4es/build -j4 >> /tmp/gl4es-build.log 2>&1
+          RC=$?
+          F=$(ls /tmp/gl4es/lib/libGL.so* 2>/dev/null | head -1)
+          if [ $RC -eq 0 ] && [ -n "$F" ]; then
+            cp -L "$F" "$OUT/libgl4es.so"
+            echo "::notice::gl4es built: $(ls -la $OUT/libgl4es.so)"
+          else
+            echo "::warning::gl4es build failed rc=$RC: $(tail -c 1500 /tmp/gl4es-build.log | tr '\n' '|')"
+          fi
+
+      - name: Build LWJGL2 compatibility layer (old Minecraft versions)
+        continue-on-error: true
+        run: |
+          set -e
+          M=https://repo1.maven.org/maven2
+          mkdir -p /tmp/l3 app/src/main/assets
+          for a in lwjgl lwjgl-glfw lwjgl-opengl lwjgl-openal; do
+            curl -fsSL "$M/org/lwjgl/$a/3.3.3/$a-3.3.3.jar" -o "/tmp/l3/$a.jar"
+          done
+          curl -fsSL "$M/org/ow2/asm/asm/9.7/asm-9.7.jar" -o /tmp/asm.jar
+          bash lwjgl2compat/build.sh /tmp/l3 /tmp/asm.jar "$PWD/app/src/main/assets/lwjgl2compat.jar"
+
       - name: Prepare signing key (from GitHub Secrets)
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}

@@ -123,8 +123,24 @@ EXPORT void glfwDestroyWindow(void* w) {
     eglDestroyContext(G.dpy, G.ctx); eglDestroySurface(G.dpy, G.surf);
     G.created = 0;
 }
+static int g4_inited = 0;
+static void g4_fbsize(int* w, int* h) { *w = G.w; *h = G.h; }
+static void* g4_proc(const char* n) { return (void*) eglGetProcAddress(n); }
+// gl4es (собран с NOEGL): ему нужен текущий контекст GLES, поэтому инициализируем после первого MakeCurrent
+static void g4_init(void) {
+    if (g4_inited || !G.gl_lib) return;
+    void (*init)(void) = (void (*)(void)) dlsym(G.gl_lib, "initialize_gl4es");
+    if (!init) return;
+    g4_inited = 1;
+    void (*sp)(void* (*)(const char*)) = (void (*)(void* (*)(const char*))) dlsym(G.gl_lib, "set_getprocaddress");
+    void (*sf)(void (*)(int*, int*)) = (void (*)(void (*)(int*, int*))) dlsym(G.gl_lib, "set_getmainfbsize");
+    if (sp) sp(g4_proc);
+    if (sf) sf(g4_fbsize);
+    init();
+    LOG("gl4es initialised");
+}
 EXPORT void glfwMakeContextCurrent(void* w) {
-    if (w) eglMakeCurrent(G.dpy, G.surf, G.surf, G.ctx);
+    if (w) { eglMakeCurrent(G.dpy, G.surf, G.surf, G.ctx); g4_init(); }
     else eglMakeCurrent(G.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }
 EXPORT void* glfwGetCurrentContext(void) { return eglGetCurrentContext() != EGL_NO_CONTEXT ? (void*) &G : NULL; }
@@ -145,7 +161,14 @@ EXPORT void glfwSwapBuffers(void* w) {
         G.size_dirty = 1;
         LOG("поверхность пересоздана %dx%d", G.w, G.h);
     }
-    if (eglSwapBuffers(G.dpy, G.surf) == EGL_FALSE) G.surf_dirty = G.win ? 1 : 0;
+    if (g4_inited) {
+        static void (*pre)(void), (*post)(void); static int look = 0;
+        if (!look) { look = 1; pre = (void (*)(void)) dlsym(G.gl_lib, "gl4es_pre_swap"); post = (void (*)(void)) dlsym(G.gl_lib, "gl4es_post_swap"); }
+        if (pre) pre();
+    }
+    int swapped = eglSwapBuffers(G.dpy, G.surf);
+    if (g4_inited) { static void (*post2)(void); static int l2 = 0; if (!l2) { l2 = 1; post2 = (void (*)(void)) dlsym(G.gl_lib, "gl4es_post_swap"); } if (post2) post2(); }
+    if (swapped == EGL_FALSE) G.surf_dirty = G.win ? 1 : 0;
     if (g_fps > 0) {                                   // ограничение FPS (стабилизация производительности)
         double target = 1.0 / g_fps, t = now(), wait = g_lastFrame + target - t;
         if (wait > 0 && wait < 0.2) usleep((useconds_t) (wait * 1e6));

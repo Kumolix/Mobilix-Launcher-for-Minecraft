@@ -1216,7 +1216,7 @@ class MainActivity : Activity() {
                     val o = man.getJSONObject(i); val id = o.getString("id")
                     order[id] = i
                     if (!cut && o.getString("type") == "release") vanilla.add(id)
-                    if (id == "1.7.2") cut = true
+                    if (id == "1.8") cut = true
                 }
                 try {
                     val fa = JSONArray(fetchText("https://meta.fabricmc.net/v2/versions/game"))
@@ -1536,7 +1536,12 @@ class MainActivity : Activity() {
         val v = mergeProfile(JSONObject(versionJsonFile.readText()), child)
         val javaMajor = v.optJSONObject("javaVersion")?.optInt("majorVersion", 0) ?: 0
         log("Нужна Java: $javaMajor")
-        if (v.optJSONObject("arguments") == null) throw RuntimeException("Эта версия слишком старая: её формат запуска пока не поддерживается")
+        val legacy = JSONObject(versionJsonFile.readText()).optJSONObject("arguments") == null
+        if (legacy && child != null) throw RuntimeException("Forge и другие загрузчики для версий 1.12.2 и ниже пока не поддерживаются")
+        val oldGl = legacy // 1.8.3: legacy || javaMajor < 16
+        if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
+        else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
+        val newLwjgl = "3.3.3"
 
         // 2. Клиентский jar
         val clientInfo = v.getJSONObject("downloads").getJSONObject("client")
@@ -1556,8 +1561,24 @@ class MainActivity : Activity() {
             val lib = libs.getJSONObject(i)
             if (!allowed(lib)) continue
             val name = lib.optString("name")
-            if (name.startsWith("org.lwjgl:lwjgl:")) lwjglVer = name.split(":")[2]
             val art = lib.optJSONObject("downloads")?.optJSONObject("artifact")
+            if (oldGl) {
+                // нативные jar и LWJGL 2 нам не нужны: LWJGL 3.3.3 ставится отдельно
+                if (name.startsWith("org.lwjgl.lwjgl:lwjgl:") || name.startsWith("org.lwjgl.lwjgl:lwjgl-platform:") ||
+                    name.startsWith("net.java.jinput:") || name.startsWith("net.java.jutils:")) continue
+                if (lib.has("natives") && art == null) continue
+                if (name.split(":").size > 3 && name.split(":")[3].startsWith("natives")) continue
+            }
+            if (oldGl && name.startsWith("org.lwjgl:")) {
+                val pp = name.split(":")
+                val a = pp[1]
+                val path3 = "org/lwjgl/$a/$newLwjgl/$a-$newLwjgl.jar"
+                val dest3 = File(librariesDir, path3)
+                libTasks.add(Task("https://repo1.maven.org/maven2/$path3", dest3, null))
+                cpMap["org.lwjgl:$a"] = dest3.path
+                continue
+            }
+            if (name.startsWith("org.lwjgl:lwjgl:")) lwjglVer = name.split(":")[2]
             val path: String; var url: String?; var sha: String? = null
             if (art != null) {
                 path = art.getString("path"); url = art.optString("url", ""); sha = art.optString("sha1", "").ifEmpty { null }
@@ -1571,7 +1592,26 @@ class MainActivity : Activity() {
             val key = if (parts.size >= 2) parts[0] + ":" + parts[1] + (if (parts.size > 3) ":" + parts[3] else "") else path
             cpMap[key] = dest.path
         }
-        val classpath = ArrayList(cpMap.values)
+        if (oldGl) lwjglVer = newLwjgl
+        if (legacy) {
+            for (a in listOf("lwjgl", "lwjgl-glfw", "lwjgl-opengl", "lwjgl-openal")) {
+                val path3 = "org/lwjgl/$a/$newLwjgl/$a-$newLwjgl.jar"
+                val dest3 = File(librariesDir, path3)
+                libTasks.add(Task("https://repo1.maven.org/maven2/$path3", dest3, null))
+                cpMap["org.lwjgl:$a"] = dest3.path
+            }
+        }
+        val classpath = ArrayList<String>()
+        if (legacy) {
+            val compat = File(filesDir, "lwjgl2compat.jar")
+            try {
+                assets.open("lwjgl2compat.jar").use { i -> compat.outputStream().use { o -> i.copyTo(o) } }
+            } catch (e: Exception) {
+                throw RuntimeException("В этой сборке нет слоя LWJGL 2 (lwjgl2compat.jar): старые версии недоступны")
+            }
+            classpath.add(compat.path)
+        }
+        classpath.addAll(cpMap.values)
         classpath.add(clientJar.path)
         downloadAll("Библиотеки", libTasks)
 
@@ -1589,20 +1629,41 @@ class MainActivity : Activity() {
             assetTasks.add(Task(ASSETS_URL + p, File(assetsDir, "objects/$p"), hash))
         }
         downloadAll("Ресурсы", assetTasks, fatal = false)
+        val idxJson = JSONObject(indexFile.readText())
+        val virtualAssets = idxJson.optBoolean("virtual", false) || idxJson.optBoolean("map_to_resources", false)
+        val mapToResources = idxJson.optBoolean("map_to_resources", false)
+        val assetsForGame: File = when {
+            mapToResources -> File(gameDir, "resources")
+            virtualAssets -> File(assetsDir, "virtual/$indexId")
+            else -> assetsDir
+        }
+        if (virtualAssets) {
+            log("Копирование ресурсов в ${assetsForGame.path}")
+            val ks = objects.keys()
+            while (ks.hasNext()) {
+                val k = ks.next()
+                val hash = objects.getJSONObject(k).getString("hash")
+                val src = File(assetsDir, "objects/${hash.substring(0, 2)}/$hash")
+                val dst = File(assetsForGame, k)
+                if (src.exists() && !dst.exists()) { dst.parentFile?.mkdirs(); src.copyTo(dst) }
+            }
+        }
         if (!play) { log("Файлы версии скачаны."); return }
 
         // 5. Java-рантайм
         val java = ensureRuntime(root, javaMajor)
         val rt = java.parentFile!!.parentFile!!
         val lwjglPath = ensureLwjgl(lwjglVer)
-        val mgPath = ensureMobileGlues()
+        val gl4es = File(applicationInfo.nativeLibraryDir, "libgl4es.so").takeIf { it.exists() }?.path
+        if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
+        val mgPath = if (oldGl && gl4es != null) gl4es else ensureMobileGlues()
 
         // 6. Команда запуска
         if (elyOn() && !elyEnsureSession()) {
             log("Сессия Ely.by истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
             elyLogout(false)
         }
-        applySkinPack(gameDir)
+        if (javaMajor >= 17) applySkinPack(gameDir)
         val repl = mapOf(
             "auth_player_name" to nickName(),
             "version_name" to profile,
@@ -1618,6 +1679,9 @@ class MainActivity : Activity() {
             "user_type" to (if (elyOn()) "mojang" else "legacy"),
             "version_type" to "release",
             "natives_directory" to natives.path,
+            "auth_session" to "token:" + (if (elyOn()) prefs.getString("ely_token", "0")!! else "0") + ":" + (if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()),
+            "game_assets" to assetsForGame.path,
+            "user_properties" to "{}",
             "launcher_name" to "Mobilix",
             "launcher_version" to "0.2",
             "classpath" to classpath.joinToString(":")
@@ -1625,9 +1689,16 @@ class MainActivity : Activity() {
         val sub = { s: String ->
             Regex("\\$\\{(\\w+)\\}").replace(s) { m -> repl[m.groupValues[1]] ?: m.value }
         }
-        val args = v.getJSONObject("arguments")
-        val jvmArgs = collectArgs(args.optJSONArray("jvm"), sub)
-        val gameArgs = collectArgs(args.optJSONArray("game"), sub)
+        val jvmArgs: List<String>
+        val gameArgs: List<String>
+        if (legacy) {
+            jvmArgs = listOf("-Djava.library.path=${natives.path}", "-cp", classpath.joinToString(":"))
+            gameArgs = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
+        } else {
+            val args = v.getJSONObject("arguments")
+            jvmArgs = collectArgs(args.optJSONArray("jvm"), sub)
+            gameArgs = collectArgs(args.optJSONArray("game"), sub)
+        }
         val cmd = ArrayList<String>()
         cmd.add(java.path)
         val mi = android.app.ActivityManager.MemoryInfo()
@@ -1650,6 +1721,10 @@ class MainActivity : Activity() {
             cmd.add("-Djna.nosys=true")
         }
         if (mgPath != null) cmd.add("-Dorg.lwjgl.opengl.libname=$mgPath")
+        if (oldGl) {
+            cmd.add("-Dlog4j2.formatMsgNoLookups=true")
+            for (p in listOf("java.lang", "java.util", "java.io", "java.net", "java.nio", "sun.nio.ch")) { cmd.add("--add-opens"); cmd.add("java.base/$p=ALL-UNNAMED") }
+        }
         cmd.add("-Dorg.lwjgl.util.Debug=true")
         cmd.add("-Dorg.lwjgl.util.DebugLoader=true")
         if (elyOn()) {
@@ -1669,6 +1744,9 @@ class MainActivity : Activity() {
         launch.put("jvm", JSONArray(cmd.subList(1, mainIdx)))
         launch.put("game", JSONArray(cmd.subList(mainIdx + 1, cmd.size)))
         launch.put("glLib", mgPath ?: "")
+        if (oldGl && gl4es != null) {
+            launch.put("env", JSONObject().put("LIBGL_ES", "2").put("LIBGL_NOBANNER", "1"))
+        }
         File(root, "launch.json").writeText(launch.toString())
         log("Команда запуска собрана (${cmd.size} аргументов).")
 
