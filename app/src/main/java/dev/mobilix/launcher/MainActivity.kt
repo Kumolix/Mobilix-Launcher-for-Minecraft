@@ -801,14 +801,8 @@ class MainActivity : Activity() {
         impRow.addView(btn("Ely.by", 0xFF14301D.toInt()) { importSkin("ely", skinNick.text.toString().trim()) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         impRow.addView(btn("Mojang", 0xFF14301D.toInt()) { importSkin("mojang", skinNick.text.toString().trim()) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
         col.addView(impRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
-        val catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun open(url: String) { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {} }
-        catRow.addView(btn(tr("Каталог Ely.by", "Ely.by catalog"), 0xFF0F2416.toInt()) { open("https://ely.by/skins") }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        catRow.addView(btn("SkinMC", 0xFF0F2416.toInt()) { open("https://skinmc.net/") }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(8) })
-        col.addView(catRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         col.addView(TextView(this).apply {
-            text = tr("В каталогах скачайте скин PNG и загрузите его кнопкой «Загрузить скин». Импорт по нику отправляет ник на сервер выбранного сервиса.",
-                "Download a PNG skin from a catalog and load it with “Upload skin”. Import by nickname sends the nickname to the chosen service.")
+            text = tr("Импорт по нику отправляет ник на сервер выбранного сервиса.", "Import by nickname sends the nickname to the chosen service.")
             textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(6), 0, 0)
         })
         col.addView(TextView(this).apply {
@@ -964,40 +958,70 @@ class MainActivity : Activity() {
             try {
                 importSkinNow(source, nickIn)
             } catch (e: Exception) {
-                runOnUiThread { Toast.makeText(this, tr("Скин не найден или нет сети", "Skin not found or no network"), Toast.LENGTH_LONG).show() }
+                val why = e.message ?: e.javaClass.simpleName
+                runOnUiThread { Toast.makeText(this, tr("Скин не найден: ", "Skin not found: ") + why, Toast.LENGTH_LONG).show() }
             }
         }.start()
     }
 
-    private fun importSkinNow(source: String, nickIn: String) {
-        var url: String
-        var slim = false
-        if (source == "ely") {
-            url = "https://skinsystem.ely.by/skins/$nickIn.png"
-            try {
-                val t = JSONObject(fetchText("https://skinsystem.ely.by/textures/$nickIn")).getJSONObject("SKIN")
-                url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
-            } catch (_: Exception) {}
-        } else {
-            val id = JSONObject(fetchText("https://api.mojang.com/users/profiles/minecraft/$nickIn")).getString("id")
-            val props = JSONObject(fetchText("https://sessionserver.mojang.com/session/minecraft/profile/$id")).getJSONArray("properties")
-            val value = String(android.util.Base64.decode(props.getJSONObject(0).getString("value"), android.util.Base64.DEFAULT))
-            val t = JSONObject(value).getJSONObject("textures").getJSONObject("SKIN")
-            url = t.getString("url"); slim = t.optJSONObject("metadata")?.optString("model") == "slim"
-        }
+    private fun httpBytes(url: String): ByteArray {
         val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 15000; c.readTimeout = 30000
-        c.setRequestProperty("User-Agent", "Mobilix/1.8")
-        val bytes = c.inputStream.use { it.readBytes() }
-        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        if (bmp == null || bmp.width != 64 || (bmp.height != 64 && bmp.height != 32)) throw RuntimeException("not a 64x64 skin")
-        File(filesDir, "skin_custom.png").writeBytes(bytes)
-        prefs.edit().putBoolean("slim", slim).apply()
-        runOnUiThread {
-            skinView.slim = slim; skinView.setSkin(bmp)
-            accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
-            Toast.makeText(this, tr("Скин загружен", "Skin loaded") + (if (slim) tr(" (стройный)", " (slim)") else ""), Toast.LENGTH_SHORT).show()
+        c.connectTimeout = 15000; c.readTimeout = 30000; c.instanceFollowRedirects = true
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) Mobilix/1.8")
+        c.setRequestProperty("Accept", "*/*")
+        val code = c.responseCode
+        if (code !in 200..299) throw RuntimeException("HTTP $code (${URL(url).host})")
+        return c.inputStream.use { it.readBytes() }
+    }
+
+    /** Скин по нику: несколько источников по очереди (на мобильной сети часть адресов может быть недоступна). */
+    private fun importSkinNow(source: String, nickIn: String) {
+        val tries = ArrayList<Pair<String, () -> Triple<ByteArray, Boolean, Boolean>>>()  // название, действие -> (png, slim?, slimKnown)
+        fun fromTextureJson(js: JSONObject): Triple<ByteArray, Boolean, Boolean> {
+            val t = js.getJSONObject("SKIN")
+            return Triple(httpBytes(t.getString("url")), t.optJSONObject("metadata")?.optString("model") == "slim", true)
         }
+        val ely = "Ely.by" to {
+            try {
+                fromTextureJson(JSONObject(String(httpBytes("https://skinsystem.ely.by/textures/$nickIn"))))
+            } catch (e: Exception) {
+                Triple(httpBytes("https://skinsystem.ely.by/skins/$nickIn.png"), false, false)
+            }
+        }
+        val mojangId = {
+            try { JSONObject(String(httpBytes("https://api.minecraftservices.com/minecraft/profile/lookup/name/$nickIn"))).getString("id") }
+            catch (e: Exception) { JSONObject(String(httpBytes("https://api.mojang.com/users/profiles/minecraft/$nickIn"))).getString("id") }
+        }
+        val mojang = "Mojang" to {
+            val id = mojangId()
+            val props = JSONObject(String(httpBytes("https://sessionserver.mojang.com/session/minecraft/profile/$id"))).getJSONArray("properties")
+            val value = String(android.util.Base64.decode(props.getJSONObject(0).getString("value"), android.util.Base64.DEFAULT))
+            fromTextureJson(JSONObject(value).getJSONObject("textures"))
+        }
+        val minotar = "Minotar" to { Triple(httpBytes("https://minotar.net/skin/$nickIn"), false, false) }
+        val mcheads = "MC-Heads" to { Triple(httpBytes("https://mc-heads.net/skin/$nickIn"), false, false) }
+        if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { tries.add(mojang); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
+        var lastErr = ""
+        for ((name, act) in tries) {
+            try {
+                val (bytes, slimIn, known) = act()
+                val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bmp == null || bmp.width != 64 || (bmp.height != 64 && bmp.height != 32)) { lastErr = "$name: not a 64x64 skin"; continue }
+                // если модель неизвестна, определяем по прозрачности руки (у «стройного» скина правая рука 3 пикселя)
+                val slim = if (known) slimIn else (bmp.height == 64 && android.graphics.Color.alpha(bmp.getPixel(54, 20)) == 0 && android.graphics.Color.alpha(bmp.getPixel(55, 25)) == 0)
+                File(filesDir, "skin_custom.png").writeBytes(bytes)
+                prefs.edit().putBoolean("slim", slim).apply()
+                runOnUiThread {
+                    skinView.slim = slim; skinView.setSkin(bmp)
+                    accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
+                    Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
+                }
+                return
+            } catch (e: Exception) {
+                lastErr = "$name: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+        throw RuntimeException(lastErr)
     }
 
     private fun skinFile(): File? {
