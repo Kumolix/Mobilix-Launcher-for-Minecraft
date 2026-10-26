@@ -24,6 +24,8 @@ public final class Display {
 	private static boolean fullscreen;
 	private static boolean resizable;
 	private static boolean resizedPending, resized;
+	private static volatile long lastFrame = System.currentTimeMillis();
+	private static boolean watchdog;
 	private static boolean vsync;
 	private static boolean grabWanted;
 	private static String title = "Minecraft";
@@ -77,6 +79,7 @@ public final class Display {
 		GLFW.glfwSwapInterval(vsync ? 1 : 0);
 		created = true;
 		mode = new DisplayMode(width, height, 32, 60);
+		startWatchdog();
 		resizedPending = true; // окно имеет реальный размер экрана, игра должна подстроиться
 		try {
 			if (!Mouse.isCreated()) Mouse.create();
@@ -128,6 +131,7 @@ public final class Display {
 
 	public static void update(boolean processMessages) {
 		if (!created) throw new IllegalStateException("Display not created");
+		lastFrame = System.currentTimeMillis();
 		GLFW.glfwSwapBuffers(window);
 		if (processMessages) processMessages();
 	}
@@ -141,7 +145,33 @@ public final class Display {
 		if (Keyboard.isCreated()) Keyboard.poll();
 	}
 
+	private static void startWatchdog() {
+		if (watchdog) return;
+		watchdog = true;
+		Thread t = new Thread(() -> {
+			long lastDump = 0;
+			while (true) {
+				try { Thread.sleep(5000); } catch (InterruptedException e) { return; }
+				long now = System.currentTimeMillis();
+				if (now - lastFrame > 20000 && now - lastDump > 40000) {
+					lastDump = now;
+					System.err.println("[Mobilix] Кадры не выводятся уже " + (now - lastFrame) / 1000 + " с. Потоки игры:");
+					for (java.util.Map.Entry<Thread, StackTraceElement[]> e : Thread.getAllStackTraces().entrySet()) {
+						String n = e.getKey().getName();
+						if (!(n.contains("Client") || n.contains("main") || n.contains("Thread-") || n.contains("Server"))) continue;
+						System.err.println("  поток " + n + " (" + e.getKey().getState() + ")");
+						int k = 0;
+						for (StackTraceElement el : e.getValue()) { System.err.println("    at " + el); if (++k >= 18) break; }
+					}
+				}
+			}
+		}, "Mobilix-watchdog");
+		t.setDaemon(true);
+		t.start();
+	}
+
 	public static void swapBuffers() {
+		lastFrame = System.currentTimeMillis();
 		if (!created) throw new IllegalStateException("Display not created");
 		GLFW.glfwSwapBuffers(window);
 	}
