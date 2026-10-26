@@ -1703,7 +1703,10 @@ class MainActivity : Activity() {
         val gameArgs: List<String>
         if (legacy) {
             jvmArgs = listOf("-Djava.library.path=${natives.path}", "-cp", classpath.joinToString(":"))
-            gameArgs = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
+            val dm = resources.displayMetrics
+            val sw = maxOf(dm.widthPixels, dm.heightPixels); val sh = minOf(dm.widthPixels, dm.heightPixels)
+            val base = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
+            gameArgs = if (base.contains("--width")) base else base + listOf("--width", sw.toString(), "--height", sh.toString())
         } else {
             val args = v.getJSONObject("arguments")
             jvmArgs = collectArgs(args.optJSONArray("jvm"), sub)
