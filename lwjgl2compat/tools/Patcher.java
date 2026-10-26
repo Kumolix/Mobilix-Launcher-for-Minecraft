@@ -20,6 +20,8 @@ public class Patcher {
     static final Pattern HOLDER = Pattern.compile(
         "org/lwjgl/opengl/(GL\\d+|ARB\\w+|EXT\\w+|NV\\w+|AMD\\w+|KHR\\w+|APPLE\\w+|IBM\\w+|SGI\\w+|SUN\\w+|INTEL\\w+|OES\\w+|GREMEDY\\w+|HP\\w+|INGR\\w+|MESA\\w+|OVR\\w+|PGI\\w+|REND\\w+|S3\\w+|3DFX\\w+)"
         + "|org/lwjgl/openal/(AL\\d+|ALC\\d+|EXT\\w+|EFX\\d+|SOFT\\w+)");
+    // glMultMatrixf(FloatBuffer) -> glMultMatrix(FloatBuffer) и т.п.
+    static final Pattern MATRIX = Pattern.compile("^(gl\\w*Matrix)[fd]((?:ARB|EXT)?)$");
     static final Pattern SUFFIX = Pattern.compile("^(.*?)(?:[fdis]|ub|us|ui|i64|ui64)?v((?:ARB|EXT|NV|AMD|KHR|OES|SGIS|APPLE)?)$");
 
     static final class M { final String name, desc; M(String n, String d) { name = n; desc = d; } 
@@ -85,7 +87,7 @@ public class Patcher {
                             if (!(m.name.startsWith("gl") || m.name.startsWith("al"))) continue;
                             if (!hasBuffer(m.desc)) continue;
                             Matcher mt = SUFFIX.matcher(m.name);
-                            if (!mt.matches()) continue;
+                            if (!mt.matches()) { mt = MATRIX.matcher(m.name); if (!mt.matches()) continue; }
                             String alias = mt.group(1) + mt.group(2);
                             if (alias.length() < 3) continue;
                             M am = new M(alias, m.desc);
