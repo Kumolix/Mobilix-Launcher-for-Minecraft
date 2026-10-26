@@ -1507,7 +1507,7 @@ class MainActivity : Activity() {
 
     private fun prepareAndRun(profile: String = selectedProfile(), play: Boolean = true) {
         val root = dataRoot()
-        val gameDir = File(root, "game").apply { mkdirs() }
+        File(root, "game").mkdirs()
         val assetsDir = File(root, "assets")
         val librariesDir = File(root, "libraries")
         logFile = File(root, "launcher.log").also { it.writeText("") }
@@ -1518,6 +1518,14 @@ class MainActivity : Activity() {
         log("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MODEL}, ${Build.SUPPORTED_ABIS.joinToString()}")
         log("Папка данных: ${root.path}")
         log("Профиль $profile (игра $baseVer), ник ${nickName()}")
+        root.listFiles()?.filter { it.isDirectory && (it.name == "game" || it.name.startsWith("game-")) }?.forEach { d ->
+            val hs = File(d, "hs_err.log")
+            if (hs.exists()) {
+                log("=== Предыдущий запуск упал (${d.name}/hs_err.log), начало: ===")
+                try { hs.readLines().take(40).forEach { log("  $it") } } catch (_: Exception) {}
+                hs.renameTo(File(d, "hs_err.old"))
+            }
+        }
 
         // 1. json ванильной версии
         val versionJsonFile = File(root, "versions/$baseVer/$baseVer.json")
@@ -1537,6 +1545,8 @@ class MainActivity : Activity() {
         val javaMajor = v.optJSONObject("javaVersion")?.optInt("majorVersion", 0) ?: 0
         log("Нужна Java: $javaMajor")
         val legacy = JSONObject(versionJsonFile.readText()).optJSONObject("arguments") == null
+        // старые версии играют в своей папке: настройки и миры 1.13+ ломают их (options.txt и т.п.)
+        val gameDir = (if (legacy) File(root, "game-$baseVer") else File(root, "game")).apply { mkdirs() }
         if (legacy && child != null) throw RuntimeException("Forge и другие загрузчики для версий 1.12.2 и ниже пока не поддерживаются")
         val oldGl = legacy || javaMajor < 16
         if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
