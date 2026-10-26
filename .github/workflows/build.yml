@@ -119,6 +119,21 @@ jobs:
       - name: Build debug APK
         run: gradle assembleRelease --no-daemon
 
+      - name: Verify APK (signature, ABIs, size)
+        continue-on-error: true
+        run: |
+          BT=$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/* | sort -V | tail -1)
+          APK=app/build/outputs/apk/release/app-release.apk
+          {
+            echo "size: $(stat -c %s $APK)"
+            "$BT/apksigner" verify -v --print-certs "$APK" 2>&1 | head -12
+            "$BT/aapt2" dump badging "$APK" 2>&1 | grep -E "^package|sdkVersion|targetSdk|native-code" 
+            unzip -l "$APK" | grep -E "\.so$|lwjgl2compat" 
+            "$BT/zipalign" -c -P 16 4 "$APK" && echo "zipalign ok" || echo "zipalign FAIL"
+          } > /tmp/verify.txt 2>&1
+          echo "::notice title=APK check::$(tr '\n' '|' < /tmp/verify.txt | head -c 3000)"
+          cat /tmp/verify.txt
+
       - name: Name the APK
         run: |
           NAME="Mobilix-launcher-v-$(cat VERSION)"
