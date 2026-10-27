@@ -931,6 +931,21 @@ class MainActivity : Activity() {
             .setNegativeButton(tr("Отмена", "Cancel"), null).show()
     }
 
+    /** Можно ли подключать -javaagent: в рантайме есть модуль java.instrument и libinstrument.so, и она загружается. */
+    private fun agentUsable(rt: File): Boolean {
+        val so = File(rt, "lib/libinstrument.so")
+        if (!so.exists()) { log("  libinstrument.so не найдена в рантайме"); return false }
+        val rel = try { File(rt, "release").readText() } catch (_: Exception) { null }
+        if (rel != null && !rel.contains("java.instrument")) { log("  в рантайме нет модуля java.instrument"); return false }
+        return try {
+            System.load(so.path)
+            true
+        } catch (e: Throwable) {
+            log("  libinstrument.so не загружается: ${e.message}")
+            false
+        }
+    }
+
     /** authlib-injector (открытый, AGPL-3.0): подменяет серверы авторизации и скинов на Ely.by. */
     private fun ensureAuthlib(): File? {
         val f = File(filesDir, "authlib-injector.jar")
@@ -1782,8 +1797,8 @@ class MainActivity : Activity() {
         cmd.add("-Dorg.lwjgl.util.DebugLoader=true")
         if (elyOn()) {
             val agent = ensureAuthlib()
-            if (agent != null && File(rt, "lib/libinstrument.so").exists()) cmd.add("-javaagent:${agent.path}=https://authserver.ely.by/api/authlib-injector")
-            else log("ВНИМАНИЕ: authlib-injector не подключён (нет файла или libinstrument.so): скин и вход на серверах Ely.by могут не работать.")
+            if (agent != null && agentUsable(rt)) cmd.add("-javaagent:${agent.path}=https://authserver.ely.by/api/authlib-injector")
+            else log("ВНИМАНИЕ: в Java-рантайме нет рабочего java.instrument, поэтому authlib-injector не подключён. Игра запустится с ником и UUID из Ely.by, скин взят из Ely.by, но вход на серверы с проверкой Ely.by работать не будет.")
         }
         cmd.addAll(jvmArgs)
         cmd.add(v.getString("mainClass"))
@@ -1798,7 +1813,7 @@ class MainActivity : Activity() {
         launch.put("game", JSONArray(cmd.subList(mainIdx + 1, cmd.size)))
         launch.put("glLib", mgPath ?: "")
         if (oldGl && gl4es != null) {
-            launch.put("env", JSONObject().put("LIBGL_ES", "2").put("LIBGL_NOBANNER", "1"))
+            launch.put("env", JSONObject().put("LIBGL_ES", "2").put("LIBGL_NOBANNER", "1").put("LIBGL_NOERROR", "1"))
         }
         File(root, "launch.json").writeText(launch.toString())
         log("Команда запуска собрана (${cmd.size} аргументов).")
