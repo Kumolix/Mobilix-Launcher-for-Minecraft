@@ -1,10 +1,21 @@
-version: 1.8.0
-EN: What's new
-- Sign in with Ely.by (like ElyPrism): your Ely.by nickname and skin are used in the launcher and in the game, no Azure or card needed. Account page → "Sign in with Ely.by". The sign-out button is dark red
-- The repository is now Mobilix-Launcher-for-Minecraft, all links updated
-- Key combinations, skin import by nickname, user agreement link (from 1.7.5)
+version: 1.8.16
 
-RU: Что нового?
-- Вход через Ely.by (как в ElyPrism): ник и скин Ely.by используются в лаунчере и в игре, без Azure и карты. Страница «Аккаунт» → «Войти через Ely.by». Кнопка выхода тёмно-красная
-- Репозиторий теперь Mobilix-Launcher-for-Minecraft, все ссылки обновлены
-- Комбинации кнопок, импорт скина по нику, ссылка на соглашение (с 1.7.5)
+**EN: What's new**
+- Old Minecraft versions: 1.8 – 1.12.2 (LWJGL 2 compatibility layer) and 1.13 – 1.16.5 (LWJGL 3.3.3), rendered with gl4es
+- Sign in with Ely.by: your Ely.by skin is refreshed on every launcher start and before each game launch
+- Skin import by nickname (Ely.by / Mojang) with several fallback sources
+- Skin resource pack now works on all versions from 1.8
+- Sprint button is a toggle by default
+- Key combinations: pick the key again to add one more key; reset button and hint
+- Old versions use their own game folder; crash reports are shown in the launcher log
+- Fixed: game failing to start with Ely.by sign-in; GL error spam
+
+**RU: Что нового?**
+- Старые версии Minecraft: 1.8 – 1.12.2 (слой совместимости LWJGL 2) и 1.13 – 1.16.5 (LWJGL 3.3.3), графика через gl4es
+- Вход через Ely.by: скин Ely.by обновляется при каждом запуске лаунчера и перед каждым запуском игры
+- Импорт скина по нику (Ely.by / Mojang) с несколькими запасными источниками
+- Ресурспак со скином работает на всех версиях от 1.8
+- Кнопка бега по умолчанию переключаемая
+- Комбинации клавиш: выберите клавишу ещё раз, чтобы добавить к ней другую; есть подсказка и кнопка сброса
+- Старые версии играют в отдельной папке; отчёты о крэшах показываются в журнале лаунчера
+- Исправлено: игра не запускалась при входе через Ely.by; спам ошибок GL в логе
