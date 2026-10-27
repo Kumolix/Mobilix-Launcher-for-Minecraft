@@ -417,7 +417,7 @@ class MainActivity : Activity() {
     }
 
     private fun openGameFolder() {
-        val dir = File(dataRoot(), "game").apply { mkdirs() }
+        val dir = curGameDir().apply { mkdirs() }
         try {
             val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("path", dir.path))
@@ -575,7 +575,7 @@ class MainActivity : Activity() {
     private fun idx(): JSONObject = try { JSONObject(prefs.getString("installed", "{}")) } catch (_: Exception) { JSONObject() }
     private fun idxSave(o: JSONObject) { prefs.edit().putString("installed", o.toString()).apply() }
     private fun typeDir(type: String) = when (type) { "resourcepack" -> "resourcepacks"; "shader" -> "shaderpacks"; else -> "mods" }
-    private fun packFile(type: String, name: String) = File(File(dataRoot(), "game"), typeDir(type) + "/" + name)
+    private fun packFile(type: String, name: String) = File(curGameDir(), typeDir(type) + "/" + name)
 
     /** Кнопки строки каталога: «Скачать» или «Загружено» + «Удалить». */
     private fun fillActions(box: LinearLayout, id: String, type: String, loader: String, title: String) {
@@ -641,7 +641,7 @@ class MainActivity : Activity() {
                 if (f.exists()) { known.add(f.path); row(o.optString("n", f.name), typeDir(o.optString("t")) + " · " + f.name, o.optString("t"), f, id) }
             }
             for (t in listOf("mod", "resourcepack", "shader")) {
-                File(File(dataRoot(), "game"), typeDir(t)).listFiles()?.sortedBy { it.name }?.forEach {
+                File(curGameDir(), typeDir(t)).listFiles()?.sortedBy { it.name }?.forEach {
                     if (it.isFile && !known.contains(it.path) && !it.name.endsWith(".part")) row(it.name, typeDir(t), t, it, null)
                 }
             }
@@ -739,7 +739,7 @@ class MainActivity : Activity() {
                 for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
                 val dir = when (type) { "resourcepack" -> "resourcepacks"; "shader" -> "shaderpacks"; else -> "mods" }
                 val root = getExternalFilesDir(null) ?: filesDir
-                val dest = File(File(root, "game"), "$dir/" + f.getString("filename"))
+                val dest = File(curGameDir(), "$dir/" + f.getString("filename"))
                 val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
                 if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
                 idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title)) })
@@ -1080,7 +1080,7 @@ class MainActivity : Activity() {
         return when (kind) {
             "vanilla" -> ids.firstOrNull { it == mc && File(dataRoot(), "versions/$it/$it.jar").exists() }
             "fabric" -> ids.firstOrNull { it.startsWith("fabric-loader-") && it.endsWith("-$mc") }
-            else -> ids.firstOrNull { it.startsWith("$mc-forge-") }
+            else -> ids.firstOrNull { it.startsWith("$mc-forge-") || it.startsWith("$mc-forge$mc-") }
         }
     }
 
@@ -1116,7 +1116,14 @@ class MainActivity : Activity() {
                         val installer = File(root, "forge-installer.jar")
                         installer.delete()
                         log("Forge $mc-$fv: скачивание установщика…")
-                        downloadBig("https://maven.minecraftforge.net/net/minecraftforge/forge/$mc-$fv/forge-$mc-$fv-installer.jar", installer)
+                        var got = false; var lastErr: Exception? = null
+                        for (suf in listOf("", "-$mc", "-$mc.0")) {
+                            try {
+                                downloadBig("https://maven.minecraftforge.net/net/minecraftforge/forge/$mc-$fv$suf/forge-$mc-$fv$suf-installer.jar", installer)
+                                if (installer.length() > 100000) { got = true; break }
+                            } catch (e: Exception) { lastErr = e; installer.delete() }
+                        }
+                        if (!got) throw RuntimeException("не удалось скачать установщик Forge: $lastErr")
                         val java = ensureRuntime(root, 21)
                         val rt = java.parentFile!!.parentFile!!
                         val lp = File(root, "launcher_profiles.json")
@@ -1507,19 +1514,28 @@ class MainActivity : Activity() {
 
     // ---------- основной сценарий ----------
 
+    /** Папка игры выбранного профиля: старые версии (формат до 1.13) играют в своей папке. */
+    internal fun curGameDir(): File {
+        val base = curBase()
+        val legacy = try { JSONObject(File(dataRoot(), "versions/$base/$base.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
+        return File(dataRoot(), if (legacy) "game-$base" else "game")
+    }
+
     internal fun selectedProfile(): String = prefs.getString("profile", VERSION) ?: VERSION
 
     /** Базовая версия игры выбранного профиля (для Fabric/Forge берётся из inheritsFrom). */
     internal fun curBase(): String {
         val id = selectedProfile()
         return try {
-            JSONObject(File(dataRoot(), "versions/$id/$id.json").readText()).optString("inheritsFrom", "").ifEmpty { id }
+            val j = JSONObject(File(dataRoot(), "versions/$id/$id.json").readText())
+            j.optString("inheritsFrom", "").ifEmpty { j.optString("jar", "") }.ifEmpty { id }
         } catch (_: Exception) { id }
     }
 
     internal fun prettyProfile(id: String): String = when {
         id.startsWith("fabric-loader-") -> "Fabric " + id.substringAfterLast("-") + " (" + id.removePrefix("fabric-loader-").substringBeforeLast("-") + ")"
         id.contains("-forge-") -> "Forge " + id.substringBefore("-forge-") + " (" + id.substringAfter("-forge-") + ")"
+        Regex("^[\\d.]+-forge[\\d.]+-.+").matches(id) -> "Forge " + id.substringBefore("-forge") + " (" + id.substringAfter("-forge").removePrefix(id.substringBefore("-forge")).removePrefix("-") + ")"
         else -> id
     }
 
@@ -1556,6 +1572,7 @@ class MainActivity : Activity() {
             args.put(k, arr)
         }
         m.put("arguments", args)
+        if (child.has("minecraftArguments")) { m.put("minecraftArguments", child.getString("minecraftArguments")); m.remove("arguments") }
         return m
     }
 
@@ -1566,8 +1583,8 @@ class MainActivity : Activity() {
         val librariesDir = File(root, "libraries")
         logFile = File(root, "launcher.log").also { it.writeText("") }
         val profFile = File(root, "versions/$profile/$profile.json")
-        val child: JSONObject? = if (profFile.exists()) JSONObject(profFile.readText()).takeIf { it.has("inheritsFrom") } else null
-        val baseVer = child?.optString("inheritsFrom", "")?.ifEmpty { null } ?: profile
+        val child: JSONObject? = if (profFile.exists()) JSONObject(profFile.readText()).takeIf { it.has("inheritsFrom") || (it.has("jar") && it.optString("jar") != profile) } else null
+        val baseVer = child?.let { it.optString("inheritsFrom", "").ifEmpty { it.optString("jar", "") } }?.ifEmpty { null } ?: profile
         val natives = File(filesDir, "natives/$baseVer").apply { mkdirs() }
         log("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MODEL}, ${Build.SUPPORTED_ABIS.joinToString()}")
         log("Папка данных: ${root.path}")
@@ -1617,7 +1634,8 @@ class MainActivity : Activity() {
         val legacy = JSONObject(versionJsonFile.readText()).optJSONObject("arguments") == null
         // старые версии играют в своей папке: настройки и миры 1.13+ ломают их (options.txt и т.п.)
         val gameDir = (if (legacy) File(root, "game-$baseVer") else File(root, "game")).apply { mkdirs() }
-        if (legacy && child != null) throw RuntimeException("Forge и другие загрузчики для версий 1.12.2 и ниже пока не поддерживаются")
+        if (legacy && child != null && !profile.contains("forge")) throw RuntimeException("Fabric и другие загрузчики для версий 1.12.2 и ниже не поддерживаются, только Forge")
+        val oldForge = legacy && child != null
         val oldGl = legacy || javaMajor < 16
         if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
         else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
@@ -1664,10 +1682,11 @@ class MainActivity : Activity() {
                 path = art.getString("path"); url = art.optString("url", ""); sha = art.optString("sha1", "").ifEmpty { null }
             } else if (name.isNotEmpty()) {
                 path = mavenPath(name)
-                url = lib.optString("url", "https://libraries.minecraft.net/").trimEnd('/') + "/" + path
+                url = lib.optString("url", "https://libraries.minecraft.net/").trimEnd('/')
+                    .replace("http://", "https://").replace("files.minecraftforge.net/maven", "maven.minecraftforge.net") + "/" + path
             } else continue
             val dest = File(librariesDir, path)
-            if (!url.isNullOrEmpty()) libTasks.add(Task(url, dest, sha)) else if (!dest.exists()) continue
+            if (!url.isNullOrEmpty() && !(oldForge && art == null && dest.exists())) libTasks.add(Task(url, dest, sha)) else if (!dest.exists()) continue
             val parts = name.split(":")
             val key = if (parts.size >= 2) parts[0] + ":" + parts[1] + (if (parts.size > 3) ":" + parts[3] else "") else path
             cpMap[key] = dest.path
@@ -1808,6 +1827,19 @@ class MainActivity : Activity() {
         if (oldGl) {
             cmd.add("-Dlog4j2.formatMsgNoLookups=true")
             for (p in listOf("java.lang", "java.util", "java.io", "java.net", "java.nio", "sun.nio.ch")) { cmd.add("--add-opens"); cmd.add("java.base/$p=ALL-UNNAMED") }
+        }
+        if (oldForge) {
+            cmd.add("-Djava.system.class.loader=dev.mobilix.loader.MobilixLoader")
+            for (p in listOf("java.lang.reflect", "java.lang.invoke", "java.util.jar", "java.util.zip", "java.security", "java.text", "java.util.concurrent", "jdk.internal.loader", "jdk.internal.misc", "sun.security.util")) { cmd.add("--add-opens"); cmd.add("java.base/$p=ALL-UNNAMED") }
+            cmd.add("-Dfml.ignoreInvalidMinecraftCertificates=true")
+            cmd.add("-Dfml.ignorePatchDiscrepancies=true")
+            // заставка Forge использует LWJGL2-контексты в потоке, у нас этого нет: отключаем
+            try {
+                val cfg = File(gameDir, "config").apply { mkdirs() }
+                val sp = File(cfg, "splash.properties")
+                val lines = if (sp.exists()) sp.readLines().filter { !it.startsWith("enabled=") } else emptyList()
+                sp.writeText((lines + "enabled=false").joinToString("\n") + "\n")
+            } catch (_: Exception) {}
         }
         cmd.add("-Dorg.lwjgl.util.Debug=true")
         cmd.add("-Dorg.lwjgl.util.DebugLoader=true")
