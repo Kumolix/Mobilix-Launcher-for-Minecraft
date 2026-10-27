@@ -205,6 +205,8 @@ class MainActivity : Activity() {
         }
         skinBox.addView(nickText, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         root.addView(skinBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        // скин Ely.by обновляется при каждом открытии лаунчера (если есть интернет)
+        if (elyOn()) Thread { try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {} }.start()
 
         // панель лога (скрыта по умолчанию)
         logPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setBackgroundColor(Th.bar) }
@@ -990,7 +992,7 @@ class MainActivity : Activity() {
     }
 
     /** Скин по нику: несколько источников по очереди (на мобильной сети часть адресов может быть недоступна). */
-    private fun importSkinNow(source: String, nickIn: String) {
+    private fun importSkinNow(source: String, nickIn: String, quiet: Boolean = false, strict: Boolean = false) {
         val tries = ArrayList<Pair<String, () -> Triple<ByteArray, Boolean, Boolean>>>()  // название, действие -> (png, slim?, slimKnown)
         fun fromTextureJson(js: JSONObject): Triple<ByteArray, Boolean, Boolean> {
             val t = js.getJSONObject("SKIN")
@@ -1015,7 +1017,8 @@ class MainActivity : Activity() {
         }
         val minotar = "Minotar" to { Triple(httpBytes("https://minotar.net/skin/$nickIn"), false, false) }
         val mcheads = "MC-Heads" to { Triple(httpBytes("https://mc-heads.net/skin/$nickIn"), false, false) }
-        if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { tries.add(mojang); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
+        if (strict) tries.add(ely)
+        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { tries.add(mojang); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
         var lastErr = ""
         for ((name, act) in tries) {
             try {
@@ -1029,7 +1032,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     skinView.slim = slim; skinView.setSkin(bmp)
                     accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
-                    Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
+                    if (!quiet) Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
                 }
                 return
             } catch (e: Exception) {
@@ -1736,6 +1739,7 @@ class MainActivity : Activity() {
             log("Сессия Ely.by истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
             elyLogout(false)
         }
+        if (elyOn()) try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {}
         applySkinPack(gameDir, baseVer)
         val repl = mapOf(
             "auth_player_name" to nickName(),
