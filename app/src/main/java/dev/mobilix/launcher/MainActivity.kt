@@ -940,6 +940,10 @@ class MainActivity : Activity() {
         val rel = try { File(rt, "release").readText() } catch (_: Exception) { null }
         if (rel != null && !rel.contains("java.instrument")) { log("  в рантайме нет модуля java.instrument"); return false }
         return try {
+            for (j in listOf("lib/jli/libjli.so", "lib/libjli.so")) {
+                val f = File(rt, j)
+                if (f.exists()) { try { System.load(f.path); break } catch (_: Throwable) {} }
+            }
             System.load(so.path)
             true
         } catch (e: Throwable) {

@@ -70,6 +70,17 @@ static jint create_jvm(JNIEnv* env, jstring javaHome, jobjectArray opts, JavaVM*
             LOG("preload %s -> %s", pre[i], ph ? "ok" : dlerror());
         }
     }
+    // libinstrument.so (для -javaagent) зависит от libjli.so: грузим её заранее, иначе линкер Android её не находит.
+    {
+        const char* jl[] = { "%s/lib/jli/libjli.so", "%s/lib/libjli.so", NULL };
+        for (int i = 0; jl[i]; i++) {
+            char pp[1100];
+            snprintf(pp, sizeof pp, jl[i], home);
+            void* ph = dlopen(pp, RTLD_LAZY | RTLD_GLOBAL);
+            LOG("preload %s -> %s", pp, ph ? "ok" : dlerror());
+            if (ph) break;
+        }
+    }
     int n = (*env)->GetArrayLength(env, opts);
     JavaVMOption* o = (JavaVMOption*) calloc(n, sizeof(JavaVMOption));
     for (int i = 0; i < n; i++) {
