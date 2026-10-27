@@ -1401,7 +1401,11 @@ class MainActivity : Activity() {
     }
 
     /** Кладёт ресурспак, подменяющий все стандартные скины, и включает его в options.txt. */
-    private fun applySkinPack(gameDir: File) {
+    private fun applySkinPack(gameDir: File, ver: String = "") {
+        val minor = Regex("^1\\.(\\d+)").find(ver)?.groupValues?.get(1)?.toIntOrNull() ?: 21
+        val patch = Regex("^1\\.\\d+\\.(\\d+)").find(ver)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val fmt = when { minor <= 8 -> 1; minor <= 10 -> 2; minor <= 12 -> 3; minor <= 14 -> 4; minor == 15 -> 5; minor == 16 -> if (patch >= 2) 6 else 5; minor == 17 -> 7; minor == 18 -> 8; minor == 19 -> 9; else -> 42 }
+        val oldNames = minor <= 12   // до 1.13 в options.txt имена паков без «file/»
         val packName = "Mobilix-skin.zip"
         val packFile = File(gameDir, "resourcepacks/$packName")
         val custom = File(filesDir, "skin_custom.png")
@@ -1412,21 +1416,25 @@ class MainActivity : Activity() {
             val arr = try { JSONArray(if (i >= 0) lines[i].substringAfter(":") else "[]") } catch (_: Exception) { JSONArray() }
             val list = ArrayList<String>()
             for (k in 0 until arr.length()) list.add(arr.getString(k))
-            val entry = "file/$packName"
+            val entry = if (oldNames) packName else "file/$packName"
             if (custom.exists()) {
                 packFile.parentFile?.mkdirs()
                 val png = custom.readBytes()
                 java.util.zip.ZipOutputStream(packFile.outputStream()).use { z ->
                     z.putNextEntry(java.util.zip.ZipEntry("pack.mcmeta"))
-                    z.write("{\"pack\":{\"pack_format\":42,\"description\":\"Mobilix skin\"}}".toByteArray())
+                    z.write("{\"pack\":{\"pack_format\":$fmt,\"description\":\"Mobilix skin\"}}".toByteArray())
                     z.closeEntry()
+                    for (n in listOf("steve", "alex")) {   // 1.8–1.19.2
+                        z.putNextEntry(java.util.zip.ZipEntry("assets/minecraft/textures/entity/$n.png"))
+                        z.write(png); z.closeEntry()
+                    }
                     for (n in listOf("alex", "ari", "efe", "kai", "makena", "noor", "steve", "sunny", "zuri"))
                         for (d in listOf("wide", "slim")) {
                             z.putNextEntry(java.util.zip.ZipEntry("assets/minecraft/textures/entity/player/$d/$n.png"))
                             z.write(png); z.closeEntry()
                         }
                 }
-                if (!list.contains("vanilla")) list.add(0, "vanilla")
+                if (!oldNames && !list.contains("vanilla")) list.add(0, "vanilla")
                 if (!list.contains(entry)) list.add(entry)
             } else {
                 list.remove(entry)
@@ -1728,7 +1736,7 @@ class MainActivity : Activity() {
             log("Сессия Ely.by истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
             elyLogout(false)
         }
-        if (javaMajor >= 17) applySkinPack(gameDir)
+        applySkinPack(gameDir, baseVer)
         val repl = mapOf(
             "auth_player_name" to nickName(),
             "version_name" to profile,
