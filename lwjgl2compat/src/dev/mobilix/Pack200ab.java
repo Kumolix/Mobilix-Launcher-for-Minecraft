@@ -17,6 +17,12 @@ public final class Pack200ab {
     public static Unpacker newUnpacker() {
         return new Unpacker() {
             public void unpack(InputStream in, JarOutputStream out) throws IOException {
+                // поток LZMA отдаёт данные кусками, а распаковщик ждёт всё сразу: читаем всё в память
+                java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+                byte[] tmp = new byte[65536];
+                int r;
+                while ((r = in.read(tmp)) > 0) buf.write(tmp, 0, r);
+                in = new java.io.ByteArrayInputStream(buf.toByteArray());
                 try {
                     Class<?> c = Class.forName("org.apache.commons.compress.harmony.unpack200.Archive");
                     Object a = c.getConstructor(InputStream.class, JarOutputStream.class).newInstance(in, out);
