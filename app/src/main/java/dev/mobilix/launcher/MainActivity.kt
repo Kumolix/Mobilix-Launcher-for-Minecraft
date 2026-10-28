@@ -1835,6 +1835,7 @@ class MainActivity : Activity() {
         }
         if (oldForge) {
             cmd.add("-Djava.system.class.loader=dev.mobilix.loader.MobilixLoader")
+            cmd.add("-Djava.security.manager=allow")  // Forge ставит свой SecurityManager, в Java 21 это запрещено без этого ключа
             for (p in listOf("java.lang.reflect", "java.lang.invoke", "java.util.jar", "java.util.zip", "java.security", "java.text", "java.util.concurrent", "jdk.internal.loader", "jdk.internal.misc", "sun.security.util")) { cmd.add("--add-opens"); cmd.add("java.base/$p=ALL-UNNAMED") }
             cmd.add("-Dfml.ignoreInvalidMinecraftCertificates=true")
             cmd.add("-Dfml.ignorePatchDiscrepancies=true")
