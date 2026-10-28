@@ -14,5 +14,9 @@ javac -nowarn --release 8 -cp "$CP:$W/stubs" -d "$W/classes" $(find "$HERE/src" 
 java -cp "$W/tools:$ASM" Patcher "$W/patched" "$W/classes" $(echo "$CP" | tr ':' ' ')
 # итог: наши классы + пропатченные классы LWJGL3 (идут первыми в classpath)
 cp -r "$W/classes/." "$W/patched/"
+# подмены классов Forge (компилируем заглушки, берём только вложенные классы)
+mkdir -p "$W/ovr"
+javac -nowarn --release 8 -d "$W/ovr" $(find "$HERE/overrides" -name '*.java')
+for f in $(cd "$W/ovr" && find . -name '*$*.class'); do mkdir -p "$W/patched/$(dirname "$f")"; cp "$W/ovr/$f" "$W/patched/$f"; done
 (cd "$W/patched" && jar cf "$OUT" .)
 echo "compat jar: $(ls -la "$OUT")"
