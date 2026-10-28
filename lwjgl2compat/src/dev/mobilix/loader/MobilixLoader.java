@@ -28,7 +28,7 @@ public class MobilixLoader extends URLClassLoader {
 
     private static boolean parentFirst(String n) {
         return n.startsWith("java.") || n.startsWith("javax.") || n.startsWith("sun.") || n.startsWith("jdk.")
-                || n.startsWith("com.sun.") || n.startsWith("dev.mobilix.loader.");
+                || n.startsWith("com.sun.") || n.equals("dev.mobilix.loader.MobilixLoader");
     }
 
     @Override
