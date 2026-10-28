@@ -939,17 +939,8 @@ class MainActivity : Activity() {
         if (!so.exists()) { log("  libinstrument.so не найдена в рантайме"); return false }
         val rel = try { File(rt, "release").readText() } catch (_: Exception) { null }
         if (rel != null && !rel.contains("java.instrument")) { log("  в рантайме нет модуля java.instrument"); return false }
-        return try {
-            for (j in listOf("lib/jli/libjli.so", "lib/libjli.so")) {
-                val f = File(rt, j)
-                if (f.exists()) { try { System.load(f.path); break } catch (_: Throwable) {} }
-            }
-            System.load(so.path)
-            true
-        } catch (e: Throwable) {
-            log("  libinstrument.so не загружается: ${e.message}")
-            false
-        }
+        // Файл есть и модуль подключён; нужные библиотеки (libjli, libjava) подгружает сам процесс игры до запуска JVM.
+        return true
     }
 
     /** authlib-injector (открытый, AGPL-3.0): подменяет серверы авторизации и скинов на Ely.by. */
@@ -1124,13 +1115,27 @@ class MainActivity : Activity() {
                             } catch (e: Exception) { lastErr = e; installer.delete() }
                         }
                         if (!got) throw RuntimeException("не удалось скачать установщик Forge: $lastErr")
-                        val java = ensureRuntime(root, 21)
-                        val rt = java.parentFile!!.parentFile!!
-                        val lp = File(root, "launcher_profiles.json")
-                        if (!lp.exists()) lp.writeText("{\"profiles\":{}}")
-                        log("Forge: установка (это долго, потерпите)…")
-                        runForgeInstaller(rt, installer, root)
-                        id = findProfile("forge", mc) ?: throw RuntimeException("Forge установился, но профиль не найден")
+                        val legacyMc = try { JSONObject(File(root, "versions/$mc/$mc.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
+                        if (legacyMc) {
+                            // Старые версии: установщик не запускаем, берём из него описание версии и файл Forge
+                            log("Forge: распаковка установщика…")
+                            id = installLegacyForge(installer, root)
+                            log("Профиль $id создан, докачиваю библиотеки…")
+                            prepareAndRun(id, false)
+                        } else {
+                            val java = ensureRuntime(root, 21)
+                            val rt = java.parentFile!!.parentFile!!
+                            val lp = File(root, "launcher_profiles.json")
+                            if (!lp.exists()) lp.writeText("{\"profiles\":{}}")
+                            var found: String? = null
+                            for (attempt in 1..3) {
+                                log("Forge: установка, попытка $attempt (это долго, потерпите)…")
+                                runForgeInstaller(rt, installer, root)
+                                found = findProfile("forge", mc)
+                                if (found != null) break
+                            }
+                            id = found ?: throw RuntimeException("Forge установился, но профиль не найден")
+                        }
                     }
                     else -> prepareAndRun(mc, false)
                 }
@@ -2176,6 +2181,22 @@ class MainActivity : Activity() {
                 }
                 e = tin.nextTarEntry
             }
+        }
+    }
+
+    /** Ставит Forge для 1.8–1.12.2 без запуска установщика: версия из install_profile.json + jar Forge из архива. */
+    private fun installLegacyForge(installer: File, root: File): String {
+        java.util.zip.ZipFile(installer).use { z ->
+            val prof = JSONObject(z.getInputStream(z.getEntry("install_profile.json")).bufferedReader().readText())
+            val vi = prof.optJSONObject("versionInfo") ?: throw RuntimeException("в установщике нет versionInfo")
+            val inst = prof.getJSONObject("install")
+            val id = vi.getString("id")
+            val jf = File(root, "versions/$id/$id.json"); jf.parentFile?.mkdirs(); jf.writeText(vi.toString())
+            val entry = z.getEntry(inst.getString("filePath")) ?: throw RuntimeException("в установщике нет ${inst.getString("filePath")}")
+            val dest = File(File(root, "libraries"), mavenPath(inst.getString("path")))
+            dest.parentFile?.mkdirs()
+            z.getInputStream(entry).use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            return id
         }
     }
 
