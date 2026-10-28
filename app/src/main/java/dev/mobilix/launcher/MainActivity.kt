@@ -1705,6 +1705,13 @@ class MainActivity : Activity() {
                 cpMap["org.lwjgl:$a"] = dest3.path
             }
         }
+        if (oldForge) {
+            // Pack200 удалён из Java 14+: старый Forge распаковывает им патчи, подставляем распаковщик из Commons Compress
+            val ccPath = "org/apache/commons/commons-compress/1.21/commons-compress-1.21.jar"
+            val ccFile = File(librariesDir, ccPath)
+            libTasks.add(Task("https://repo1.maven.org/maven2/$ccPath", ccFile, null))
+            cpMap["org.apache.commons:commons-compress"] = ccFile.path
+        }
         val classpath = ArrayList<String>()
         if (legacy) {
             val compat = File(filesDir, "lwjgl2compat.jar")
@@ -1801,7 +1808,8 @@ class MainActivity : Activity() {
             val dm = resources.displayMetrics
             val sw = maxOf(dm.widthPixels, dm.heightPixels); val sh = minOf(dm.widthPixels, dm.heightPixels)
             val base = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
-            gameArgs = if (base.contains("--width")) base else base + listOf("--width", sw.toString(), "--height", sh.toString())
+            val g0 = if (base.contains("--width")) base else base + listOf("--width", sw.toString(), "--height", sh.toString())
+            gameArgs = if (oldForge) g0 + listOf("--tweakClass", "dev.mobilix.loader.MobilixTweaker") else g0
         } else {
             val args = v.getJSONObject("arguments")
             jvmArgs = collectArgs(args.optJSONArray("jvm"), sub)
