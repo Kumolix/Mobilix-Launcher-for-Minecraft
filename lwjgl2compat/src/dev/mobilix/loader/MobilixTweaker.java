@@ -10,6 +10,17 @@ import net.minecraft.launchwrapper.LaunchClassLoader;
 public class MobilixTweaker implements ITweaker {
     public MobilixTweaker() {
         try {
+            Class.forName("dev.mobilix.U"); // проверка, что Unsafe доступен
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> u = Class.forName("dev.mobilix.U");
+            java.lang.reflect.Method m = u.getDeclaredMethod("unfilterReflection");
+            m.setAccessible(true);
+            m.invoke(null);
+        } catch (Throwable t) {
+            System.err.println("[Mobilix] не удалось снять фильтр рефлексии: " + t);
+        }
+        try {
             LaunchClassLoader l = Launch.classLoader;
             l.addClassLoaderExclusion("dev.mobilix.");
             l.addClassLoaderExclusion("org.apache.commons.compress.");

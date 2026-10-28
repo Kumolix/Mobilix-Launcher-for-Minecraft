@@ -2201,10 +2201,15 @@ class MainActivity : Activity() {
      * прямо в jar Forge; подписи удаляем, иначе изменённый класс не пройдёт проверку. Делается один раз.
      */
     private fun patchForgeJar(jar: File) {
-        val mark = File(jar.path + ".mobilix1")
+        val mark = File(jar.path + ".mobilix2")
         if (mark.exists() || !jar.exists()) return
-        val from = "java/util/jar/Pack200".toByteArray()
-        val to = "dev/mobilix/Pack200ab".toByteArray()
+        // пары замен одинаковой длины: Pack200 и внутренние sun.reflect.*, которых нет в Java 12+
+        val pairs = listOf(
+            "java/util/jar/Pack200" to "dev/mobilix/Pack200ab",
+            "sun.reflect.ReflectionFactory" to "dev.mobilix.ReflectionFactory",
+            "sun.reflect.FieldAccessor" to "dev.mobilix.FieldAccessor",
+            "sun.reflect.ConstructorAccessor" to "dev.mobilix.ConstructorAccessor"
+        ).map { it.first.toByteArray() to it.second.toByteArray() }
         val tmp = File(jar.path + ".tmp")
         var changed = 0
         java.util.zip.ZipFile(jar).use { z ->
@@ -2214,11 +2219,13 @@ class MainActivity : Activity() {
                     if (n.startsWith("META-INF/") && (n.endsWith(".SF") || n.endsWith(".DSA") || n.endsWith(".RSA") || n.endsWith(".EC"))) continue
                     var data = z.getInputStream(e).readBytes()
                     if (n.endsWith(".class")) {
-                        var i = 0
-                        while (i <= data.size - from.size) {
-                            var j = 0
-                            while (j < from.size && data[i + j] == from[j]) j++
-                            if (j == from.size) { System.arraycopy(to, 0, data, i, to.size); changed++; i += from.size } else i++
+                        for ((from, to) in pairs) {
+                            var i = 0
+                            while (i <= data.size - from.size) {
+                                var j = 0
+                                while (j < from.size && data[i + j] == from[j]) j++
+                                if (j == from.size) { System.arraycopy(to, 0, data, i, to.size); changed++; i += from.size } else i++
+                            }
                         }
                     }
                     out.putNextEntry(java.util.zip.ZipEntry(n))
