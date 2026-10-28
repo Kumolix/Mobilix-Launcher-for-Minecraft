@@ -1274,7 +1274,7 @@ class MainActivity : Activity() {
                     val o = man.getJSONObject(i); val id = o.getString("id")
                     order[id] = i
                     if (!cut && o.getString("type") == "release") vanilla.add(id)
-                    if (id == "1.8") cut = true
+                    if (id == "1.6.1") cut = true
                 }
                 try {
                     val fa = JSONArray(fetchText("https://meta.fabricmc.net/v2/versions/game"))
