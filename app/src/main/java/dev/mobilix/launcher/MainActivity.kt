@@ -152,7 +152,10 @@ class MainActivity : Activity() {
     internal fun lang() = prefs.getString("lang", "ru") ?: "ru"
     internal fun tr(ru: String, en: String) = if (lang() == "en") en else ru
     internal fun elyOn() = !prefs.getString("ely_token", "").isNullOrEmpty()
-    internal fun nickName() = if (elyOn()) (prefs.getString("ely_name", NICK) ?: NICK) else (prefs.getString("nick", NICK) ?: NICK)
+    internal fun msOn() = !prefs.getString("ms_token", "").isNullOrEmpty()
+    internal fun nickName() = if (msOn()) (prefs.getString("ms_name", NICK) ?: NICK) else if (elyOn()) (prefs.getString("ely_name", NICK) ?: NICK) else (prefs.getString("nick", NICK) ?: NICK)
+    private fun authUuid(): String = if (msOn()) prefs.getString("ms_uuid", "")!! else if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()
+    private fun authToken(): String = if (msOn()) prefs.getString("ms_token", "0")!! else if (elyOn()) prefs.getString("ely_token", "0")!! else "0"
     internal fun dpi(v: Int) = dp(v)
 
     /** Фон кнопки: при нажатии и в выключенном состоянии темнеет. */
@@ -207,6 +210,7 @@ class MainActivity : Activity() {
         root.addView(skinBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         // скин Ely.by обновляется при каждом открытии лаунчера (если есть интернет)
         if (elyOn()) Thread { try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {} }.start()
+        else if (msOn()) Thread { try { importSkinNow("mojang", nickName(), quiet = true) } catch (_: Exception) {} }.start()
 
         // панель лога (скрыта по умолчанию)
         logPanel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE; setBackgroundColor(Th.bar) }
@@ -843,11 +847,21 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
             background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.WHITE); setStroke(dp(1), 0xFF8C8C8C.toInt()) }
             isClickable = true
-            setOnClickListener { Toast.makeText(this@MainActivity, tr("Вход через Microsoft появится позже", "Microsoft sign-in is coming soon"), Toast.LENGTH_SHORT).show() }
+            setOnClickListener { msDeviceLogin() }
         }
         ms.addView(MsLogoView(this), LinearLayout.LayoutParams(dp(21), dp(21)))
         ms.addView(TextView(this).apply { text = tr("Войти через Microsoft", "Sign in with Microsoft"); textSize = 15f; setTextColor(0xFF5E5E5E.toInt()); setPadding(dp(12), 0, 0, 0) })
         col.addView(ms, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(12) })
+        if (msOn()) {
+            ms.visibility = View.GONE
+            col.addView(TextView(this).apply {
+                text = "Microsoft: " + nickName(); textSize = 15f; setTextColor(Th.accent); setPadding(0, dp(24), 0, dp(4))
+            })
+            col.addView(Button(this).apply {
+                text = tr("Выйти", "Sign out"); isAllCaps = false; setTextColor(0xFFFF6B6B.toInt()); background = sel(0xFF4A0D0D.toInt())
+                setOnClickListener { msLogout(true); nickText.text = nickName(); openPage(tr("Аккаунт", "Account"), accountPage()) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(4) })
+        }
         col.addView(TextView(this).apply {
             text = tr("Скин применяется и в игре: лаунчер подставляет его как стандартный скин (ресурспак Mobilix-skin). Ширина рук в игре зависит от UUID игрока.",
                 "The skin is also applied in-game as the default skin (Mobilix-skin resource pack). Arm width in-game depends on the player UUID.")
@@ -855,6 +869,148 @@ class MainActivity : Activity() {
         })
         sv.addView(col)
         return sv
+    }
+
+    // ---------- Microsoft ----------
+    private val MS_CLIENT = "f5cd701a-c346-422c-bd11-dfd604cb0c68"
+    private val MS_TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+    private val MS_SCOPE = "XboxLive.signin offline_access"
+
+    private fun postForm(url: String, p: Map<String, String>): Pair<Int, String> {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.requestMethod = "POST"; c.doOutput = true
+        c.connectTimeout = 15000; c.readTimeout = 30000
+        c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded"); c.setRequestProperty("User-Agent", "Mobilix/1.8")
+        val body = p.entries.joinToString("&") { java.net.URLEncoder.encode(it.key, "UTF-8") + "=" + java.net.URLEncoder.encode(it.value, "UTF-8") }
+        c.outputStream.use { it.write(body.toByteArray()) }
+        val code = c.responseCode
+        val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        return code to text
+    }
+
+    private fun getBearer(url: String, token: String): Pair<Int, String> {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.connectTimeout = 15000; c.readTimeout = 30000
+        c.setRequestProperty("Authorization", "Bearer $token"); c.setRequestProperty("User-Agent", "Mobilix/1.8")
+        val code = c.responseCode
+        val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        return code to text
+    }
+
+    /** Токен Microsoft -> Xbox Live -> XSTS -> токен Minecraft и профиль. Возвращает (токен, uuid, ник). */
+    private fun msMinecraftLogin(msAccess: String): Triple<String, String, String> {
+        val (c1, t1) = postJson("https://user.auth.xboxlive.com/user/authenticate", JSONObject()
+            .put("Properties", JSONObject().put("AuthMethod", "RPS").put("SiteName", "user.auth.xboxlive.com").put("RpsTicket", "d=$msAccess"))
+            .put("RelyingParty", "http://auth.xboxlive.com").put("TokenType", "JWT"))
+        if (c1 !in 200..299) throw RuntimeException("Xbox Live: HTTP $c1")
+        val xbl = JSONObject(t1)
+        val xblToken = xbl.getString("Token")
+        val uhs = xbl.getJSONObject("DisplayClaims").getJSONArray("xui").getJSONObject(0).getString("uhs")
+        val (c2, t2) = postJson("https://xsts.auth.xboxlive.com/xsts/authorize", JSONObject()
+            .put("Properties", JSONObject().put("SandboxId", "RETAIL").put("UserTokens", JSONArray().put(xblToken)))
+            .put("RelyingParty", "rp://api.minecraftservices.com/").put("TokenType", "JWT"))
+        if (c2 !in 200..299) {
+            val xe = try { JSONObject(t2).optLong("XErr") } catch (_: Exception) { 0L }
+            throw RuntimeException(when (xe) {
+                2148916233L -> tr("у аккаунта нет профиля Xbox", "the account has no Xbox profile")
+                2148916238L -> tr("детский аккаунт: его нужно добавить в семью Microsoft", "child account: add it to a Microsoft family")
+                else -> "XSTS: HTTP $c2"
+            })
+        }
+        val xsts = JSONObject(t2).getString("Token")
+        val (c3, t3) = postJson("https://api.minecraftservices.com/authentication/login_with_xbox", JSONObject().put("identityToken", "XBL3.0 x=$uhs;$xsts"))
+        if (c3 == 403) throw RuntimeException(tr("Mojang ещё не одобрил приложение (Invalid app registration)", "Mojang has not approved the app yet (Invalid app registration)"))
+        if (c3 !in 200..299) throw RuntimeException("Minecraft: HTTP $c3")
+        val mc = JSONObject(t3).getString("access_token")
+        val (c4, t4) = getBearer("https://api.minecraftservices.com/minecraft/profile", mc)
+        if (c4 == 404) throw RuntimeException(tr("на аккаунте нет Minecraft Java Edition", "this account does not own Minecraft Java Edition"))
+        if (c4 !in 200..299) throw RuntimeException("Профиль: HTTP $c4")
+        val pj = JSONObject(t4)
+        return Triple(mc, pj.getString("id"), pj.getString("name"))
+    }
+
+    private fun msSave(mc: String, uuid: String, name: String, refresh: String) {
+        prefs.edit().putString("ms_token", mc).putString("ms_uuid", uuid).putString("ms_name", name)
+            .putString("ms_refresh", refresh).putLong("ms_exp", System.currentTimeMillis() + 23L * 3600 * 1000).apply()
+    }
+
+    private fun msLogout(tell: Boolean) {
+        prefs.edit().remove("ms_token").remove("ms_uuid").remove("ms_name").remove("ms_refresh").remove("ms_exp").apply()
+        if (tell) Toast.makeText(this, tr("Вы вышли из Microsoft", "Signed out of Microsoft"), Toast.LENGTH_SHORT).show()
+    }
+
+    /** Токен Minecraft живёт сутки: при необходимости обновляем через refresh-токен. false: нужен новый вход. */
+    private fun msEnsureSession(): Boolean {
+        if (System.currentTimeMillis() < prefs.getLong("ms_exp", 0L) - 120000L) return true
+        val rt = prefs.getString("ms_refresh", "") ?: ""
+        return try {
+            val (c, t) = postForm(MS_TOKEN_URL, mapOf("client_id" to MS_CLIENT, "grant_type" to "refresh_token", "refresh_token" to rt, "scope" to MS_SCOPE))
+            if (c !in 200..299) return false
+            val j = JSONObject(t)
+            val (mc, id, name) = msMinecraftLogin(j.getString("access_token"))
+            msSave(mc, id, name, j.optString("refresh_token", rt))
+            true
+        } catch (_: java.io.IOException) { true }   // нет сети: пробуем запуститься с текущим токеном
+        catch (_: Exception) { false }
+    }
+
+    /** Вход через Microsoft по коду устройства: пользователь открывает страницу и вводит код. */
+    private fun msDeviceLogin() {
+        Toast.makeText(this, tr("Подключение к Microsoft…", "Connecting to Microsoft…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val (c, t) = postForm("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode", mapOf("client_id" to MS_CLIENT, "scope" to MS_SCOPE))
+                if (c !in 200..299) throw RuntimeException("Microsoft: HTTP $c " + (try { JSONObject(t).optString("error_description").take(150) } catch (_: Exception) { "" }))
+                val j = JSONObject(t)
+                val userCode = j.getString("user_code")
+                val uri = j.getString("verification_uri")
+                val dev = j.getString("device_code")
+                var interval = j.optInt("interval", 5)
+                val until = System.currentTimeMillis() + j.optInt("expires_in", 900) * 1000L
+                val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+                runOnUiThread {
+                    AlertDialog.Builder(this).setTitle(tr("Вход через Microsoft", "Sign in with Microsoft"))
+                        .setMessage(tr("1. Откройте $uri\n2. Введите код: $userCode\n3. Войдите в аккаунт с Minecraft и вернитесь сюда.\n\nЛаунчер сам заметит вход.",
+                            "1. Open $uri\n2. Enter the code: $userCode\n3. Sign in with the account that owns Minecraft and come back.\n\nThe launcher will notice the sign-in by itself."))
+                        .setPositiveButton(tr("Открыть и скопировать код", "Open and copy code")) { _, _ ->
+                            try {
+                                (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                                    .setPrimaryClip(android.content.ClipData.newPlainText("code", userCode))
+                                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)))
+                            } catch (_: Exception) {}
+                            Toast.makeText(this, tr("Ждём подтверждения…", "Waiting for confirmation…"), Toast.LENGTH_LONG).show()
+                        }
+                        .setNegativeButton(tr("Отмена", "Cancel")) { _, _ -> cancelled.set(true) }
+                        .setOnCancelListener { cancelled.set(true) }
+                        .show()
+                }
+                var access: String? = null; var refresh = ""
+                while (!cancelled.get() && System.currentTimeMillis() < until && access == null) {
+                    Thread.sleep(interval * 1000L)
+                    if (cancelled.get()) break
+                    val (c2, t2) = postForm(MS_TOKEN_URL, mapOf("client_id" to MS_CLIENT, "grant_type" to "urn:ietf:params:oauth:grant-type:device_code", "device_code" to dev))
+                    val j2 = JSONObject(t2)
+                    if (c2 in 200..299) { access = j2.getString("access_token"); refresh = j2.optString("refresh_token", "") }
+                    else when (j2.optString("error")) {
+                        "authorization_pending" -> {}
+                        "slow_down" -> interval += 5
+                        else -> throw RuntimeException(j2.optString("error_description").take(150).ifEmpty { j2.optString("error") })
+                    }
+                }
+                if (access == null) return@Thread
+                val (mc, id, name) = msMinecraftLogin(access)
+                elyLogout(false)
+                msSave(mc, id, name, refresh)
+                try { importSkinNow("mojang", name, quiet = true) } catch (_: Exception) {}
+                runOnUiThread {
+                    nickText.text = nickName()
+                    Toast.makeText(this, tr("Вы вошли как $name", "Signed in as $name"), Toast.LENGTH_LONG).show()
+                    openPage(tr("Аккаунт", "Account"), accountPage())
+                }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this, tr("Вход не удался: ", "Sign-in failed: ") + (e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 
     // ---------- Ely.by ----------
@@ -899,6 +1055,7 @@ class MainActivity : Activity() {
                 if (code in 200..299) {
                     val j = JSONObject(text)
                     val prof = j.getJSONObject("selectedProfile")
+                    msLogout(false)
                     prefs.edit().putString("ely_token", j.getString("accessToken")).putString("ely_uuid", prof.getString("id"))
                         .putString("ely_name", prof.getString("name")).apply()
                     // скин аккаунта становится скином в лаунчере
@@ -1777,7 +1934,12 @@ class MainActivity : Activity() {
             log("Сессия Ely.by истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
             elyLogout(false)
         }
+        if (msOn() && !msEnsureSession()) {
+            log("Сессия Microsoft истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
+            msLogout(false)
+        }
         if (elyOn()) try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {}
+        else if (msOn()) try { importSkinNow("mojang", nickName(), quiet = true) } catch (_: Exception) {}
         applySkinPack(gameDir, baseVer)
         val repl = mapOf(
             "auth_player_name" to nickName(),
@@ -1787,14 +1949,14 @@ class MainActivity : Activity() {
             "game_directory" to gameDir.path,
             "assets_root" to assetsDir.path,
             "assets_index_name" to indexId,
-            "auth_uuid" to (if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()),
-            "auth_access_token" to (if (elyOn()) prefs.getString("ely_token", "0")!! else "0"),
+            "auth_uuid" to authUuid(),
+            "auth_access_token" to authToken(),
             "clientid" to "0",
             "auth_xuid" to "0",
-            "user_type" to (if (elyOn()) "mojang" else "legacy"),
+            "user_type" to (if (msOn()) "msa" else if (elyOn()) "mojang" else "legacy"),
             "version_type" to "release",
             "natives_directory" to natives.path,
-            "auth_session" to "token:" + (if (elyOn()) prefs.getString("ely_token", "0")!! else "0") + ":" + (if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()),
+            "auth_session" to "token:" + authToken() + ":" + authUuid(),
             "game_assets" to assetsForGame.path,
             "user_properties" to "{}",
             "launcher_name" to "Mobilix",
