@@ -315,6 +315,7 @@ class MainActivity : Activity() {
 
         setContentView(rootFrame)
         Thread { loadSkin() }.start()
+        Thread { ensureGpu(); writeGameSettings() }.start()
         Thread { checkUpdate() }.start()
     }
 
@@ -409,11 +410,46 @@ class MainActivity : Activity() {
 
     private fun note(t: String) = TextView(this).apply { text = t; textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(6), 0, 0) }
 
+    /** Рекомендованное разрешение рендера (%) по видеочипу; 100, если чип ещё неизвестен. */
+    private fun autoScale(): Int = GpuTier.tier(prefs.getString("gpu", "") ?: "")?.let { GpuTier.scale(it) } ?: 100
+
+    /** Разрешение рендера: 0 в настройках = авто. */
+    private fun effectiveScale(): Int = prefs.getInt("renderScale", 0).let { if (it <= 0) autoScale() else it.coerceIn(30, 100) }
+
+    /** Узнаёт видеочип (один раз) коротким офскрин-контекстом EGL, чтобы «Авто» работало уже с первого запуска. */
+    private fun ensureGpu() {
+        if (!(prefs.getString("gpu", "") ?: "").isEmpty()) return
+        var dpy = android.opengl.EGL14.EGL_NO_DISPLAY
+        var ctx = android.opengl.EGL14.EGL_NO_CONTEXT
+        var surf = android.opengl.EGL14.EGL_NO_SURFACE
+        try {
+            dpy = android.opengl.EGL14.eglGetDisplay(android.opengl.EGL14.EGL_DEFAULT_DISPLAY)
+            val v = IntArray(2)
+            if (!android.opengl.EGL14.eglInitialize(dpy, v, 0, v, 1)) return
+            val cfgs = arrayOfNulls<android.opengl.EGLConfig>(1)
+            val n = IntArray(1)
+            val attr = intArrayOf(android.opengl.EGL14.EGL_RENDERABLE_TYPE, android.opengl.EGL14.EGL_OPENGL_ES2_BIT, android.opengl.EGL14.EGL_SURFACE_TYPE, android.opengl.EGL14.EGL_PBUFFER_BIT, android.opengl.EGL14.EGL_NONE)
+            if (!android.opengl.EGL14.eglChooseConfig(dpy, attr, 0, cfgs, 0, 1, n, 0) || n[0] == 0) return
+            ctx = android.opengl.EGL14.eglCreateContext(dpy, cfgs[0], android.opengl.EGL14.EGL_NO_CONTEXT, intArrayOf(android.opengl.EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, android.opengl.EGL14.EGL_NONE), 0)
+            surf = android.opengl.EGL14.eglCreatePbufferSurface(dpy, cfgs[0], intArrayOf(android.opengl.EGL14.EGL_WIDTH, 1, android.opengl.EGL14.EGL_HEIGHT, 1, android.opengl.EGL14.EGL_NONE), 0)
+            if (!android.opengl.EGL14.eglMakeCurrent(dpy, surf, surf, ctx)) return
+            val r = android.opengl.GLES20.glGetString(android.opengl.GLES20.GL_RENDERER)
+            if (!r.isNullOrBlank()) prefs.edit().putString("gpu", r.trim()).apply()
+        } catch (_: Throwable) {
+        } finally {
+            try {
+                android.opengl.EGL14.eglMakeCurrent(dpy, android.opengl.EGL14.EGL_NO_SURFACE, android.opengl.EGL14.EGL_NO_SURFACE, android.opengl.EGL14.EGL_NO_CONTEXT)
+                if (surf != android.opengl.EGL14.EGL_NO_SURFACE) android.opengl.EGL14.eglDestroySurface(dpy, surf)
+                if (ctx != android.opengl.EGL14.EGL_NO_CONTEXT) android.opengl.EGL14.eglDestroyContext(dpy, ctx)
+            } catch (_: Throwable) {}
+        }
+    }
+
     /** Настройки для процесса игры (читаются в GameActivity и ControlsView). */
     internal fun writeGameSettings() {
         try {
             File(filesDir, "game_settings.json").writeText(JSONObject()
-                .put("renderScale", prefs.getInt("renderScale", 100))
+                .put("renderScale", effectiveScale())
                 .put("joystick", prefs.getBoolean("joystick", false))
                 .put("fps", prefs.getInt("fps", 0))
                 .put("fullscreen", prefs.getBoolean("fullscreen", false)).toString())
@@ -465,22 +501,33 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(14) })
         col.addView(note(tr("Откроется «Мои файлы» (Samsung) или стандартный проводник. Путь также скопирован в буфер.", "Opens My Files (Samsung) or the system file manager. The path is also copied.")))
         col.addView(header(tr("Игра", "Game")))
-        val cur = prefs.getInt("renderScale", 100)
-        val lbl = TextView(this).apply { text = tr("Разрешение рендера: $cur%", "Render resolution: $cur%"); setTextColor(Th.text) }
-        col.addView(lbl)
-        col.addView(SeekBar(this).apply {
-            max = 70; progress = cur - 30
+        val curR = prefs.getInt("renderScale", 0)
+        val rl = TextView(this).apply { setTextColor(Th.text); setPadding(0, 0, 0, dp(4)) }
+        fun rText(v: Int) {
+            rl.text = if (v == 0) tr("Разрешение рендера: авто (${autoScale()}%)", "Render resolution: auto (${autoScale()}%)")
+            else tr("Разрешение рендера: $v%", "Render resolution: $v%")
+        }
+        rText(curR)
+        col.addView(rl)
+        val rs = SeekBar(this).apply {
+            max = 70; progress = if (curR == 0) 70 else (curR - 30).coerceIn(0, 70)
+            visibility = if (curR == 0) View.GONE else View.VISIBLE
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, p: Int, u: Boolean) { lbl.text = tr("Разрешение рендера: ${p + 30}%", "Render resolution: ${p + 30}%") }
+                override fun onProgressChanged(sb: SeekBar?, p: Int, u: Boolean) { rText(p + 30) }
                 override fun onStartTrackingTouch(sb: SeekBar?) {}
                 override fun onStopTrackingTouch(sb: SeekBar?) {
-                    val v = (sb?.progress ?: 70) + 30
-                    prefs.edit().putInt("renderScale", v).apply()
+                    prefs.edit().putInt("renderScale", (sb?.progress ?: 70) + 30).apply()
                     writeGameSettings()
                 }
             })
+        }
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Вручную", "Manual")), if (curR == 0) 0 else 1) { i ->
+            if (i == 0) { prefs.edit().putInt("renderScale", 0).apply(); rs.visibility = View.GONE; rText(0) }
+            else { val v = rs.progress + 30; prefs.edit().putInt("renderScale", v).apply(); rs.visibility = View.VISIBLE; rText(v) }
+            writeGameSettings()
         })
-        col.addView(note(tr("Игра рисуется в меньшем разрешении и растягивается на весь экран: меньше нагрузка на GPU, выше FPS. Размытия нет, это именно снижение числа пикселей. Применяется при следующем запуске.",
+        col.addView(rs)
+        col.addView(note(tr("Игра рисуется в меньшем разрешении и растягивается на весь экран: меньше нагрузка на GPU, выше FPS. Размытия нет, это именно снижение числа пикселей. «Авто» подбирает значение по видеочипу (мощные — 100%, слабые — ниже). Применяется при следующем запуске.",
             "The game renders at a lower resolution and is scaled to the full screen: lower GPU load, higher FPS. Applied on next launch.")))
         col.addView(TextView(this).apply { text = tr("Стабилизация производительности", "Performance stabilization"); setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
         val fpsOpts = listOf(0, 60, 45, 30)
@@ -492,8 +539,8 @@ class MainActivity : Activity() {
         col.addView(chipRow(listOf(tr("Авто", "Auto"), "0", "1", "2", "3", "4"), prefs.getInt("mip", -1) + 1) { i ->
             prefs.edit().putInt("mip", i - 1).apply()
         })
-        col.addView(note(tr("На старых видеочипах (Adreno 6xx и ниже) мипмапы сильно роняют FPS в мире: анимации воды и лавы грузятся по 5 раз за кадр. «Авто»: после первого запуска лаунчер узнаёт видеочип и один раз ставит 0 для такого, дальше ваш выбор в самой игре сохраняется. Число: ставится при каждом запуске. Применяется при следующем запуске.",
-            "On old GPUs (Adreno 6xx and older) mipmaps can crush FPS in the world: water and lava animations upload 5 times per frame. Auto: after the first launch the launcher learns the GPU and sets 0 once for such devices; your in-game choice is kept afterwards. A number is applied on every launch. Applied on next launch.")))
+        col.addView(note(tr("Мипмапы — уменьшенные копии текстур. На слабых видеочипах их загрузка сильно роняет FPS в мире. «Авто» подбирает ступень по видеочипу: мощные — 4, послабее — 3, затем 2, 1 и 0 для самых слабых (на Adreno 618 из A52 нужен 0). Подбор ставится один раз, потом ваш выбор в самой игре сохраняется. Число: ставится при каждом запуске. Применяется при следующем запуске.",
+            "Mipmaps are smaller copies of textures. On weak GPUs uploading them can crush FPS in the world. Auto picks a step from the GPU: strong chips 4, weaker 3, then 2, 1 and 0 for the weakest (the Adreno 618 in the Galaxy A52 needs 0). The pick is applied once, then your in-game choice is kept. A number is applied on every launch. Applied on next launch.")))
         col.addView(TextView(this).apply { text = tr("Полноэкранный режим", "Full screen mode"); setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("fullscreen", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("fullscreen", i == 1).apply(); writeGameSettings()
@@ -2074,10 +2121,12 @@ class MainActivity : Activity() {
      */
     private fun applyMipmap(gameDir: File, oldGl: Boolean) {
         try {
+            ensureGpu()
+            writeGameSettings()
             val dir = getExternalFilesDir(null) ?: filesDir
             try {
                 val lg = File(dir, "game.log")
-                if (lg.exists()) {
+                if ((prefs.getString("gpu", "") ?: "").isEmpty() && lg.exists()) {
                     val buf = ByteArray(300000)
                     val n = java.io.FileInputStream(lg).use { it.read(buf) }
                     if (n > 0) {
@@ -2087,20 +2136,19 @@ class MainActivity : Activity() {
                 }
             } catch (_: Throwable) {}
             val gpu = prefs.getString("gpu", "") ?: ""
-            val adreno = Regex("Adreno \\(TM\\) (\\d+)").find(gpu)?.groupValues?.get(1)?.toIntOrNull()
-            val slow = adreno != null && adreno < 700
+            val tier = GpuTier.tier(gpu)
             val pref = prefs.getInt("mip", -1)
             val marker = "mipAuto:" + gameDir.name
             val want = when {
                 pref >= 0 -> pref
-                slow && prefs.getString(marker, "") != gpu -> 0
+                tier != null && tier < 4 && prefs.getString(marker, "") != gpu -> tier
                 else -> return
             }
             val opt = File(gameDir, "options.txt")
             val lines = if (opt.exists()) opt.readLines().filter { !it.startsWith("mipmapLevels:") } else emptyList()
             opt.writeText((lines + "mipmapLevels:$want").joinToString("\n") + "\n")
             if (pref < 0) prefs.edit().putString(marker, gpu).apply()
-            log("Мипмапы: $want" + (if (pref < 0) " (авто, видеочип: $gpu)" else " (из настроек)"))
+            log("Мипмапы: $want" + (if (pref < 0) " (авто, видеочип: $gpu, уровень $tier из 4)" else " (из настроек)"))
         } catch (_: Throwable) {}
     }
 
