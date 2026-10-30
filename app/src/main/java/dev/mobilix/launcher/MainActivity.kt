@@ -323,9 +323,17 @@ class MainActivity : Activity() {
         drawerOpen = open
         val from = 1f - (-drawer.translationX / drawerW)
         scrim.visibility = View.VISIBLE
+        skinView.paused = true                                   // скин не перерисовываем, пока едет панель
+        drawer.setLayerType(View.LAYER_TYPE_HARDWARE, null)      // панель двигается как готовая текстура
         android.animation.ValueAnimator.ofFloat(from, if (open) 1f else 0f).apply {
             duration = 300
             interpolator = android.view.animation.DecelerateInterpolator()
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    drawer.setLayerType(View.LAYER_TYPE_NONE, null)
+                    skinView.paused = drawerOpen || pageOpen
+                }
+            })
             addUpdateListener {
                 val p = it.animatedValue as Float
                 drawer.translationX = -(1f - p) * drawerW
@@ -355,7 +363,10 @@ class MainActivity : Activity() {
         pageOpen = true
         val h = rootFrame.height.toFloat().coerceAtLeast(resources.displayMetrics.heightPixels.toFloat())
         page.translationY = h
-        page.animate().translationY(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        skinView.paused = true                                   // главная закрыта страницей: анимация скина не нужна
+        page.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        page.animate().translationY(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator())
+            .withEndAction { page.setLayerType(View.LAYER_TYPE_NONE, null) }.start()
     }
 
     private fun closePage() {
@@ -363,8 +374,9 @@ class MainActivity : Activity() {
         pageOpen = false
         accountSkin = null
         val page = pageLayer.getChildAt(0) ?: return
+        page.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         page.animate().translationY(pageLayer.height.toFloat()).setDuration(260)
-            .withEndAction { pageLayer.removeAllViews(); pageLayer.visibility = View.GONE }.start()
+            .withEndAction { pageLayer.removeAllViews(); pageLayer.visibility = View.GONE; skinView.paused = drawerOpen }.start()
     }
 
     @Suppress("DEPRECATION")
