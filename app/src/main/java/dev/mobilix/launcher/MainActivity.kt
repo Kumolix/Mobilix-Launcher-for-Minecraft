@@ -488,6 +488,12 @@ class MainActivity : Activity() {
             prefs.edit().putInt("fps", fpsOpts[i]).apply(); writeGameSettings()
         })
         col.addView(note(tr("Ограничивает FPS: меньше нагрев и расход батареи, но и частота кадров ниже. Применяется при запуске.", "Caps FPS: less heat and battery use, but lower frame rate. Applied on launch.")))
+        col.addView(TextView(this).apply { text = tr("Мипмапы (уровни текстур)", "Mipmap levels"); setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), "0", "1", "2", "3", "4"), prefs.getInt("mip", -1) + 1) { i ->
+            prefs.edit().putInt("mip", i - 1).apply()
+        })
+        col.addView(note(tr("На старых видеочипах (Adreno 6xx и ниже) мипмапы сильно роняют FPS в мире: анимации воды и лавы грузятся по 5 раз за кадр. «Авто»: после первого запуска лаунчер узнаёт видеочип и один раз ставит 0 для такого, дальше ваш выбор в самой игре сохраняется. Число: ставится при каждом запуске. Применяется при следующем запуске.",
+            "On old GPUs (Adreno 6xx and older) mipmaps can crush FPS in the world: water and lava animations upload 5 times per frame. Auto: after the first launch the launcher learns the GPU and sets 0 once for such devices; your in-game choice is kept afterwards. A number is applied on every launch. Applied on next launch.")))
         col.addView(TextView(this).apply { text = tr("Полноэкранный режим", "Full screen mode"); setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("fullscreen", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("fullscreen", i == 1).apply(); writeGameSettings()
@@ -1799,6 +1805,7 @@ class MainActivity : Activity() {
         if (legacy && child != null && !profile.contains("forge")) throw RuntimeException("Fabric и другие загрузчики для версий 1.12.2 и ниже не поддерживаются, только Forge")
         val oldForge = legacy && child != null
         val oldGl = legacy || javaMajor < 16
+        applyMipmap(gameDir, oldGl)
         if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
         else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
         val newLwjgl = "3.3.3"
@@ -2058,6 +2065,43 @@ class MainActivity : Activity() {
         runOnUiThread {
             startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "game"))
         }
+    }
+
+    /**
+     * Уровень мипмапов в options.txt. Число из настроек ставится при каждом запуске.
+     * «Авто»: видеочип берём из game.log прошлого запуска; для Adreno 6xx и старше (медленная загрузка текстур)
+     * один раз ставим 0 для этой папки игры, потом выбор игрока в самой игре не трогаем.
+     */
+    private fun applyMipmap(gameDir: File, oldGl: Boolean) {
+        try {
+            val dir = getExternalFilesDir(null) ?: filesDir
+            try {
+                val lg = File(dir, "game.log")
+                if (lg.exists()) {
+                    val buf = ByteArray(300000)
+                    val n = java.io.FileInputStream(lg).use { it.read(buf) }
+                    if (n > 0) {
+                        val m = Regex("\\[Mobilix\\] GPU: (.+?) \\|").find(String(buf, 0, n))
+                        if (m != null) prefs.edit().putString("gpu", m.groupValues[1].trim()).apply()
+                    }
+                }
+            } catch (_: Throwable) {}
+            val gpu = prefs.getString("gpu", "") ?: ""
+            val adreno = Regex("Adreno \\(TM\\) (\\d+)").find(gpu)?.groupValues?.get(1)?.toIntOrNull()
+            val slow = adreno != null && adreno < 700
+            val pref = prefs.getInt("mip", -1)
+            val marker = "mipAuto:" + gameDir.name
+            val want = when {
+                pref >= 0 -> pref
+                slow && oldGl && prefs.getString(marker, "") != gpu -> 0
+                else -> return
+            }
+            val opt = File(gameDir, "options.txt")
+            val lines = if (opt.exists()) opt.readLines().filter { !it.startsWith("mipmapLevels:") } else emptyList()
+            opt.writeText((lines + "mipmapLevels:$want").joinToString("\n") + "\n")
+            if (pref < 0) prefs.edit().putString(marker, gpu).apply()
+            log("Мипмапы: $want" + (if (pref < 0) " (авто, видеочип: $gpu)" else " (из настроек)"))
+        } catch (_: Throwable) {}
     }
 
     // ---------- MobileGlues (OpenGL поверх OpenGL ES) ----------
