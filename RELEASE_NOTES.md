@@ -1,15 +1,15 @@
-version: 1.8.29
+version: 1.8.34
 
 **EN: What's new**
-- Forge for old versions: 1.8 – 1.12.2 can now be installed from the version loader and launched (experimental)
-- Sign in with Ely.by: the authlib-injector agent now loads, so servers with Ely.by authentication can accept you
-- Version list shows only supported versions (1.8 and newer)
-- Mods from the catalog are installed into the folder of the selected old version
-- Fixed: Forge installer timeouts (files are re-downloaded), missing Forge profile after install
+- Virtual mouse: a "Mouse" button in the controls turns on a cursor you move with one finger (tap = left click), with LMB / RMB (hold) and scroll buttons; two fingers scroll lists and settings. Split stacks, move single items, scroll settings
+- Sign in with Microsoft (experimental): device-code login for your own Minecraft account; works once Mojang approves the app registration
+- More memory by default for 1.17+ versions
+- Diagnostics: FPS and GPU info are written to game.log, GC log to gc.log
+- Fixed: the version list no longer shows versions below 1.8
 
 **RU: Что нового?**
-- Forge для старых версий: 1.8 – 1.12.2 теперь можно установить из загрузчика версий и запустить (экспериментально)
-- Вход через Ely.by: агент authlib-injector теперь загружается, поэтому серверы с авторизацией Ely.by могут вас принять
-- В списке версий только поддерживаемые (1.8 и новее)
-- Моды из каталога ставятся в папку выбранной старой версии
-- Исправлено: таймауты установщика Forge (файлы докачиваются), пропадающий профиль Forge после установки
+- Виртуальная мышь: кнопка «Мышь» в управлении включает курсор, который двигается одним пальцем (касание = левый клик), с кнопками ЛКМ / ПКМ (удержание) и прокрутки; два пальца прокручивают списки и настройки. Можно делить стаки, переносить по одному предмету, листать настройки
+- Вход через Microsoft (экспериментально): вход по коду для своего аккаунта Minecraft; заработает после одобрения регистрации приложения Mojang
+- Больше памяти по умолчанию для версий 1.17+
+- Диагностика: FPS и данные о видеочипе пишутся в game.log, журнал сборщика мусора в gc.log
+- Исправлено: в списке версий больше нет версий ниже 1.8
