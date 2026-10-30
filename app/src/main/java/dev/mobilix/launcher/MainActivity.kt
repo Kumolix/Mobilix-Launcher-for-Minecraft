@@ -149,6 +149,7 @@ class MainActivity : Activity() {
     }
 
     private val prefs get() = getSharedPreferences("launcher", MODE_PRIVATE)
+    private var setupHint: View? = null
     internal fun lang() = prefs.getString("lang", "ru") ?: "ru"
     internal fun tr(ru: String, en: String) = if (lang() == "en") en else ru
     internal fun elyOn() = !prefs.getString("ely_token", "").isNullOrEmpty()
@@ -207,6 +208,18 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, dp(8))
         }
         skinBox.addView(nickText, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
+        // до первого запуска: заметная подсказка про быстрые настройки графики
+        setupHint = TextView(this).apply {
+            text = tr("⚙  Перед первым запуском рекомендуем открыть Настройки и выбрать быстрые настройки графики под ваш телефон: так игра пойдёт заметно плавнее.\nНажмите сюда, чтобы открыть.",
+                "⚙  Before the first launch we recommend opening Settings and picking a quick graphics preset for your phone: the game will run much smoother.\nTap here to open.")
+            textSize = 14f; setTextColor(Th.accent); typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.accent); cornerRadius = dp(12).toFloat() }
+            visibility = if (prefs.getBoolean("playedOnce", false)) View.GONE else View.VISIBLE
+            setOnClickListener { openPage(tr("Настройки", "Settings"), settingsPage()) }
+        }
+        skinBox.addView(setupHint, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP)
+            .apply { topMargin = dp(14); marginStart = dp(16); marginEnd = dp(16) })
         root.addView(skinBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         // скин Ely.by обновляется при каждом открытии лаунчера (если есть интернет)
         if (elyOn()) Thread { try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {} }.start()
@@ -338,7 +351,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun openPage(title: String, content: View) {
+    private fun openPage(title: String, content: View, animate: Boolean = true) {
         pageLayer.removeAllViews()
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Th.bg); isClickable = true }
         val head = FrameLayout(this).apply { setBackgroundColor(Th.bar) }
@@ -355,8 +368,10 @@ class MainActivity : Activity() {
         pageLayer.visibility = View.VISIBLE
         pageOpen = true
         val h = rootFrame.height.toFloat().coerceAtLeast(resources.displayMetrics.heightPixels.toFloat())
-        page.translationY = h
-        page.animate().translationY(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        if (animate) {
+            page.translationY = h
+            page.animate().translationY(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        }
     }
 
     private fun closePage() {
@@ -501,6 +516,17 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(14) })
         col.addView(note(tr("Откроется «Мои файлы» (Samsung) или стандартный проводник. Путь также скопирован в буфер.", "Opens My Files (Samsung) or the system file manager. The path is also copied.")))
         col.addView(header(tr("Игра", "Game")))
+        // быстрые настройки графики: между двумя линиями
+        col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(6); bottomMargin = dp(10) })
+        col.addView(TextView(this).apply { text = tr("Быстрые настройки графики", "Quick graphics settings"); setTextColor(Th.text); textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(6)) })
+        col.addView(chipRow(presets.map { tr(it.ru, it.en) }, prefs.getInt("preset", 0) - 1) { i ->
+            pickPreset(i)
+            Toast.makeText(this, tr("Выбрано: ${presets[i].ru}. Применится при следующем запуске игры.", "Selected: ${presets[i].en}. Applied on next game launch."), Toast.LENGTH_SHORT).show()
+            openPage(tr("Настройки", "Settings"), settingsPage(), animate = false)
+        })
+        col.addView(note(tr("Минимальные: 2 чанка, 30 FPS, 30% разрешения, всё выключено (для самых слабых). Низкие: 6 чанков, 45 FPS, 45%. Средние: 12 чанков, 60 FPS, 70%, плавное освещение. Высокие: 28 чанков, FPS без ограничения, 100%, красивая графика (для мощных, например S24 FE). Настройки записываются один раз, дальше любой параметр можно менять отдельно — выбор не перезаписывается при каждом запуске.",
+            "Minimal: 2 chunks, 30 FPS, 30% resolution, everything off (weakest phones). Low: 6 chunks, 45 FPS, 45%. Medium: 12 chunks, 60 FPS, 70%, smooth lighting. High: 28 chunks, unlimited FPS, 100%, fancy graphics (powerful phones). Applied once; any single option can be changed afterwards — your choice is not rewritten on every launch.")))
+        col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(14); bottomMargin = dp(6) })
         val curR = prefs.getInt("renderScale", 0)
         val rl = TextView(this).apply { setTextColor(Th.text); setPadding(0, 0, 0, dp(4)) }
         fun rText(v: Int) {
@@ -716,9 +742,37 @@ class MainActivity : Activity() {
                     val path = "/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
                         "&facets=" + java.net.URLEncoder.encode(facets.toString(), "UTF-8") + "&limit=25&index=" + (if (query.isEmpty()) "downloads" else "relevance")
                     val hits = JSONObject(apiGet(path)).getJSONArray("hits")
+                    // ничего нет для выбранной версии/загрузчика: ищем без фильтра версии, чтобы объяснить причину
+                    var other: JSONArray? = null
+                    if (hits.length() == 0 && query.isNotEmpty()) {
+                        try {
+                            val f2 = JSONArray().put(JSONArray().put("project_type:$type"))
+                            other = JSONObject(apiGet("/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
+                                "&facets=" + java.net.URLEncoder.encode(f2.toString(), "UTF-8") + "&limit=8&index=relevance")).getJSONArray("hits")
+                        } catch (_: Throwable) {}
+                    }
                     runOnUiThread {
                         list.removeAllViews()
-                        if (hits.length() == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено", "Nothing found"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
+                        if (hits.length() == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено для версии ${curBase()}", "Nothing found for version ${curBase()}"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
+                        val oh = other
+                        if (hits.length() == 0 && oh != null && oh.length() > 0) {
+                            list.addView(TextView(this).apply {
+                                text = tr("Но такое есть для других версий или загрузчиков (установить можно, сменив версию игры):", "But it exists for other versions or loaders (switch the game version to install):")
+                                setTextColor(Th.text2); textSize = 13f; setPadding(0, dp(10), 0, dp(6))
+                            })
+                            for (i in 0 until oh.length()) {
+                                val h = oh.getJSONObject(i)
+                                val vs = h.optJSONArray("versions")
+                                val range = if (vs != null && vs.length() > 0) vs.getString(0) + (if (vs.length() > 1) " – " + vs.getString(vs.length() - 1) else "") else "?"
+                                val cats = h.optJSONArray("categories")
+                                val ld = ArrayList<String>()
+                                if (cats != null) for (k in 0 until cats.length()) { val c = cats.getString(k); if (c in listOf("fabric", "forge", "neoforge", "quilt")) ld.add(c) }
+                                list.addView(TextView(this).apply {
+                                    text = h.getString("title") + "\n" + tr("Версии: ", "Versions: ") + range + "  ·  " + tr("Загрузчики: ", "Loaders: ") + (if (ld.isEmpty()) "?" else ld.joinToString(", "))
+                                    setTextColor(Th.text); textSize = 14f; setPadding(0, dp(6), 0, dp(6))
+                                })
+                            }
+                        }
                         for (i in 0 until hits.length()) {
                             val h = hits.getJSONObject(i)
                             val outer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(10)) }
@@ -1792,6 +1846,10 @@ class MainActivity : Activity() {
     }
 
     private fun prepareAndRun(profile: String = selectedProfile(), play: Boolean = true) {
+        if (play) {
+            prefs.edit().putBoolean("playedOnce", true).apply()
+            runOnUiThread { setupHint?.visibility = View.GONE }
+        }
         val root = dataRoot()
         File(root, "game").mkdirs()
         val assetsDir = File(root, "assets")
@@ -1853,6 +1911,7 @@ class MainActivity : Activity() {
         val oldForge = legacy && child != null
         val oldGl = legacy || javaMajor < 16
         applyMipmap(gameDir, oldGl)
+        applyPreset(gameDir, baseVer)
         if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
         else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
         val newLwjgl = "3.3.3"
@@ -2112,6 +2171,65 @@ class MainActivity : Activity() {
         runOnUiThread {
             startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "game"))
         }
+    }
+
+    // ---------- быстрые настройки графики ----------
+    private class Preset(
+        val ru: String, val en: String, val render: Int, val fps: Int, val chunks: Int,
+        val ao: Boolean, val fancy: Boolean, val mip: Int, val vbo: Boolean, val clouds: Boolean, val particles: Int
+    )
+
+    private val presets = listOf(
+        Preset("Минимальные", "Minimal", 30, 30, 2, false, false, 0, false, false, 2),
+        Preset("Низкие", "Low", 45, 45, 6, false, false, 0, false, false, 2),
+        Preset("Средние", "Medium", 70, 60, 12, true, false, 2, false, true, 1),
+        Preset("Высокие", "High", 100, 0, 28, true, true, 4, true, true, 0)
+    )
+
+    private fun mcMinor(ver: String): Int = ver.split('.').getOrNull(1)?.toIntOrNull() ?: 12
+
+    /** Выбор пресета: настройки лаунчера меняются сразу, options.txt — при ближайшем запуске каждой версии (один раз). */
+    private fun pickPreset(i: Int) {
+        val pr = presets[i]
+        prefs.edit()
+            .putInt("preset", i + 1)
+            .putInt("presetStamp", prefs.getInt("presetStamp", 0) + 1)
+            .putInt("renderScale", pr.render)
+            .putInt("fps", pr.fps)
+            .putInt("mip", -1)       // мипмапы ставит пресет один раз, а не при каждом запуске
+            .apply()
+        writeGameSettings()
+    }
+
+    /** Записывает выбранный пресет в options.txt этой папки игры один раз; дальше игрок может менять параметры сам. */
+    private fun applyPreset(gameDir: File, ver: String) {
+        try {
+            val id = prefs.getInt("preset", 0)
+            if (id <= 0 || id > presets.size) return
+            val stamp = prefs.getInt("presetStamp", 0).toString()
+            val marker = "presetApplied:" + gameDir.name
+            if (prefs.getString(marker, "") == stamp) return
+            val pr = presets[id - 1]
+            val minor = mcMinor(ver)
+            val kv = LinkedHashMap<String, String>()
+            kv["renderDistance"] = (if (minor <= 8) pr.chunks.coerceAtMost(16) else pr.chunks).toString()
+            kv["enableVsync"] = "false"
+            kv["maxFps"] = if (pr.fps <= 0) "260" else pr.fps.toString()
+            kv["mipmapLevels"] = pr.mip.toString()
+            kv["ao"] = if (minor >= 14) pr.ao.toString() else if (pr.ao) "2" else "0"
+            kv["fancyGraphics"] = pr.fancy.toString()
+            if (minor >= 16) kv["graphicsMode"] = if (pr.fancy) "1" else "0"
+            if (minor <= 15) kv["useVbo"] = pr.vbo.toString()
+            if (minor <= 8) kv["clouds"] = pr.clouds.toString() else kv["renderClouds"] = pr.clouds.toString()
+            kv["particles"] = pr.particles.toString()
+            kv["entityShadows"] = pr.fancy.toString()
+            if (minor >= 15) kv["biomeBlendRadius"] = if (pr.fancy) "2" else if (pr.ao) "1" else "0"
+            val opt = File(gameDir, "options.txt")
+            val keep = if (opt.exists()) opt.readLines().filter { l -> kv.keys.none { l.startsWith("$it:") } } else emptyList()
+            opt.writeText((keep + kv.map { "${it.key}:${it.value}" }).joinToString("\n") + "\n")
+            prefs.edit().putString(marker, stamp).apply()
+            log("Быстрые настройки графики: ${pr.ru} (${gameDir.name})")
+        } catch (_: Throwable) {}
     }
 
     /**
