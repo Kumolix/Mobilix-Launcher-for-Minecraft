@@ -741,34 +741,57 @@ class MainActivity : Activity() {
                     if (type == "mod") facets.put(JSONArray().put("categories:$loader"))
                     val path = "/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
                         "&facets=" + java.net.URLEncoder.encode(facets.toString(), "UTF-8") + "&limit=25&index=" + (if (query.isEmpty()) "downloads" else "relevance")
-                    val hits = JSONObject(apiGet(path)).getJSONArray("hits")
-                    // ничего нет для выбранной версии/загрузчика: ищем без фильтра версии, чтобы объяснить причину
+                    fun searchPath(q: String, f: JSONArray, limit: Int) = "/search?query=" + java.net.URLEncoder.encode(q, "UTF-8") +
+                        "&facets=" + java.net.URLEncoder.encode(f.toString(), "UTF-8") + "&limit=$limit&index=" + (if (q.isEmpty()) "downloads" else "relevance")
+                    var hits = JSONObject(apiGet(path)).getJSONArray("hits")
+                    // знаки вроде «!» в названии могут мешать поиску: пробуем без них
+                    val cleaned = query.replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
+                    if (hits.length() == 0 && cleaned.isNotEmpty() && cleaned != query) hits = JSONObject(apiGet(searchPath(cleaned, facets, 25))).getJSONArray("hits")
+                    // ничего нет: выясняем, какой именно фильтр отсёк результат (загрузчик или версия)
                     var other: JSONArray? = null
+                    var why = ""
+                    val qq = if (cleaned.isNotEmpty()) cleaned else query
                     if (hits.length() == 0 && query.isNotEmpty()) {
                         try {
-                            val f2 = JSONArray().put(JSONArray().put("project_type:$type"))
-                            other = JSONObject(apiGet("/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
-                                "&facets=" + java.net.URLEncoder.encode(f2.toString(), "UTF-8") + "&limit=8&index=relevance")).getJSONArray("hits")
+                            if (type == "mod") {
+                                val fv = JSONArray().put(JSONArray().put("versions:${curBase()}")).put(JSONArray().put("project_type:$type"))
+                                val r = JSONObject(apiGet(searchPath(qq, fv, 8))).getJSONArray("hits")
+                                if (r.length() > 0) { other = r; why = "loader" }
+                            }
+                            if (other == null) {
+                                val f2 = JSONArray().put(JSONArray().put("project_type:$type"))
+                                val r = JSONObject(apiGet(searchPath(qq, f2, 8))).getJSONArray("hits")
+                                if (r.length() > 0) { other = r; why = "version" }
+                            }
                         } catch (_: Throwable) {}
                     }
                     runOnUiThread {
                         list.removeAllViews()
-                        if (hits.length() == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено для версии ${curBase()}", "Nothing found for version ${curBase()}"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
+                        if (hits.length() == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено для версии ${curBase()} и загрузчика $loader", "Nothing found for version ${curBase()} and loader $loader"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
                         val oh = other
                         if (hits.length() == 0 && oh != null && oh.length() > 0) {
                             list.addView(TextView(this).apply {
-                                text = tr("Но такое есть для других версий или загрузчиков (установить можно, сменив версию игры):", "But it exists for other versions or loaders (switch the game version to install):")
+                                text = if (why == "loader")
+                                    tr("Для версии ${curBase()} такой мод есть, но не для загрузчика $loader. Загрузчики мода указаны ниже; в лаунчере пока доступны Fabric и Forge.",
+                                        "A mod like this exists for ${curBase()}, but not for the $loader loader. Its loaders are listed below; the launcher currently supports Fabric and Forge.")
+                                else tr("Для ${curBase()} не найдено. Есть для других версий или загрузчиков:", "Not found for ${curBase()}. Exists for other versions or loaders:")
                                 setTextColor(Th.text2); textSize = 13f; setPadding(0, dp(10), 0, dp(6))
                             })
                             for (i in 0 until oh.length()) {
                                 val h = oh.getJSONObject(i)
                                 val vs = h.optJSONArray("versions")
-                                val range = if (vs != null && vs.length() > 0) vs.getString(0) + (if (vs.length() > 1) " – " + vs.getString(vs.length() - 1) else "") else "?"
+                                var has = false
+                                var range = "?"
+                                if (vs != null && vs.length() > 0) {
+                                    range = vs.getString(0) + (if (vs.length() > 1) " – " + vs.getString(vs.length() - 1) else "")
+                                    for (k in 0 until vs.length()) if (vs.getString(k) == curBase()) has = true
+                                }
                                 val cats = h.optJSONArray("categories")
                                 val ld = ArrayList<String>()
                                 if (cats != null) for (k in 0 until cats.length()) { val c = cats.getString(k); if (c in listOf("fabric", "forge", "neoforge", "quilt")) ld.add(c) }
                                 list.addView(TextView(this).apply {
-                                    text = h.getString("title") + "\n" + tr("Версии: ", "Versions: ") + range + "  ·  " + tr("Загрузчики: ", "Loaders: ") + (if (ld.isEmpty()) "?" else ld.joinToString(", "))
+                                    text = h.getString("title") + "\n" + tr("Версии: ", "Versions: ") + range + (if (has) "  ✓ " + curBase() else "  ✗ " + tr("точно ${curBase()} нет в списке", "${curBase()} is not listed")) +
+                                        "\n" + tr("Загрузчики: ", "Loaders: ") + (if (ld.isEmpty()) "?" else ld.joinToString(", "))
                                     setTextColor(Th.text); textSize = 14f; setPadding(0, dp(6), 0, dp(6))
                                 })
                             }
