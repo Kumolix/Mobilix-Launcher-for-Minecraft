@@ -2093,7 +2093,7 @@ class MainActivity : Activity() {
             val marker = "mipAuto:" + gameDir.name
             val want = when {
                 pref >= 0 -> pref
-                slow && oldGl && prefs.getString(marker, "") != gpu -> 0
+                slow && prefs.getString(marker, "") != gpu -> 0
                 else -> return
             }
             val opt = File(gameDir, "options.txt")
