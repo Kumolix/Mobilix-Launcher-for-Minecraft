@@ -132,6 +132,8 @@ public final class Display {
 	public static void update(boolean processMessages) {
 		if (!created) throw new IllegalStateException("Display not created");
 		lastFrame = System.currentTimeMillis();
+		renderThread = Thread.currentThread();
+		frameCount++;
 		GLFW.glfwSwapBuffers(window);
 		if (processMessages) processMessages();
 	}
@@ -145,9 +147,58 @@ public final class Display {
 		if (Keyboard.isCreated()) Keyboard.poll();
 	}
 
+	// ---------- диагностика: где игра теряет кадры ----------
+	private static volatile Thread renderThread;
+	private static volatile int frameCount;
+	private static boolean profStarted;
+
+	/** Если кадров меньше 15 в секунду, раз в 8 секунд снимает ~60 стеков потока рендера и печатает самые частые места. */
+	private static void startProfiler() {
+		if (profStarted) return;
+		profStarted = true;
+		Thread t = new Thread(() -> {
+			int prev = frameCount;
+			while (true) {
+				try { Thread.sleep(8000); } catch (InterruptedException e) { return; }
+				int cur = frameCount;
+				double fps = (cur - prev) / 8.0;
+				prev = cur;
+				Thread rt = renderThread;
+				if (rt == null || fps >= 15.0) continue;
+				java.util.HashMap<String, Integer> top = new java.util.HashMap<>();
+				java.util.HashMap<String, Integer> deep = new java.util.HashMap<>();
+				int n = 0;
+				for (int i = 0; i < 60; i++) {
+					StackTraceElement[] st = rt.getStackTrace();
+					if (st.length > 0) {
+						n++;
+						top.merge(st[0].getClassName() + "." + st[0].getMethodName(), 1, Integer::sum);
+						StringBuilder sb = new StringBuilder();
+						for (int k = 0; k < st.length && k < 6; k++) { if (k > 0) sb.append(" < "); sb.append(st[k].getClassName().replaceAll(".*\\.", "")).append('.').append(st[k].getMethodName()); }
+						deep.merge(sb.toString(), 1, Integer::sum);
+					}
+					try { Thread.sleep(25); } catch (InterruptedException e) { return; }
+				}
+				System.err.println("[Mobilix] Профиль потока рендера (" + String.format("%.1f", fps) + " к/с, " + n + " снимков), состояние " + rt.getState() + ":");
+				printTop(top, 5);
+				System.err.println("[Mobilix]  стеки:");
+				printTop(deep, 4);
+			}
+		}, "Mobilix-profiler");
+		t.setDaemon(true);
+		t.start();
+	}
+
+	private static void printTop(java.util.Map<String, Integer> m, int k) {
+		java.util.List<java.util.Map.Entry<String, Integer>> l = new java.util.ArrayList<>(m.entrySet());
+		l.sort((x, y) -> y.getValue() - x.getValue());
+		for (int i = 0; i < l.size() && i < k; i++) System.err.println("[Mobilix]   " + l.get(i).getValue() + "x " + l.get(i).getKey());
+	}
+
 	private static void startWatchdog() {
 		if (watchdog) return;
 		watchdog = true;
+		startProfiler();
 		Thread t = new Thread(() -> {
 			long lastDump = 0;
 			while (true) {
