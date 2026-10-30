@@ -23,6 +23,7 @@ const val K_MOUSE = 1
 const val K_SCROLL = 2
 const val K_KEYBOARD = 3
 const val K_HIDE = 4
+const val K_VMOUSE = 5
 
 class Btn(
     var label: String, var kind: Int, var code: Int,
@@ -47,6 +48,7 @@ private val KEY_CHOICES: List<Triple<String, Int, Int>> = buildList {
     add(Triple("Мышь: средняя", K_MOUSE, 2))
     add(Triple("Экранная клавиатура", K_KEYBOARD, 0))
     add(Triple("Скрыть/показать кнопки", K_HIDE, 0))
+    add(Triple("Виртуальная мышь вкл/выкл", K_VMOUSE, 0))
     add(Triple("Колесо вверх", K_SCROLL, 1))
     add(Triple("Колесо вниз", K_SCROLL, -1))
     add(Triple("Пробел", K_KEY, 32)); add(Triple("Esc", K_KEY, 256)); add(Triple("Enter", K_KEY, 257))
@@ -92,11 +94,54 @@ class ControlsView(ctx: Context) : View(ctx) {
     private sealed class Owner {
         class B(val b: Btn, var sx: Float, var sy: Float, var moved: Boolean = false) : Owner()
         class Cam(var lx: Float, var ly: Float) : Owner()
+        class Pad(val sx: Float, val sy: Float, var lx: Float, var ly: Float, val t0: Long, var moved: Boolean = false) : Owner()
         object Gui : Owner()
     }
     private val owners = HashMap<Int, Owner>()
     private var vx = 0.0
     private var vy = 0.0
+
+    // ---------- виртуальная мышь ----------
+    /** Включена ли виртуальная мышь (палец двигает курсор, клик отдельными кнопками). */
+    var vm = false
+        private set
+    private var lastGui = false
+    private var scrollAcc = 0f
+    private val vbtns = listOf(
+        Btn("▲", K_SCROLL, 1, 0.95f, 0.26f, 56, 56),
+        Btn("ЛКМ", K_MOUSE, 0, 0.95f, 0.42f, 56, 56),
+        Btn("ПКМ", K_MOUSE, 1, 0.95f, 0.58f, 56, 56),
+        Btn("▼", K_SCROLL, -1, 0.95f, 0.74f, 56, 56)
+    )
+    private val cursorPath = android.graphics.Path()
+
+    /** Мышь работает только пока открыт интерфейс (курсор не захвачен игрой). */
+    private fun vmActive() = vm && !editing && !cursorDisabled()
+
+    private fun centerCursor() {
+        vx = width * gameScale / 2.0; vy = height * gameScale / 2.0
+        try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
+    }
+
+    private fun setVm(on: Boolean) {
+        vm = on
+        if (on) centerCursor()
+        save(); invalidate()
+    }
+
+    private val tick = object : Runnable {
+        override fun run() {
+            val g = !cursorDisabled()
+            if (g != lastGui) {
+                lastGui = g
+                if (g && vm) centerCursor()   // игра ставит курсор в центр при открытии меню
+                invalidate()
+            }
+            postDelayed(this, 250)
+        }
+    }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); post(tick) }
+    override fun onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow() }
 
     init { load() }
 
@@ -117,6 +162,7 @@ class ControlsView(ctx: Context) : View(ctx) {
         // верхний ряд
         buttons.add(Btn("⌨", K_KEYBOARD, 0, 0.12f, 0.07f, 40, 40)); k("F3", 292, 0.33f, 0.07f, 40)
         buttons.add(Btn("GUI", K_HIDE, 0, 0.035f, 0.09f, 40, 40))
+        buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.61f, 0.07f, 40, 40))
         k("F5", 294, 0.26f, 0.07f, 40); k("Чат", 'T'.code, 0.19f, 0.07f, 40); k("Esc", 256, 0.40f, 0.07f, 40)
         k("Инв.", 'E'.code, 0.47f, 0.07f, 40); k("Бросить", 'Q'.code, 0.54f, 0.07f, 40)
         // хотбар
@@ -128,7 +174,7 @@ class ControlsView(ctx: Context) : View(ctx) {
         try {
             val a = JSONArray()
             buttons.forEach { a.put(it.toJson()) }
-            file.writeText(JSONObject().put("v", 5).put("sens", sens.toDouble()).put("buttons", a).toString())
+            file.writeText(JSONObject().put("v", 6).put("sens", sens.toDouble()).put("vm", vm).put("buttons", a).toString())
         } catch (_: Throwable) {
         }
     }
@@ -138,6 +184,7 @@ class ControlsView(ctx: Context) : View(ctx) {
             if (file.exists()) {
                 val j = JSONObject(file.readText())
                 sens = j.optDouble("sens", 1.0).toFloat()
+                vm = j.optBoolean("vm", false)
                 val a = j.getJSONArray("buttons")
                 buttons.clear()
                 for (i in 0 until a.length()) {
@@ -152,6 +199,10 @@ class ControlsView(ctx: Context) : View(ctx) {
                 if (ver < 3) addNew()
                 if (ver < 4) migrate4()
                 if (ver < 5) { buttons.firstOrNull { it.kind == K_KEY && it.code == 341 && it.label == "Бег" }?.toggle = true; save() }
+                if (ver < 6) {
+                    if (buttons.none { it.kind == K_VMOUSE }) buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.61f, 0.07f, 40, 40))
+                    save()
+                }
                 if (buttons.isNotEmpty()) return
             }
         } catch (_: Throwable) {
@@ -198,18 +249,40 @@ class ControlsView(ctx: Context) : View(ctx) {
         return RectF(cx - b.w * d / 2, cy - b.h * d / 2, cx + b.w * d / 2, cy + b.h * d / 2)
     }
 
+    private fun drawBtn(c: Canvas, b: Btn) {
+        val r = rect(b)
+        val lit = b.pressed || b.on || (b.kind == K_VMOUSE && vm)
+        fill.color = if (lit) 0xAAFFFFFF.toInt() else if (editing) 0x66FFD54F else 0x44FFFFFF
+        c.drawRoundRect(r, 14f * d, 14f * d, fill)
+        line.color = if (editing) 0xFFFFC107.toInt() else 0x88FFFFFF.toInt()
+        c.drawRoundRect(r, 14f * d, 14f * d, line)
+        txt.color = if (lit) Color.BLACK else Color.WHITE
+        txt.textSize = (if (b.label.length > 3) 11f else 15f).coerceAtMost(b.h * 0.4f) * d
+        c.drawText(b.label, r.centerX(), r.centerY() + txt.textSize * 0.35f, txt)
+    }
+
+    private fun drawCursor(c: Canvas) {
+        val x = (vx / gameScale).toFloat(); val y = (vy / gameScale).toFloat()
+        val s = 22f * d
+        cursorPath.reset()
+        cursorPath.moveTo(x, y); cursorPath.lineTo(x, y + s); cursorPath.lineTo(x + s * 0.3f, y + s * 0.75f)
+        cursorPath.lineTo(x + s * 0.55f, y + s * 1.1f); cursorPath.lineTo(x + s * 0.72f, y + s * 1.0f)
+        cursorPath.lineTo(x + s * 0.48f, y + s * 0.66f); cursorPath.lineTo(x + s * 0.78f, y + s * 0.66f)
+        cursorPath.close()
+        fill.color = Color.WHITE; c.drawPath(cursorPath, fill)
+        line.color = Color.BLACK; line.strokeWidth = 1.5f * d; c.drawPath(cursorPath, line)
+        line.strokeWidth = 2f * d
+    }
+
     override fun onDraw(c: Canvas) {
         for (b in buttons) {
             if (hidden && !editing && b.kind != K_HIDE) continue
             if (isDpad(b)) continue
-            val r = rect(b)
-            fill.color = if (b.pressed || b.on) 0xAAFFFFFF.toInt() else if (editing) 0x66FFD54F else 0x44FFFFFF
-            c.drawRoundRect(r, 14f * d, 14f * d, fill)
-            line.color = if (editing) 0xFFFFC107.toInt() else 0x88FFFFFF.toInt()
-            c.drawRoundRect(r, 14f * d, 14f * d, line)
-            txt.color = if (b.pressed || b.on) Color.BLACK else Color.WHITE
-            txt.textSize = (if (b.label.length > 3) 11f else 15f).coerceAtMost(b.h * 0.4f) * d
-            c.drawText(b.label, r.centerX(), r.centerY() + txt.textSize * 0.35f, txt)
+            drawBtn(c, b)
+        }
+        if (vmActive()) {
+            for (b in vbtns) drawBtn(c, b)
+            drawCursor(c)
         }
         if (joy && (!hidden || editing)) {
             val cx = joyCx(); val cy = joyCy(); val r = joyR()
@@ -252,7 +325,12 @@ class ControlsView(ctx: Context) : View(ctx) {
         for (i in 0..4) setJoyKey(i, false)
     }
 
-    private fun hit(x: Float, y: Float): Btn? = buttons.lastOrNull { (!hidden || editing || it.kind == K_HIDE) && !isDpad(it) && rect(it).contains(x, y) }
+    private fun hit(x: Float, y: Float): Btn? {
+        if (vmActive()) vbtns.lastOrNull { rect(it).contains(x, y) }?.let { return it }
+        return hitMain(x, y)
+    }
+
+    private fun hitMain(x: Float, y: Float): Btn? = buttons.lastOrNull { (!hidden || editing || it.kind == K_HIDE) && !isDpad(it) && rect(it).contains(x, y) }
 
     private var kbd = false
     private fun pk(type: Int, a: Int) { try { Native.pushEvent(type, a.toDouble(), 0.0, 0) } catch (_: Throwable) {} }
@@ -313,6 +391,7 @@ class ControlsView(ctx: Context) : View(ctx) {
     private fun fire(b: Btn, down: Boolean) {
         if (b.kind == K_HIDE) { if (down && !editing) { hidden = !hidden; invalidate() }; return }
         if (b.kind == K_KEYBOARD) { if (down && !editing) toggleKeyboard(); return }
+        if (b.kind == K_VMOUSE) { if (down && !editing) setVm(!vm); return }
         if (b.extra.isEmpty()) { fireOne(b.kind, b.code, down); return }
         // комбинация: нажимаем по порядку, отпускаем в обратном
         val all = listOf(intArrayOf(b.kind, b.code)) + b.extra
@@ -343,6 +422,11 @@ class ControlsView(ctx: Context) : View(ctx) {
                     if (!editing) press(b, true)
                 } else if (editing) {
                     owners[id] = Owner.Gui
+                } else if (vmActive()) {
+                    // второй палец — прокрутка, одиночные касания больше не считаются кликом
+                    if (owners.values.any { it is Owner.Pad }) owners.values.forEach { if (it is Owner.Pad) it.moved = true }
+                    owners[id] = Owner.Pad(x, y, x, y, android.os.SystemClock.uptimeMillis())
+                    scrollAcc = 0f
                 } else if (cursorDisabled()) {
                     owners[id] = Owner.Cam(x, y)
                 } else {
@@ -369,6 +453,22 @@ class ControlsView(ctx: Context) : View(ctx) {
                             o.lx = x; o.ly = y
                             try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
                         }
+                        is Owner.Pad -> {
+                            val dx = x - o.lx; val dy = y - o.ly
+                            o.lx = x; o.ly = y
+                            if (Math.abs(x - o.sx) > 10 * d || Math.abs(y - o.sy) > 10 * d) o.moved = true
+                            if (owners.values.count { it is Owner.Pad } >= 2) {
+                                // два пальца: прокрутка списков и настроек
+                                scrollAcc += dy
+                                val step = 28f * d
+                                while (scrollAcc >= step) { scrollAcc -= step; try { Native.pushEvent(5, 0.0, 1.0, 0) } catch (_: Throwable) {} }
+                                while (scrollAcc <= -step) { scrollAcc += step; try { Native.pushEvent(5, 0.0, -1.0, 0) } catch (_: Throwable) {} }
+                            } else {
+                                vx = (vx + dx * gameScale * 1.4).coerceIn(0.0, (width * gameScale).toDouble())
+                                vy = (vy + dy * gameScale * 1.4).coerceIn(0.0, (height * gameScale).toDouble())
+                                try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
+                            }
+                        }
                         is Owner.Gui -> if (!editing) {
                             try { Native.pushEvent(3, x.toDouble() * gameScale, y.toDouble() * gameScale, 0) } catch (_: Throwable) {}
                         }
@@ -383,6 +483,11 @@ class ControlsView(ctx: Context) : View(ctx) {
                     is Owner.B -> if (editing) { if (!o.moved) editButton(o.b) else save() } else if (!o.b.toggle) press(o.b, false)
                     is Owner.Gui -> if (!editing) {
                         try { Native.pushEvent(3, x.toDouble() * gameScale, y.toDouble() * gameScale, 0); Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
+                    }
+                    is Owner.Pad -> if (!o.moved && e.actionMasked != MotionEvent.ACTION_CANCEL &&
+                        android.os.SystemClock.uptimeMillis() - o.t0 < 350) {
+                        // короткое касание = левый клик в позиции курсора
+                        try { Native.pushEvent(4, 0.0, 0.0, 1); Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
                     }
                     else -> {}
                 }
@@ -451,7 +556,7 @@ class ControlsView(ctx: Context) : View(ctx) {
                     b.kind = k; b.code = c; b.extra.clear()
                     if (b.label == "?" || b.label.isEmpty()) b.label = if (n.length <= 3) n else n.take(5)
                     picked = true
-                } else if (b.extra.size < 4 && k != K_KEYBOARD && k != K_HIDE) {
+                } else if (b.extra.size < 4 && k != K_KEYBOARD && k != K_HIDE && k != K_VMOUSE) {
                     b.extra.add(intArrayOf(k, c))
                 }
                 refresh(); invalidate(); save()
