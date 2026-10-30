@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -407,6 +408,28 @@ class MainActivity : Activity() {
         addView(View(context).apply { setBackgroundColor(0xFF2EA84F.toInt()) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(4) })
     }
 
+    /** Кнопки-«чипы» сеткой (когда в одну строку не помещаются). */
+    private fun gridChips(labels: List<String>, selected: Int, cols: Int, onPick: (Int) -> Unit): LinearLayout {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val views = ArrayList<TextView>()
+        fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) 0xFF2EA84F.toInt() else 0xFF14301D.toInt()) }
+        var row: LinearLayout? = null
+        labels.forEachIndexed { i, l ->
+            if (i % cols == 0) {
+                row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = if (i == 0) 0 else dp(6) })
+            }
+            val t = TextView(this).apply {
+                text = l; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(dp(10), dp(12), dp(10), dp(12))
+                setOnClickListener { paint(i); onPick(i) }
+            }
+            views.add(t)
+            row!!.addView(t, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = if (i % cols == 0) 0 else dp(6) })
+        }
+        paint(selected)
+        return col
+    }
+
     private fun chipRow(labels: List<String>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val views = ArrayList<TextView>()
@@ -519,7 +542,7 @@ class MainActivity : Activity() {
         // быстрые настройки графики: между двумя линиями
         col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(6); bottomMargin = dp(10) })
         col.addView(TextView(this).apply { text = tr("Быстрые настройки графики", "Quick graphics settings"); setTextColor(Th.text); textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(6)) })
-        col.addView(chipRow(presets.map { tr(it.ru, it.en) }, prefs.getInt("preset", 0) - 1) { i ->
+        col.addView(gridChips(presets.map { tr(it.ru, it.en) }, prefs.getInt("preset", 0) - 1, 2) { i ->
             pickPreset(i)
             Toast.makeText(this, tr("Выбрано: ${presets[i].ru}. Применится при следующем запуске игры.", "Selected: ${presets[i].en}. Applied on next game launch."), Toast.LENGTH_SHORT).show()
             openPage(tr("Настройки", "Settings"), settingsPage(), animate = false)
@@ -688,6 +711,9 @@ class MainActivity : Activity() {
     private fun catalogPage(): View {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         var type = "mod"; var loader = if (selectedProfile().contains("forge")) "forge" else "fabric"
+        var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
+        var hideDl = prefs.getBoolean("catHideDl", false)    // фильтр «Не показывать скачанное»
+        var searchSeq = 0                                    // номер запроса: устаревший ответ не должен перекрывать список
         val q = android.widget.EditText(this).apply {
             hint = tr("Поиск", "Search"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true)
             setPadding(dp(20), dp(12), dp(20), dp(12)); imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
@@ -731,14 +757,17 @@ class MainActivity : Activity() {
             if (count == 0) list.addView(TextView(this).apply { text = tr("Пока ничего не скачано", "Nothing downloaded yet"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
         }
         fun search() {
+            val my = ++searchSeq
             if (type == "downloaded") { showDownloaded(); return }
             list.removeAllViews()
             list.addView(TextView(this).apply { text = tr("Загрузка…", "Loading…"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
             val query = q.text.toString().trim()
             Thread {
                 try {
-                    val facets = JSONArray().put(JSONArray().put("versions:${curBase()}")).put(JSONArray().put("project_type:$type"))
-                    if (type == "mod") facets.put(JSONArray().put("categories:$loader"))
+                    val facets = JSONArray()
+                    if (strict) facets.put(JSONArray().put("versions:${curBase()}"))
+                    facets.put(JSONArray().put("project_type:$type"))
+                    if (strict && type == "mod") facets.put(JSONArray().put("categories:$loader"))
                     val path = "/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
                         "&facets=" + java.net.URLEncoder.encode(facets.toString(), "UTF-8") + "&limit=25&index=" + (if (query.isEmpty()) "downloads" else "relevance")
                     fun searchPath(q: String, f: JSONArray, limit: Int) = "/search?query=" + java.net.URLEncoder.encode(q, "UTF-8") +
@@ -750,7 +779,7 @@ class MainActivity : Activity() {
                     // то, что нашлось по названию, но не прошло фильтры (версия, загрузчик, тип): покажем отдельно с причиной
                     val extra = ArrayList<JSONObject>()
                     val qq = if (cleaned.isNotEmpty()) cleaned else query
-                    if (query.isNotEmpty()) {
+                    if (query.isNotEmpty() && strict) {
                         try {
                             val all = JSONObject(apiGet("/search?query=" + java.net.URLEncoder.encode(qq, "UTF-8") + "&limit=10&index=relevance")).getJSONArray("hits")
                             val shown = HashSet<String>()
@@ -762,10 +791,17 @@ class MainActivity : Activity() {
                         } catch (_: Throwable) {}
                     }
                     runOnUiThread {
+                        if (my != searchSeq) return@runOnUiThread
                         list.removeAllViews()
                         if (hits.length() == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено для версии ${curBase()} и загрузчика $loader", "Nothing found for version ${curBase()} and loader $loader"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
+                        var shownCount = 0
                         for (i in 0 until hits.length()) {
                             val h = hits.getJSONObject(i)
+                            if (hideDl) {
+                                val rec = idx().optJSONObject(h.optString("project_id"))
+                                if (rec != null && packFile(rec.optString("t"), rec.optString("f")).exists()) continue
+                            }
+                            shownCount++
                             val outer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(10)) }
                             val icon = ImageView(this).apply { setBackgroundColor(Th.line2); scaleType = ImageView.ScaleType.CENTER_CROP }
                             outer.addView(icon, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginEnd = dp(12) })
@@ -775,12 +811,26 @@ class MainActivity : Activity() {
                             row.addView(TextView(this).apply { text = h.getString("title"); textSize = 17f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
                             row.addView(TextView(this).apply { text = h.optString("author") + "  ·  ⬇ " + h.optInt("downloads"); textSize = 12f; setTextColor(Th.accent) })
                             row.addView(TextView(this).apply { text = h.optString("description"); textSize = 13f; setTextColor(Th.text2); maxLines = 3 })
+                            if (!strict) {
+                                var okv = false
+                                h.optJSONArray("versions")?.let { vs2 -> for (k in 0 until vs2.length()) if (vs2.getString(k) == curBase()) okv = true }
+                                var okl = type != "mod"
+                                h.optJSONArray("categories")?.let { c2 -> for (k in 0 until c2.length()) if (c2.getString(k) == loader) okl = true }
+                                if (!okv || !okl) row.addView(TextView(this).apply {
+                                    text = "⚠ " + tr("не заявлен для ${curBase()} / $loader", "not listed for ${curBase()} / $loader")
+                                    textSize = 12f; setTextColor(0xFFFFB74D.toInt())
+                                })
+                            }
                             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                             fillActions(actions, h.getString("project_id"), type, loader, h.getString("title"))
                             row.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
                             list.addView(outer)
                             list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
                         }
+                        if (hits.length() > 0 && shownCount == 0) list.addView(TextView(this).apply {
+                            text = tr("Всё найденное уже скачано (фильтр «Не показывать скачанное»)", "Everything found is already downloaded (hide-downloaded filter)")
+                            setTextColor(Th.dim); setPadding(0, dp(16), 0, 0)
+                        })
                         if (extra.isNotEmpty()) {
                             list.addView(TextView(this).apply {
                                 text = tr("Найдено, но не подходит под фильтры (версия ${curBase()}, загрузчик $loader, тип «$type»):", "Found, but filtered out (version ${curBase()}, loader $loader, type \"$type\"):")
@@ -808,11 +858,17 @@ class MainActivity : Activity() {
                                         "\n" + tr("Причина: ", "Reason: ") + (if (reasons.isEmpty()) "?" else reasons.joinToString("; "))
                                     setTextColor(Th.text); textSize = 14f; setPadding(0, dp(6), 0, dp(6))
                                 })
+                                val pid = h.optString("project_id"); val ptype = h.optString("project_type", type); val ptitle = h.optString("title")
+                                list.addView(Button(this).apply {
+                                    text = tr("Скачать вручную…", "Download manually…"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(0xFF14301D.toInt())
+                                    setOnClickListener { openManualDownload(pid, ptype, ptitle) {} }
+                                }, LinearLayout.LayoutParams(dp(200), dp(40)).apply { bottomMargin = dp(8) })
                             }
                         }
                     }
                 } catch (e: Throwable) {
                     runOnUiThread {
+                        if (my != searchSeq) return@runOnUiThread
                         list.removeAllViews()
                         list.addView(TextView(this).apply { text = tr("Не удалось загрузить каталог: ", "Could not load the catalog: ") + e.message + tr("\nПроверьте источник в Настройки → Специальное.", "\nCheck the source in Settings → Special."); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
                     }
@@ -829,7 +885,30 @@ class MainActivity : Activity() {
             search()
         }
         box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
-        box.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
+        // кнопка фильтров справа от Fabric/Forge: иконка с ползунками и числом включённых фильтров
+        val filt = FilterView(this)
+        fun refreshFilt() { filt.count = (if (strict) 1 else 0) + (if (hideDl) 1 else 0) }
+        refreshFilt()
+        filt.setOnClickListener {
+            val pane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), dp(4)) }
+            val cs = CheckBox(this).apply { text = tr("Совместимость версий", "Version compatibility"); isChecked = strict }
+            val cd = CheckBox(this).apply { text = tr("Не показывать скачанное", "Hide downloaded"); isChecked = hideDl }
+            pane.addView(cs)
+            pane.addView(TextView(this).apply { text = tr("Включено: только то, что подходит под вашу версию игры и загрузчик. Выключено: показывать всё найденное, а для несовместимого можно скачать файл вручную (на свой риск).", "On: only items that fit your game version and loader. Off: show everything found; incompatible items can be downloaded manually (at your own risk)."); textSize = 12f; setTextColor(Th.dim); setPadding(dp(32), 0, 0, dp(10)) })
+            pane.addView(cd)
+            AlertDialog.Builder(this).setTitle(tr("Фильтры", "Filters")).setView(pane)
+                .setPositiveButton(tr("Применить", "Apply")) { _, _ ->
+                    strict = cs.isChecked; hideDl = cd.isChecked
+                    prefs.edit().putBoolean("catStrict", strict).putBoolean("catHideDl", hideDl).apply()
+                    refreshFilt(); search()
+                }
+                .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+        }
+        val filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        filterRow.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        filterRow.addView(filt, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) })
+        box.addView(filterRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
         val sv = ScrollView(this); sv.addView(list)
         box.addView(sv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         q.setOnEditorActionListener { _, _, _ -> search(); true }
@@ -864,7 +943,7 @@ class MainActivity : Activity() {
                 val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") +
                     (if (type == "mod") "&loaders=" + java.net.URLEncoder.encode("[\"$loader\"]", "UTF-8") else "")
                 val vers = JSONArray(apiGet("/project/$id/version$g"))
-                if (vers.length() == 0) throw RuntimeException(tr("нет файла для ${curBase()}", "no file for ${curBase()}"))
+                if (vers.length() == 0) throw RuntimeException("__manual")
                 val files = vers.getJSONObject(0).getJSONArray("files")
                 var f = files.getJSONObject(0)
                 for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
@@ -878,7 +957,70 @@ class MainActivity : Activity() {
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
                 if (res == "ok") { onDone() }
-                else { btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download"); Toast.makeText(this, res, Toast.LENGTH_LONG).show() }
+                else {
+                    btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download")
+                    // нет файла под вашу версию/загрузчик: предлагаем выбрать любой файл вручную
+                    if (res == "__manual") openManualDownload(id, type, title, onDone)
+                    else Toast.makeText(this, res, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    /** Окно ручной загрузки: все файлы проекта без фильтров, совместимые сверху; на свой риск. */
+    private fun openManualDownload(id: String, type: String, title: String, onDone: () -> Unit) {
+        Toast.makeText(this, tr("Нет файла под ${curBase()}. Загружаю все версии…", "No file for ${curBase()}. Loading all versions…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val vers = JSONArray(apiGet("/project/$id/version"))
+                runOnUiThread {
+                    if (vers.length() == 0) { Toast.makeText(this, tr("У проекта нет файлов", "The project has no files"), Toast.LENGTH_LONG).show(); return@runOnUiThread }
+                    val all = ArrayList<JSONObject>()
+                    for (i in 0 until vers.length()) all.add(vers.getJSONObject(i))
+                    fun fits(v: JSONObject): Boolean {
+                        val g = v.optJSONArray("game_versions") ?: return false
+                        for (k in 0 until g.length()) if (g.getString(k) == curBase()) return true
+                        return false
+                    }
+                    val sorted = all.sortedByDescending { if (fits(it)) 1 else 0 }.take(80)
+                    val items = ArrayList<String>()
+                    for (v in sorted) {
+                        val g = v.optJSONArray("game_versions"); val l = v.optJSONArray("loaders")
+                        val gs = if (g != null && g.length() > 0) g.getString(0) + (if (g.length() > 1) " – " + g.getString(g.length() - 1) else "") else "?"
+                        val ls = ArrayList<String>()
+                        if (l != null) for (k in 0 until l.length()) ls.add(l.getString(k))
+                        items.add((if (fits(v)) "✓ " else "✗ ") + v.optString("name", v.optString("version_number")) + "\n" + gs + "  ·  " + ls.joinToString(", "))
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle(title + "\n" + tr("выберите файл (на свой риск)", "pick a file (at your own risk)"))
+                        .setItems(items.toTypedArray()) { _, i -> downloadVersion(id, type, title, sorted[i], onDone) }
+                        .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+                }
+            } catch (e: Throwable) {
+                runOnUiThread { Toast.makeText(this, e.message ?: e.toString(), Toast.LENGTH_LONG).show() }
+            }
+        }.start()
+    }
+
+    private fun downloadVersion(id: String, type: String, title: String, v: JSONObject, onDone: () -> Unit) {
+        Toast.makeText(this, tr("Скачивание…", "Downloading…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            var res = ""
+            try {
+                val files = v.getJSONArray("files")
+                var f = files.getJSONObject(0)
+                for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
+                val dest = File(curGameDir(), typeDir(type) + "/" + f.getString("filename"))
+                val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
+                if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
+                idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title)) })
+                res = "ok"
+            } catch (e: Throwable) { res = e.message ?: e.toString() }
+            runOnUiThread {
+                if (res == "ok") {
+                    Toast.makeText(this, tr("Скачано: $title. Версия может не подойти к вашей игре.", "Downloaded: $title. The version may not fit your game."), Toast.LENGTH_LONG).show()
+                    onDone()
+                } else Toast.makeText(this, res, Toast.LENGTH_LONG).show()
             }
         }.start()
     }

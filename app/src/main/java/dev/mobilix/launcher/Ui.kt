@@ -2,7 +2,9 @@ package dev.mobilix.launcher
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.RectF
 import android.view.View
 
@@ -52,4 +54,35 @@ object Th {
     val altBg get() = (if (light) 0xFF0B0F0C else 0xFFF1F6F2).toInt()
     val altText get() = (if (light) 0xFF43E06A else 0xFF10200F).toInt()
     val hint get() = c(0xFF58705F, 0xFF8AA391)
+}
+
+/** Квадратная кнопка фильтров: три ползунка (вверх, вниз, вверх) и число включённых фильтров. */
+class FilterView(ctx: Context) : View(ctx) {
+    var count = 0
+        set(v) { field = v; invalidate() }
+    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF2EA84F.toInt() }
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; color = 0xFF43E06A.toInt() }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF43E06A.toInt() }
+    private val num = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
+    init { isClickable = true }
+    override fun onDraw(c: Canvas) {
+        val d = resources.displayMetrics.density
+        val w = width.toFloat(); val h = height.toFloat()
+        frame.strokeWidth = 2f * d
+        c.drawRoundRect(RectF(2f * d, 2f * d, w - 2f * d, h - 2f * d), 8f * d, 8f * d, frame)
+        line.strokeWidth = 2f * d
+        val xs = floatArrayOf(0.30f, 0.50f, 0.70f)
+        val ys = floatArrayOf(0.38f, 0.64f, 0.38f)
+        for (i in 0..2) {
+            val x = w * xs[i]
+            c.drawLine(x, h * 0.26f, x, h * 0.74f, line)
+            c.drawCircle(x, h * ys[i], 3.4f * d, fill)
+        }
+        if (count > 0) {
+            val r = 8f * d
+            c.drawCircle(w - r, r, r, fill)
+            num.textSize = 11f * d
+            c.drawText(count.toString(), w - r, r + 4f * d, num)
+        }
+    }
 }
