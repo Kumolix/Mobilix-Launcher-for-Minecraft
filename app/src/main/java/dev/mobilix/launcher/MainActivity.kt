@@ -747,55 +747,23 @@ class MainActivity : Activity() {
                     // знаки вроде «!» в названии могут мешать поиску: пробуем без них
                     val cleaned = query.replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
                     if (hits.length() == 0 && cleaned.isNotEmpty() && cleaned != query) hits = JSONObject(apiGet(searchPath(cleaned, facets, 25))).getJSONArray("hits")
-                    // ничего нет: выясняем, какой именно фильтр отсёк результат (загрузчик или версия)
-                    var other: JSONArray? = null
-                    var why = ""
+                    // то, что нашлось по названию, но не прошло фильтры (версия, загрузчик, тип): покажем отдельно с причиной
+                    val extra = ArrayList<JSONObject>()
                     val qq = if (cleaned.isNotEmpty()) cleaned else query
-                    if (hits.length() == 0 && query.isNotEmpty()) {
+                    if (query.isNotEmpty()) {
                         try {
-                            if (type == "mod") {
-                                val fv = JSONArray().put(JSONArray().put("versions:${curBase()}")).put(JSONArray().put("project_type:$type"))
-                                val r = JSONObject(apiGet(searchPath(qq, fv, 8))).getJSONArray("hits")
-                                if (r.length() > 0) { other = r; why = "loader" }
-                            }
-                            if (other == null) {
-                                val f2 = JSONArray().put(JSONArray().put("project_type:$type"))
-                                val r = JSONObject(apiGet(searchPath(qq, f2, 8))).getJSONArray("hits")
-                                if (r.length() > 0) { other = r; why = "version" }
+                            val all = JSONObject(apiGet("/search?query=" + java.net.URLEncoder.encode(qq, "UTF-8") + "&limit=10&index=relevance")).getJSONArray("hits")
+                            val shown = HashSet<String>()
+                            for (k in 0 until hits.length()) shown.add(hits.getJSONObject(k).optString("project_id"))
+                            for (k in 0 until all.length()) {
+                                val h = all.getJSONObject(k)
+                                if (!shown.contains(h.optString("project_id")) && extra.size < 5) extra.add(h)
                             }
                         } catch (_: Throwable) {}
                     }
                     runOnUiThread {
                         list.removeAllViews()
                         if (hits.length() == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено для версии ${curBase()} и загрузчика $loader", "Nothing found for version ${curBase()} and loader $loader"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
-                        val oh = other
-                        if (hits.length() == 0 && oh != null && oh.length() > 0) {
-                            list.addView(TextView(this).apply {
-                                text = if (why == "loader")
-                                    tr("Для версии ${curBase()} такой мод есть, но не для загрузчика $loader. Загрузчики мода указаны ниже; в лаунчере пока доступны Fabric и Forge.",
-                                        "A mod like this exists for ${curBase()}, but not for the $loader loader. Its loaders are listed below; the launcher currently supports Fabric and Forge.")
-                                else tr("Для ${curBase()} не найдено. Есть для других версий или загрузчиков:", "Not found for ${curBase()}. Exists for other versions or loaders:")
-                                setTextColor(Th.text2); textSize = 13f; setPadding(0, dp(10), 0, dp(6))
-                            })
-                            for (i in 0 until oh.length()) {
-                                val h = oh.getJSONObject(i)
-                                val vs = h.optJSONArray("versions")
-                                var has = false
-                                var range = "?"
-                                if (vs != null && vs.length() > 0) {
-                                    range = vs.getString(0) + (if (vs.length() > 1) " – " + vs.getString(vs.length() - 1) else "")
-                                    for (k in 0 until vs.length()) if (vs.getString(k) == curBase()) has = true
-                                }
-                                val cats = h.optJSONArray("categories")
-                                val ld = ArrayList<String>()
-                                if (cats != null) for (k in 0 until cats.length()) { val c = cats.getString(k); if (c in listOf("fabric", "forge", "neoforge", "quilt")) ld.add(c) }
-                                list.addView(TextView(this).apply {
-                                    text = h.getString("title") + "\n" + tr("Версии: ", "Versions: ") + range + (if (has) "  ✓ " + curBase() else "  ✗ " + tr("точно ${curBase()} нет в списке", "${curBase()} is not listed")) +
-                                        "\n" + tr("Загрузчики: ", "Loaders: ") + (if (ld.isEmpty()) "?" else ld.joinToString(", "))
-                                    setTextColor(Th.text); textSize = 14f; setPadding(0, dp(6), 0, dp(6))
-                                })
-                            }
-                        }
                         for (i in 0 until hits.length()) {
                             val h = hits.getJSONObject(i)
                             val outer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(10)) }
@@ -812,6 +780,35 @@ class MainActivity : Activity() {
                             row.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
                             list.addView(outer)
                             list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+                        }
+                        if (extra.isNotEmpty()) {
+                            list.addView(TextView(this).apply {
+                                text = tr("Найдено, но не подходит под фильтры (версия ${curBase()}, загрузчик $loader, тип «$type»):", "Found, but filtered out (version ${curBase()}, loader $loader, type \"$type\"):")
+                                setTextColor(Th.text2); textSize = 13f; setPadding(0, dp(18), 0, dp(6))
+                            })
+                            for (h in extra) {
+                                val vs = h.optJSONArray("versions")
+                                var has = false
+                                var range = "?"
+                                if (vs != null && vs.length() > 0) {
+                                    range = vs.getString(0) + (if (vs.length() > 1) " – " + vs.getString(vs.length() - 1) else "")
+                                    for (k in 0 until vs.length()) if (vs.getString(k) == curBase()) has = true
+                                }
+                                val cats = h.optJSONArray("categories")
+                                val ld = ArrayList<String>()
+                                if (cats != null) for (k in 0 until cats.length()) { val c = cats.getString(k); if (c in listOf("fabric", "forge", "neoforge", "quilt")) ld.add(c) }
+                                val okLoader = type != "mod" || ld.contains(loader)
+                                val okType = h.optString("project_type") == type
+                                val reasons = ArrayList<String>()
+                                if (!okType) reasons.add(tr("другой тип: ${h.optString("project_type")}", "different type: ${h.optString("project_type")}"))
+                                if (!has) reasons.add(tr("версии ${curBase()} нет в списке мода", "${curBase()} is not in the mod's version list"))
+                                if (!okLoader) reasons.add(tr("нет загрузчика $loader", "no $loader loader"))
+                                list.addView(TextView(this).apply {
+                                    text = h.optString("title") + "\n" + tr("Версии: ", "Versions: ") + range + "  ·  " + tr("Загрузчики: ", "Loaders: ") + (if (ld.isEmpty()) "?" else ld.joinToString(", ")) +
+                                        "\n" + tr("Причина: ", "Reason: ") + (if (reasons.isEmpty()) "?" else reasons.joinToString("; "))
+                                    setTextColor(Th.text); textSize = 14f; setPadding(0, dp(6), 0, dp(6))
+                                })
+                            }
                         }
                     }
                 } catch (e: Throwable) {
