@@ -1986,12 +1986,14 @@ class MainActivity : Activity() {
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
         val totalMb = mi.totalMem / 1024 / 1024
         val manualX = prefs.getInt("xmx", 0)
-        val xmx = if (manualX > 0) manualX else when { totalMb < 5000 -> 1024; totalMb < 10000 -> 1536; else -> 2048 }
+        val modern = !oldGl   // 1.17+ тяжелее: даём больше памяти
+        val xmx = if (manualX > 0) manualX else when { totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }
         log("ОЗУ устройства: $totalMb МБ, память игры: $xmx МБ")
         cmd.add("-Xmx${xmx}M")
         cmd.add(when (prefs.getString("gc", "Serial")) { "G1" -> "-XX:+UseG1GC"; "Parallel" -> "-XX:+UseParallelGC"; else -> "-XX:+UseSerialGC" })
         prefs.getString("jvmArgs", "")?.split(Regex("\\s+"))?.filter { it.startsWith("-") }?.forEach { cmd.add(it) }
         cmd.add("-XX:ErrorFile=${File(gameDir, "hs_err.log").path}")
+        cmd.add("-Xlog:gc:file=${File(gameDir, "gc.log").path}:uptime:filecount=1,filesize=2m")
         cmd.add("-Djava.io.tmpdir=${cacheDir.path}")
         cmd.add("-Duser.home=${gameDir.path}")
         cmd.add("-Djava.awt.headless=true")

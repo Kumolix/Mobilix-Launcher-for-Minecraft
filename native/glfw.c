@@ -174,6 +174,23 @@ EXPORT void glfwSwapBuffers(void* w) {
         if (wait > 0 && wait < 0.2) usleep((useconds_t) (wait * 1e6));
         g_lastFrame = now();
     }
+    // диагностика: FPS и видеочип раз в 5 секунд пишем в game.log
+    {
+        static int frames = 0, info = 0; static double t5 = 0;
+        frames++;
+        double t = now();
+        if (t5 == 0) t5 = t;
+        if (t - t5 >= 5.0) {
+            if (!info) {
+                info = 1;
+                const unsigned char* (*gs)(unsigned int) = (const unsigned char* (*)(unsigned int)) eglGetProcAddress("glGetString");
+                if (gs) fprintf(stderr, "[Mobilix] GPU: %s | %s\n", (const char*) gs(0x1F01), (const char*) gs(0x1F02));
+            }
+            fprintf(stderr, "[Mobilix] FPS: %.1f (кадров %d за %.1f с)\n", frames / (t - t5), frames, t - t5);
+            fflush(stderr);
+            frames = 0; t5 = t;
+        }
+    }
 }
 
 EXPORT void* glfwGetProcAddress(const char* name) {
