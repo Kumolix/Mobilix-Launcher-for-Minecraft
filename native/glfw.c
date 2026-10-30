@@ -146,6 +146,7 @@ EXPORT void glfwMakeContextCurrent(void* w) {
 EXPORT void* glfwGetCurrentContext(void) { return eglGetCurrentContext() != EGL_NO_CONTEXT ? (void*) &G : NULL; }
 EXPORT void glfwSwapInterval(int i) { if (G.dpy) eglSwapInterval(G.dpy, i); }
 static int g_fps = 0;
+static double g_swapT = 0;                           // время внутри swap за период диагностики
 static double g_lastFrame = 0;
 EXPORT void smc_set_fps(int fps) { g_fps = fps; }
 
@@ -161,6 +162,7 @@ EXPORT void glfwSwapBuffers(void* w) {
         G.size_dirty = 1;
         LOG("поверхность пересоздана %dx%d", G.w, G.h);
     }
+    double ts_swap = now();
     if (g4_inited) {
         static void (*pre)(void), (*post)(void); static int look = 0;
         if (!look) { look = 1; pre = (void (*)(void)) dlsym(G.gl_lib, "gl4es_pre_swap"); post = (void (*)(void)) dlsym(G.gl_lib, "gl4es_post_swap"); }
@@ -169,6 +171,7 @@ EXPORT void glfwSwapBuffers(void* w) {
     int swapped = eglSwapBuffers(G.dpy, G.surf);
     if (g4_inited) { static void (*post2)(void); static int l2 = 0; if (!l2) { l2 = 1; post2 = (void (*)(void)) dlsym(G.gl_lib, "gl4es_post_swap"); } if (post2) post2(); }
     if (swapped == EGL_FALSE) G.surf_dirty = G.win ? 1 : 0;
+    g_swapT += now() - ts_swap;
     if (g_fps > 0) {                                   // ограничение FPS (стабилизация производительности)
         double target = 1.0 / g_fps, t = now(), wait = g_lastFrame + target - t;
         if (wait > 0 && wait < 0.2) usleep((useconds_t) (wait * 1e6));
@@ -186,7 +189,12 @@ EXPORT void glfwSwapBuffers(void* w) {
                 const unsigned char* (*gs)(unsigned int) = (const unsigned char* (*)(unsigned int)) eglGetProcAddress("glGetString");
                 if (gs) fprintf(stderr, "[Mobilix] GPU: %s | %s\n", (const char*) gs(0x1F01), (const char*) gs(0x1F02));
             }
-            fprintf(stderr, "[Mobilix] FPS: %.1f (кадров %d за %.1f с)\n", frames / (t - t5), frames, t - t5);
+            {
+                double per = (t - t5) * 1000.0 / frames, sw = g_swapT * 1000.0 / frames;
+                fprintf(stderr, "[Mobilix] FPS: %.1f (кадров %d за %.1f с) | на кадр %.0f мс: в swap/GPU %.0f мс, остальное (игра+GL-слой) %.0f мс\n",
+                        frames / (t - t5), frames, t - t5, per, sw, per - sw);
+                g_swapT = 0;
+            }
             fflush(stderr);
             frames = 0; t5 = t;
         }
