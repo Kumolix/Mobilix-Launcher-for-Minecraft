@@ -1,7 +1,6 @@
 package dev.mobilix.launcher
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Build
@@ -9,7 +8,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -161,7 +159,6 @@ class MainActivity : Activity() {
     internal fun nickName() = if (msOn()) (prefs.getString("ms_name", NICK) ?: NICK) else if (elyOn()) (prefs.getString("ely_name", NICK) ?: NICK) else (prefs.getString("nick", NICK) ?: NICK)
     private fun authUuid(): String = if (msOn()) prefs.getString("ms_uuid", "")!! else if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()
     private fun authToken(): String = if (msOn()) prefs.getString("ms_token", "0")!! else if (elyOn()) prefs.getString("ely_token", "0")!! else "0"
-    internal fun dpi(v: Int) = dp(v)
 
     /** Фон кнопки: при нажатии и в выключенном состоянии темнеет. */
     internal fun sel(color: Int): android.graphics.drawable.Drawable {
@@ -251,8 +248,8 @@ class MainActivity : Activity() {
         versionText = bar(tr("Версия: ", "Version: ") + prettyProfile(selectedProfile()), 0xFF14301D.toInt(), 17f, 56) {}
         vrow.addView(versionText, LinearLayout.LayoutParams(0, dp(56), 1f))
         val arrow = bar("▲", 0xFF0F2416.toInt(), 18f, 56) {}
-        arrow.setOnClickListener { showVersions(arrow) }
-        versionText.setOnClickListener { showVersions(arrow) }
+        arrow.setOnClickListener { showVersions() }
+        versionText.setOnClickListener { showVersions() }
         vrow.addView(arrow, LinearLayout.LayoutParams(dp(64), dp(56)))
         root.addView(vrow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
 
@@ -1746,7 +1743,7 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun showVersions(anchor: View) {
+    private fun showVersions() {
         val installed = ArrayList(installedProfiles())
         if (installed.isEmpty()) installed.add(VERSION)
         val cur = selectedProfile()

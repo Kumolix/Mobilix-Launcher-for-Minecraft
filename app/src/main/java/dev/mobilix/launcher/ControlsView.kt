@@ -1,6 +1,5 @@
 package dev.mobilix.launcher
 
-import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
