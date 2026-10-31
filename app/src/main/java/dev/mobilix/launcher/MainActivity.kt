@@ -154,6 +154,9 @@ class MainActivity : Activity() {
     internal fun lang() = prefs.getString("lang", "ru") ?: "ru"
     internal fun tr(ru: String, en: String) = if (lang() == "en") en else ru
     internal fun elyOn() = !prefs.getString("ely_token", "").isNullOrEmpty()
+    /** Включить, когда Mojang одобрит appID: до этого вход через Microsoft всё равно получает 403. */
+    private val MS_APPROVED = false
+
     internal fun msOn() = !prefs.getString("ms_token", "").isNullOrEmpty()
     internal fun nickName() = if (msOn()) (prefs.getString("ms_name", NICK) ?: NICK) else if (elyOn()) (prefs.getString("ely_name", NICK) ?: NICK) else (prefs.getString("nick", NICK) ?: NICK)
     private fun authUuid(): String = if (msOn()) prefs.getString("ms_uuid", "")!! else if (elyOn()) prefs.getString("ely_uuid", "")!! else skinUuid()
@@ -261,7 +264,7 @@ class MainActivity : Activity() {
         root.addView(playBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)))
         if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
             playBtn.isEnabled = false
-            android.app.AlertDialog.Builder(this)
+            MobDialog(this)
                 .setTitle(tr("Устройство не поддерживается", "Device not supported"))
                 .setMessage(tr("Нужна 64-битная система (arm64). Здесь работает 32-битная, поэтому Minecraft (Java 21) запустить нельзя. Лаунчер откроется, но кнопка «Играть» отключена.",
                     "A 64-bit (arm64) system is required. This device runs a 32-bit one, so Minecraft (Java 21) cannot start. The launcher opens, but Play is disabled."))
@@ -394,7 +397,7 @@ class MainActivity : Activity() {
     }
 
     private fun chooseLanguage() {
-        AlertDialog.Builder(this).setTitle(tr("Язык", "Language"))
+        MobDialog(this).setTitle(tr("Язык", "Language"))
             .setItems(arrayOf("Русский", "English")) { _, i ->
                 prefs.edit().putString("lang", if (i == 1) "en" else "ru").apply()
                 recreate()
@@ -890,19 +893,30 @@ class MainActivity : Activity() {
         fun refreshFilt() { filt.count = (if (strict) 1 else 0) + (if (hideDl) 1 else 0) }
         refreshFilt()
         filt.setOnClickListener {
-            val pane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(12), dp(24), dp(4)) }
-            val cs = CheckBox(this).apply { text = tr("Совместимость версий", "Version compatibility"); isChecked = strict }
-            val cd = CheckBox(this).apply { text = tr("Не показывать скачанное", "Hide downloaded"); isChecked = hideDl }
-            pane.addView(cs)
-            pane.addView(TextView(this).apply { text = tr("Включено: только то, что подходит под вашу версию игры и загрузчик. Выключено: показывать всё найденное, а для несовместимого можно скачать файл вручную (на свой риск).", "On: only items that fit your game version and loader. Off: show everything found; incompatible items can be downloaded manually (at your own risk)."); textSize = 12f; setTextColor(Th.dim); setPadding(dp(32), 0, 0, dp(10)) })
-            pane.addView(cd)
-            AlertDialog.Builder(this).setTitle(tr("Фильтры", "Filters")).setView(pane)
-                .setPositiveButton(tr("Применить", "Apply")) { _, _ ->
-                    strict = cs.isChecked; hideDl = cd.isChecked
-                    prefs.edit().putBoolean("catStrict", strict).putBoolean("catHideDl", hideDl).apply()
-                    refreshFilt(); search()
+            val pane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            fun chip(label: String, note: String, on: Boolean, onToggle: (Boolean) -> Unit) {
+                var state = on
+                val t = TextView(this).apply {
+                    text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(14), dp(12), dp(14), dp(12))
+                    fun paint() { setBackgroundColor(if (state) 0xFF2EA84F.toInt() else 0xFF14301D.toInt()); text = (if (state) "✓  " else "") + label }
+                    paint()
+                    setOnClickListener { state = !state; paint(); onToggle(state) }
                 }
-                .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+                pane.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                pane.addView(TextView(this).apply { text = note; textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(4), 0, dp(12)) })
+            }
+            chip(tr("Совместимость версий", "Version compatibility"),
+                tr("Включено: только то, что подходит под вашу версию игры и загрузчик. Выключено: показывать всё найденное, несовместимое можно скачать вручную (на свой риск).",
+                    "On: only items that fit your game version and loader. Off: show everything found; incompatible items can be downloaded manually (at your own risk)."), strict) { v ->
+                strict = v; prefs.edit().putBoolean("catStrict", v).apply(); refreshFilt(); search()
+            }
+            chip(tr("Не показывать скачанное", "Hide downloaded"),
+                tr("Скрывает в результатах то, что уже скачано.", "Hides items you have already downloaded."), hideDl) { v ->
+                hideDl = v; prefs.edit().putBoolean("catHideDl", v).apply(); refreshFilt(); search()
+            }
+            MobDialog(this).setTitle(tr("Фильтры", "Filters")).setView(pane)
+                .setPositiveButton(tr("Готово", "Done"), null).show()
         }
         val filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         filterRow.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -991,7 +1005,7 @@ class MainActivity : Activity() {
                         if (l != null) for (k in 0 until l.length()) ls.add(l.getString(k))
                         items.add((if (fits(v)) "✓ " else "✗ ") + v.optString("name", v.optString("version_number")) + "\n" + gs + "  ·  " + ls.joinToString(", "))
                     }
-                    AlertDialog.Builder(this)
+                    MobDialog(this)
                         .setTitle(title + "\n" + tr("выберите файл (на свой риск)", "pick a file (at your own risk)"))
                         .setItems(items.toTypedArray()) { _, i -> downloadVersion(id, type, title, sorted[i], onDone) }
                         .setNegativeButton(tr("Отмена", "Cancel"), null).show()
@@ -1116,7 +1130,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
             background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.WHITE); setStroke(dp(1), 0xFF8C8C8C.toInt()) }
             isClickable = true
-            setOnClickListener { msDeviceLogin() }
+            alpha = if (MS_APPROVED) 1f else 0.55f
+            setOnClickListener {
+                if (MS_APPROVED) msDeviceLogin()
+                else MobDialog(this@MainActivity).setTitle(tr("Вход через Microsoft", "Sign in with Microsoft"))
+                    .setMessage(tr("Пока недоступен: Mojang не одобрил приложение Mobilix для официального входа. Мы подадим заявку ещё раз позже. Играть можно с ником или через Ely.by.",
+                        "Not available yet: Mojang has not approved Mobilix for official sign-in. We will apply again later. You can play with a nickname or via Ely.by."))
+                    .setPositiveButton("OK", null).show()
+            }
         }
         ms.addView(MsLogoView(this), LinearLayout.LayoutParams(dp(21), dp(21)))
         ms.addView(TextView(this).apply { text = tr("Войти через Microsoft", "Sign in with Microsoft"); textSize = 15f; setTextColor(0xFF5E5E5E.toInt()); setPadding(dp(12), 0, 0, 0) })
@@ -1238,7 +1259,7 @@ class MainActivity : Activity() {
                 val until = System.currentTimeMillis() + j.optInt("expires_in", 900) * 1000L
                 val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
                 runOnUiThread {
-                    AlertDialog.Builder(this).setTitle(tr("Вход через Microsoft", "Sign in with Microsoft"))
+                    MobDialog(this).setTitle(tr("Вход через Microsoft", "Sign in with Microsoft"))
                         .setMessage(tr("1. Откройте $uri\n2. Введите код: $userCode\n3. Войдите в аккаунт с Minecraft и вернитесь сюда.\n\nЛаунчер сам заметит вход.",
                             "1. Open $uri\n2. Enter the code: $userCode\n3. Sign in with the account that owns Minecraft and come back.\n\nThe launcher will notice the sign-in by itself."))
                         .setPositiveButton(tr("Открыть и скопировать код", "Open and copy code")) { _, _ ->
@@ -1347,7 +1368,7 @@ class MainActivity : Activity() {
         }
         val f = android.widget.EditText(this).apply { hint = tr("Код двухфакторной защиты (если включена)", "2FA code (if enabled)"); setSingleLine(true); inputType = android.text.InputType.TYPE_CLASS_NUMBER }
         box.addView(u); box.addView(p); box.addView(f)
-        android.app.AlertDialog.Builder(this).setTitle(tr("Вход через Ely.by", "Sign in with Ely.by")).setView(box)
+        MobDialog(this).setTitle(tr("Вход через Ely.by", "Sign in with Ely.by")).setView(box)
             .setPositiveButton(tr("Войти", "Sign in")) { _, _ ->
                 val pass = p.text.toString() + (if (f.text.isNotEmpty()) ":" + f.text else "")
                 elyLogin(u.text.toString().trim(), pass) { err ->
@@ -1651,7 +1672,7 @@ class MainActivity : Activity() {
                             text = tr("Удалить", "Delete"); isAllCaps = false; textSize = 12f; setTextColor(Color.WHITE); background = sel(0xFFB3261E.toInt())
                             setOnClickListener {
                                 if (busy) { Toast.makeText(this@MainActivity, tr("Подождите: идёт загрузка", "Wait: a download is in progress"), Toast.LENGTH_SHORT).show(); return@setOnClickListener }
-                                AlertDialog.Builder(this@MainActivity)
+                                MobDialog(this@MainActivity)
                                     .setTitle(tr("Удалить версию?", "Delete version?"))
                                     .setMessage(prettyProfile(id))
                                     .setNegativeButton(tr("Отмена", "Cancel"), null)
@@ -1729,18 +1750,16 @@ class MainActivity : Activity() {
         val installed = ArrayList(installedProfiles())
         if (installed.isEmpty()) installed.add(VERSION)
         val cur = selectedProfile()
-        val pm = android.widget.PopupMenu(this, anchor, Gravity.END)
-        installed.forEachIndexed { i, v -> pm.menu.add(0, i, i, prettyProfile(v) + if (v == cur) "  ✓" else "") }
-        pm.menu.add(1, 1000, 1000, tr("＋ Загрузить другую версию…", "＋ Download another version…"))
-        pm.setOnMenuItemClickListener {
-            if (it.itemId == 1000) openPage(tr("Загрузчик версий", "Version loader"), versionsPage())
+        val names = ArrayList<String>()
+        installed.forEach { names.add(prettyProfile(it) + if (it == cur) "  ✓" else "") }
+        names.add(tr("＋ Загрузить другую версию…", "＋ Download another version…"))
+        MobDialog(this).setTitle(tr("Версия для игры", "Game version")).setItems(names.toTypedArray()) { _, i ->
+            if (i == installed.size) openPage(tr("Загрузчик версий", "Version loader"), versionsPage())
             else {
-                prefs.edit().putString("profile", installed[it.itemId]).apply()
-                versionText.text = tr("Версия: ", "Version: ") + prettyProfile(installed[it.itemId])
+                prefs.edit().putString("profile", installed[i]).apply()
+                versionText.text = tr("Версия: ", "Version: ") + prettyProfile(installed[i])
             }
-            true
-        }
-        pm.show()
+        }.setNegativeButton(tr("Закрыть", "Close"), null).show()
     }
 
     /** Достаёт стандартный скин (Стив) из клиентского jar и показывает его в 3D. */
@@ -1800,7 +1819,7 @@ class MainActivity : Activity() {
 
     private fun start() {
         if (findJava(runtimeDir()) == null) {
-            android.app.AlertDialog.Builder(this)
+            MobDialog(this)
                 .setTitle(tr("Первый запуск", "First launch"))
                 .setMessage(tr("Первый запуск долгий: скачиваются Java, библиотеки и ресурсы игры (около 400 МБ), это займёт несколько минут (примерно 3–5). Лучше подключиться к Wi‑Fi и не закрывать лаунчер. Дальше игра будет запускаться быстро.",
                     "The first launch is slow: Java, libraries and game assets (about 400 MB) are downloaded, which takes a few minutes (roughly 3–5). Use Wi‑Fi and keep the launcher open. Later launches are fast."))
@@ -1894,7 +1913,7 @@ class MainActivity : Activity() {
     }
 
     private fun confirmWipe() {
-        AlertDialog.Builder(this)
+        MobDialog(this)
             .setTitle(tr("Удалить скачанное?", "Delete downloads?"))
             .setMessage(tr("Будут удалены клиент игры, библиотеки, ресурсы, Java-рантайм, моды и паки. Миры (папка saves) можно оставить.",
                 "The game client, libraries, assets, Java runtime, mods and packs will be deleted. You can keep your worlds (saves)."))

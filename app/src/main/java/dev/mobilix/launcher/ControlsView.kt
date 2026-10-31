@@ -528,7 +528,7 @@ class ControlsView(ctx: Context) : View(ctx) {
 
     private fun pickKey(onPick: (kind: Int, code: Int, name: String) -> Unit) {
         val names = KEY_CHOICES.map { it.first }.toTypedArray()
-        AlertDialog.Builder(context).setTitle("Назначить клавишу").setItems(names) { _, i ->
+        MobDialog(context).setTitle("Назначить клавишу").setItems(names) { _, i ->
             val (n, k, c) = KEY_CHOICES[i]
             onPick(k, c, n)
         }.show()
@@ -569,7 +569,7 @@ class ControlsView(ctx: Context) : View(ctx) {
         box.addView(seek(ctx, "Ширина", 24, 200, b.w) { b.w = it })
         box.addView(seek(ctx, "Высота", 24, 200, b.h) { b.h = it })
         box.addView(tg)
-        AlertDialog.Builder(ctx).setTitle("Кнопка").setView(box)
+        MobDialog(ctx).setTitle("Кнопка").setView(box)
             .setPositiveButton("Готово") { _, _ ->
                 b.label = name.text.toString().ifEmpty { if (b.extra.isEmpty()) "?" else (listOf(keyName(b.kind, b.code)) + b.extra.map { keyName(it[0], it[1]) }).joinToString("+") { n -> n.take(3) } }
                 b.toggle = tg.isChecked
@@ -584,7 +584,7 @@ class ControlsView(ctx: Context) : View(ctx) {
     fun cameraDialog() {
         val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(40, 20, 40, 10) }
         box.addView(seek(context, "Чувствительность камеры, %", 20, 400, (sens * 100).toInt()) { sens = it / 100f })
-        AlertDialog.Builder(context).setTitle("Камера").setView(box)
+        MobDialog(context).setTitle("Камера").setView(box)
             .setPositiveButton("Готово") { _, _ -> save() }.show()
     }
 }
