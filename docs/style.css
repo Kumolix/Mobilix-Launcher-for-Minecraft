@@ -32,9 +32,9 @@ nav a:hover{color:var(--ink)}
 .soc{display:flex;gap:8px;align-items:center;margin-left:4px}
 .soc a{display:block;line-height:0;transition:transform .1s}
 .soc a:hover{transform:translateY(-2px)}
-.soc img{display:block;image-rendering:pixelated;width:auto;height:30px}
+.soc img{display:block;image-rendering:pixelated;width:32px;height:32px}
 .soc.big{gap:14px}
-.soc.big img{height:48px}
+.soc.big img{width:48px;height:48px}
 footer .soc{flex-basis:100%}
 
 /* hero */
