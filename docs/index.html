@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mobilix: Minecraft Java на Android</title>
+<meta name="description" content="Mobilix — лаунчер Minecraft Java для Android со своим запуском Java 21. Vanilla, Fabric, Forge, моды Modrinth, экранное управление.">
+<meta property="og:title" content="Mobilix: Minecraft Java на Android">
+<meta property="og:description" content="Лаунчер Minecraft Java для Android без PojavLauncher. Моды, Forge, Fabric, виртуальная мышь, автонастройка графики.">
+<meta property="og:image" content="icon.png">
+<meta name="theme-color" content="#0a1a11">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&family=Pixelify+Sans:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="#top"><img src="favicon.png" alt="" width="32" height="32">Mobilix</a>
+    <nav>
+      <a href="#install" data-i18n="nav_install">Установка</a>
+      <a href="#changes" data-i18n="nav_changes">Что нового</a>
+      <a href="#faq" data-i18n="nav_faq">Вопросы</a>
+      <a href="https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft">GitHub</a>
+    </nav>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+      <button type="button" data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <h1 data-i18n="h1">Minecraft Java на вашем телефоне</h1>
+      <p class="lead" data-i18n="lead">Лаунчер со своим запуском Java 21, без PojavLauncher. Vanilla, Fabric и Forge, моды из Modrinth и экранное управление, которое можно настроить под себя.</p>
+      <div class="dl">
+        <a id="dl" class="btn px" href="https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/latest">
+          <span data-i18n="download">Скачать APK</span>
+          <small id="dlinfo" data-i18n="dl_fallback">Последняя версия на GitHub</small>
+        </a>
+        <div class="meta">
+          <div data-i18n="req">Android 9 и новее, arm64</div>
+          <div id="count" hidden></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hot px" id="hot">
+      <div class="slots" role="tablist" aria-label="Возможности" data-i18n-aria="slots_label"></div>
+      <div class="pane" role="tabpanel" aria-live="polite">
+        <h2 id="ptitle"></h2>
+        <p id="ptext"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section id="install">
+  <div class="wrap">
+    <h2 class="t" data-i18n="inst_t">Как установить</h2>
+    <ol class="steps">
+      <li><h3 data-i18n="s1h">Скачайте APK</h3><p data-i18n="s1p">Нажмите «Скачать APK» на этой странице. Файл появится в загрузках телефона.</p></li>
+      <li><h3 data-i18n="s2h">Разрешите установку</h3><p data-i18n="s2p">Откройте файл. Android попросит разрешить установку из этого источника. Если Play Protect предупредит, выберите «Всё равно установить».</p></li>
+      <li><h3 data-i18n="s3h">Выберите версию игры</h3><p data-i18n="s3p">В лаунчере укажите ник и версию Minecraft. Нужные файлы игры скачаются сами, поэтому на первый раз нужен интернет.</p></li>
+      <li><h3 data-i18n="s4h">Настройте графику</h3><p data-i18n="s4p">Перед первой игрой откройте Настройки и выберите пресет графики. Для большинства телефонов лаунчер уже подбирает мипмапы и разрешение сам.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="changes" class="alt">
+  <div class="wrap">
+    <h2 class="t" data-i18n="chg_t">Что нового</h2>
+    <div class="log" id="log"><p class="meta" data-i18n="loading">Загружаем список версий…</p></div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2 class="t" data-i18n="faq_t">Вопросы и ответы</h2>
+    <div class="faq" id="faqbox"></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft">GitHub</a>
+    <a href="https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases" data-i18n="f_all">Все версии</a>
+    <a href="https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/issues" data-i18n="f_bug">Сообщить об ошибке</a>
+    <a href="https://t.me/mobilix_launcher">Telegram</a>
+    <a href="https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md" data-i18n="f_priv">Конфиденциальность</a>
+    <span class="sp"></span>
+    <span data-i18n="f_note">Mobilix не связан с Mojang и Microsoft. Minecraft — товарный знак Mojang AB.</span>
+  </div>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

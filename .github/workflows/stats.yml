@@ -1,0 +1,40 @@
+name: Site stats
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write docs/stats.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases?per_page=30" > /tmp/rel.json
+          python3 - <<'PY'
+          import json, datetime
+          rel = json.load(open('/tmp/rel.json'))
+          keep = []
+          total = 0
+          for r in rel:
+              if r.get('draft'): continue
+              assets = [{'name': a['name'], 'size': a['size'], 'download_count': a['download_count'],
+                         'browser_download_url': a['browser_download_url']} for a in r.get('assets', [])]
+              total += sum(a['download_count'] for a in assets)
+              keep.append({'tag_name': r['tag_name'], 'published_at': r['published_at'], 'body': r.get('body') or '',
+                           'prerelease': r.get('prerelease', False), 'draft': False, 'assets': assets})
+          out = {'downloads': total, 'updated': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), 'releases': keep}
+          json.dump(out, open('docs/stats.json', 'w'), ensure_ascii=False, indent=1)
+          PY
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/stats.json
+          git diff --cached --quiet || (git commit -m "Update site stats" && git push)
