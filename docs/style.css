@@ -29,6 +29,14 @@ nav a:hover{color:var(--ink)}
 .lang button{font:500 14px var(--font);color:var(--muted);background:none;border:0;padding:8px 10px;cursor:pointer;border-radius:6px}
 .lang button[aria-pressed="true"]{color:var(--ink);background:var(--surface)}
 
+.soc{display:flex;gap:8px;align-items:center;margin-left:4px}
+.soc a{display:block;line-height:0;transition:transform .1s}
+.soc a:hover{transform:translateY(-2px)}
+.soc img{display:block;image-rendering:pixelated;width:auto;height:30px}
+.soc.big{gap:14px}
+.soc.big img{height:48px}
+footer .soc{flex-basis:100%}
+
 /* hero */
 .hero{padding:72px 0 88px;background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%)}
 .hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
@@ -90,6 +98,7 @@ footer .wrap{display:flex;flex-wrap:wrap;gap:12px 28px}
 footer .sp{flex:1}
 
 @media (max-width:900px){
+  .bar .soc{display:none}
   .hero .wrap{grid-template-columns:1fr;gap:44px}
   .steps{grid-template-columns:1fr 1fr}
   nav{display:none}
