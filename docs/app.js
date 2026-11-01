@@ -7,7 +7,7 @@ ru:{
  h1:"Minecraft Java на вашем телефоне",
  lead:"Лаунчер со своим запуском Java 21, без PojavLauncher. Vanilla, Fabric и Forge, моды из Modrinth и экранное управление, которое можно настроить под себя.",
  download:"Скачать APK",dl_fallback:"Последняя версия на GitHub",req:"Android 9 и новее, arm64",
- slots_label:"Возможности",
+ slots_label:"Возможности",sh_t:"Как выглядит",sh1:"Главный экран",sh2:"Каталог модов",sh3:"Быстрые настройки графики",sh4:"Выбор версии игры",
  inst_t:"Как установить",
  s1h:"Скачайте APK",s1p:"Нажмите «Скачать APK» на этой странице. Файл появится в загрузках телефона.",
  s2h:"Разрешите установку",s2p:"Откройте файл. Android попросит разрешить установку из этого источника. Если Play Protect предупредит, выберите «Всё равно установить».",
@@ -42,7 +42,7 @@ en:{
  h1:"Minecraft Java on your phone",
  lead:"A launcher with its own Java 21 runtime, no PojavLauncher. Vanilla, Fabric and Forge, Modrinth mods and on-screen controls you can lay out yourself.",
  download:"Download APK",dl_fallback:"Latest version on GitHub",req:"Android 9 or newer, arm64",
- slots_label:"Features",
+ slots_label:"Features",sh_t:"What it looks like",sh1:"Home screen",sh2:"Mod catalog",sh3:"Quick graphics presets",sh4:"Game version picker",
  inst_t:"How to install",
  s1h:"Download the APK",s1p:"Press “Download APK” on this page. The file lands in your phone's downloads.",
  s2h:"Allow the install",s2p:"Open the file. Android will ask to allow installs from this source. If Play Protect warns you, choose “Install anyway”.",
@@ -74,10 +74,10 @@ en:{
 }};
 
 var SPR={
- cursor:["w.......","ww......","www.....","wwww....","wwwww...","wwww....","w.ww....","..ww...."],
- chip:[".g.g.g..","gggggggg",".gGGGGg.","ggGddGgg",".gGddGg.","ggGGGGgg","gggggggg",".g.g.g.."],
+ cursor:[".w......",".ww.....",".www....",".wwww...",".wwwww..",".wwww...",".w.ww...","...ww..."],
+ chip:[".g.gg.g.","gggggggg",".gGGGGg.","ggGddGgg","ggGddGgg",".gGGGGg.","gggggggg",".g.gg.g."],
  chest:[".nnnnnn.","nnnnnnnn","nNNNNNNn","nnnyynnn","nnnyynnn","nNNNNNNn","nNNNNNNn","nnnnnnnn"],
- pick:[".ssss...","s....s..",".....ns.","....nn.s","...nn...","..nn....",".nn.....","nn......"],
+ pick:[".ssssss.","ss.nn.ss","s..nn..s","...nn...","...nn...","...nn...","...nn...","...nn..."],
  heart:[".rr..rr.","rrrrrrrr","rrrrrrrr","rrrrrrrr",".rrrrrr.","..rrrr..","...rr...","........"],
  globe:["..bbbb..",".bGGbbb.","bGGGbbGb","bbGGbGGb","bbbbbGGb","bGGbbGbb",".bGGbbb.","..bbbb.."]
 };

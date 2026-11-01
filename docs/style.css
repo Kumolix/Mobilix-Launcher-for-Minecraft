@@ -66,6 +66,12 @@ section h2.t{font-size:clamp(28px,3.4vw,40px);margin-bottom:36px}
 .steps li::before{content:counter(s);position:absolute;top:-17px;left:0;background:var(--bg);padding-right:12px;font:600 26px/1 var(--px);color:var(--accent-hi)}
 .steps h3{font-size:19px;margin:12px 0 6px}
 .steps p{margin:0;color:var(--muted);font-size:15.5px}
+.shots{padding-top:24px}
+.shots .row{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.shots figure{margin:0}
+.shot{--s:10px;padding:2px}
+.shot img{display:block;width:100%;height:auto}
+.shots figcaption{margin-top:12px;color:var(--muted);font-size:14.5px}
 .alt{background:var(--bg2)}
 .log{display:grid;gap:12px;max-width:760px}
 details{border-bottom:1px solid #1d4128;padding:18px 0}
@@ -88,6 +94,10 @@ footer .sp{flex:1}
   .steps{grid-template-columns:1fr 1fr}
   nav{display:none}
   .lang{margin-left:auto}
+}
+@media (max-width:900px){
+  .shots .row{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:16px;margin:0 -20px;padding:0 20px 8px}
+  .shots figure{flex:0 0 62%;max-width:280px;scroll-snap-align:start}
 }
 @media (max-width:520px){
   .hero{padding:44px 0 56px}
