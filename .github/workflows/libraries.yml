@@ -1,0 +1,30 @@
+name: Libraries backup
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download libraries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash libraries/fetch.sh
+      - name: Upload big files to release "libraries"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view libraries >/dev/null 2>&1 || gh release create libraries --title "Libraries backup" --notes "Копии JRE, нативов LWJGL и MobileGlues. Список и контрольные суммы: libraries/MANIFEST.txt" --prerelease
+          find libraries/big -type f | while read -r f; do
+            n=$(echo "${f#libraries/big/}" | tr '/' '_')
+            cp "$f" "/tmp/$n" && gh release upload libraries "/tmp/$n" --clobber && rm "/tmp/$n"
+          done
+          rm -rf libraries/big
+      - name: Commit small files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add libraries
+          git diff --cached --quiet || (git commit -m "Update libraries backup" && git push)
