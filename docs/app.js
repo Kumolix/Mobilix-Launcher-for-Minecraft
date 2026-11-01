@@ -167,7 +167,7 @@ function renderStats(){
   }
  }
 }
-function sumDownloads(rel){var n=0;rel.forEach(function(r){(r.assets||[]).forEach(function(a){n+=a.download_count||0;});});return n;}
+function sumDownloads(rel){var n=0;rel.filter(function(r){return !r.draft;}).slice(0,3).forEach(function(r){(r.assets||[]).forEach(function(a){n+=a.download_count||0;});});return n;}
 function getJSON(u){return fetch(u,{cache:"no-cache"}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json();});}
 
 function load(){
@@ -176,8 +176,7 @@ function load(){
   cache.releases=rel;cache.total=sumDownloads(rel);renderStats();renderLog();
  }).catch(function(){
   getJSON("stats.json").then(function(s){
-   if(typeof s.downloads==="number"&&s.downloads>0){cache.total=s.downloads;}
-   if(s.releases){cache.releases=s.releases;}else cache.failed=true;
+   if(s.releases){cache.releases=s.releases;cache.total=sumDownloads(s.releases);}else cache.failed=true;
    renderStats();renderLog();
   }).catch(function(){cache.failed=true;renderLog();});
  });

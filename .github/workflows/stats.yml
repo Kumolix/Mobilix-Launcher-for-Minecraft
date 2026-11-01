@@ -26,7 +26,7 @@ jobs:
               if r.get('draft'): continue
               assets = [{'name': a['name'], 'size': a['size'], 'download_count': a['download_count'],
                          'browser_download_url': a['browser_download_url']} for a in r.get('assets', [])]
-              total += sum(a['download_count'] for a in assets)
+              if len(keep) < 3: total += sum(a['download_count'] for a in assets)
               keep.append({'tag_name': r['tag_name'], 'published_at': r['published_at'], 'body': r.get('body') or '',
                            'prerelease': r.get('prerelease', False), 'draft': False, 'assets': assets})
           out = {'downloads': total, 'updated': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), 'releases': keep}
