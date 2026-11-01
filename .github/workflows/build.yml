@@ -5,6 +5,13 @@ permissions:
 
 on:
   push:
+    paths-ignore:
+      - 'docs/**'
+      - 'libraries/**'
+      - 'README.md'
+      - 'PRIVACY.md'
+      - '.github/workflows/stats.yml'
+      - '.github/workflows/libraries.yml'
   workflow_dispatch:
 
 jobs:
