@@ -421,6 +421,7 @@ class MainActivity : Activity() {
     private fun closePage() {
         if (!pageOpen) return
         pageOpen = false
+        catBuild = null
         accountSkin = null
         val page = pageLayer.getChildAt(0) ?: return
         page.animate().translationY(pageLayer.height.toFloat()).setDuration(260)
@@ -829,8 +830,8 @@ class MainActivity : Activity() {
             val a = builds()
             val act = activeBuild()?.optString("id")
             if (a.length() == 0) list.addView(TextView(this).apply {
-                text = tr("Сборок пока нет. У каждой сборки своя папка: моды, миры и настройки не смешиваются с обычной игрой.",
-                    "No builds yet. Each build has its own folder: mods, worlds and settings stay apart from the regular game.")
+                text = tr("Сборок пока нет. У каждой сборки своя папка: моды, миры и настройки не смешиваются с обычной игрой. Карандаш открывает каталог для сборки, а играть в ней можно, выбрав её внизу списка версий на главном экране.",
+                    "No builds yet. Each build has its own folder: mods, worlds and settings stay apart from the regular game. The pencil opens the catalog for that build; to play it, pick it at the bottom of the version list on the main screen.")
                 setTextColor(Th.dim); textSize = 14f; setPadding(dp(4), dp(8), dp(4), 0)
             })
             for (i in 0 until a.length()) {
@@ -838,13 +839,7 @@ class MainActivity : Activity() {
                 val on = b.optString("id") == act
                 val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                    background = sel(if (on) 0xFF1B6E34.toInt() else 0xFF14301D.toInt()); isClickable = true
-                    setOnClickListener {
-                        prefs.edit().putString("profile", b.optString("profile")).putString("build", b.optString("id")).apply()
-                        versionText.text = verTitle()
-                        Toast.makeText(this@MainActivity, tr("Выбрана сборка: ${b.optString("name")}", "Build selected: ${b.optString("name")}"), Toast.LENGTH_SHORT).show()
-                        render()
-                    }
+                    background = sel(if (on) 0xFF1B6E34.toInt() else 0xFF14301D.toInt())
                 }
                 val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(8), dp(10)) }
                 col.addView(TextView(this).apply { text = (if (on) "● " else "") + b.optString("name"); textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
@@ -852,7 +847,7 @@ class MainActivity : Activity() {
                 row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 val edit = PixelIcon(this, PixelIcon.PENCIL, PixelIcon.PENCIL_PAL).apply {
                     isClickable = true; background = iconBg(); setPadding(dp(11), dp(11), dp(11), dp(11))
-                    setOnClickListener { editBuild(b) { render() } }
+                    setOnClickListener { openPage(tr("Каталог сборки: ", "Build catalog: ") + b.optString("name"), modsCatalogPage(b)) }
                 }
                 val del = PixelIcon(this, PixelIcon.TRASH, PixelIcon.TRASH_PAL).apply {
                     isClickable = true; background = iconBg(); setPadding(dp(11), dp(11), dp(11), dp(11))
@@ -930,9 +925,31 @@ class MainActivity : Activity() {
             }.setNegativeButton(tr("Отмена", "Cancel"), null).show()
     }
 
-    private fun modsCatalogPage(): View {
+    private fun modsCatalogPage(build: JSONObject? = null): View {
+        catBuild = build
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        var type = "mod"; var loader = if (selectedProfile().contains("forge")) "forge" else "fabric"
+        if (build != null) {
+            val hdr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(4)) }
+            hdr.addView(TextView(this).apply {
+                text = build.optString("name") + " · " + prettyProfile(build.optString("profile")); textSize = 13f; setTextColor(0xFF8FD6A3.toInt())
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            hdr.addView(TextView(this).apply {
+                text = tr("Изменить", "Edit"); textSize = 13f; setTextColor(Color.WHITE); setPadding(dp(14), dp(8), dp(14), dp(8))
+                background = sel(0xFF14301D.toInt()); isClickable = true
+                setOnClickListener {
+                    editBuild(build) {
+                        val a = builds()
+                        for (k in 0 until a.length()) if (a.getJSONObject(k).optString("id") == build.optString("id")) {
+                            val nb = a.getJSONObject(k)
+                            openPage(tr("Каталог сборки: ", "Build catalog: ") + nb.optString("name"), modsCatalogPage(nb), false)
+                        }
+                    }
+                }
+            })
+            box.addView(hdr)
+        }
+        var type = "mod"; var loader = if ((build?.optString("profile") ?: selectedProfile()).contains("forge")) "forge" else "fabric"
         var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
         var hideDl = prefs.getBoolean("catHideDl", false)    // фильтр «Не показывать скачанное»
         var searchSeq = 0                                    // номер запроса: устаревший ответ не должен перекрывать список
@@ -2002,9 +2019,21 @@ class MainActivity : Activity() {
         val names = ArrayList<String>()
         installed.forEach { names.add(prettyProfile(it) + if (it == cur) "  ✓" else "") }
         names.add(tr("＋ Загрузить другую версию…", "＋ Download another version…"))
+        val bl = builds()
+        val act = activeBuild()?.optString("id")
+        val buildList = (0 until bl.length()).map { bl.getJSONObject(it) }
+        if (buildList.isNotEmpty()) {
+            names.add("\u0001" + tr("Сборки", "Builds"))
+            buildList.forEach { names.add(it.optString("name") + "  ·  " + prettyProfile(it.optString("profile")) + if (it.optString("id") == act) "  ✓" else "") }
+        }
+        val buildStart = installed.size + 2   // после версий, «Загрузить другую» и заголовка раздела
         MobDialog(this).setTitle(tr("Версия для игры", "Game version")).setItems(names.toTypedArray()) { _, i ->
             if (i == installed.size) openPage(tr("Загрузчик версий", "Version loader"), versionsPage())
-            else {
+            else if (i >= buildStart) {
+                val b = buildList[i - buildStart]
+                prefs.edit().putString("profile", b.optString("profile")).putString("build", b.optString("id")).apply()
+                versionText.text = verTitle()
+            } else if (i < installed.size) {
                 prefs.edit().putString("profile", installed[i]).putString("build", "").apply()
                 versionText.text = verTitle()
             }
@@ -2214,7 +2243,11 @@ class MainActivity : Activity() {
     // ---------- основной сценарий ----------
 
     /** Папка игры выбранного профиля: старые версии (формат до 1.13) играют в своей папке. */
+    /** Сборка, для которой открыт каталог (пока открыта страница «Каталог сборки»); иначе null. */
+    private var catBuild: JSONObject? = null
+
     internal fun curGameDir(): File {
+        catBuild?.let { return buildDir(it.optString("id")).apply { mkdirs() } }
         activeBuild()?.let { return buildDir(it.optString("id")).apply { mkdirs() } }
         val base = curBase()
         val legacy = try { JSONObject(File(dataRoot(), "versions/$base/$base.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
@@ -2245,7 +2278,7 @@ class MainActivity : Activity() {
 
     /** Базовая версия игры выбранного профиля (для Fabric/Forge берётся из inheritsFrom). */
     internal fun curBase(): String {
-        val id = selectedProfile()
+        val id = catBuild?.optString("profile") ?: selectedProfile()
         return try {
             val j = JSONObject(File(dataRoot(), "versions/$id/$id.json").readText())
             j.optString("inheritsFrom", "").ifEmpty { j.optString("jar", "") }.ifEmpty { id }

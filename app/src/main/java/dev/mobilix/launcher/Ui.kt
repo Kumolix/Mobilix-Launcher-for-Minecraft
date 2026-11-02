@@ -156,7 +156,13 @@ class MobDialog(private val ctx: Context) {
         items?.let { arr ->
             val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
             arr.forEachIndexed { i, label ->
-                if (i > 0) col.addView(View(ctx).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+                // строка, начинающаяся с \u0001, — заголовок раздела: зелёный отчерк и подпись, не нажимается
+                if (label.startsWith("\u0001")) {
+                    col.addView(View(ctx).apply { setBackgroundColor(0xFF2EA84F.toInt()) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(8) })
+                    col.addView(TextView(ctx).apply { text = label.substring(1); textSize = 13f; setTextColor(0xFF8FD6A3.toInt()); setPadding(dp(10), dp(8), dp(10), dp(2)) })
+                    return@forEachIndexed
+                }
+                if (i > 0 && !arr[i - 1].startsWith("\u0001")) col.addView(View(ctx).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
                 col.addView(TextView(ctx).apply {
                     text = label; textSize = 15f; setTextColor(Th.text); setPadding(dp(10), dp(12), dp(10), dp(12))
                     background = StateListDrawable().apply {
