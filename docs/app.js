@@ -100,7 +100,7 @@ function pxnum(str,scale){
  return '<svg class="pxn" role="img" aria-label="'+str+'" viewBox="0 0 '+x+' 7" width="'+(x*scale)+'" height="'+(7*scale)+'" fill="currentColor" shape-rendering="crispEdges">'+r+'</svg>';
 }
 var SPR={
- cursor:[".w......",".ww.....",".www....",".wwww...",".wwwww..",".wwww...",".w.ww...","...ww..."],
+ cursor:[".w......",".ww.....",".www....",".wwww...",".wwwww..",".wwww...",".w.www..","....www."],
  chip:[".g.gg.g.","gggggggg",".gGGGGg.","ggGddGgg","ggGddGgg",".gGGGGg.","gggggggg",".g.gg.g."],
  chest:[".nnnnnn.","nnnnnnnn","nNNNNNNn","nnnyynnn","nnnyynnn","nNNNNNNn","nNNNNNNn","nnnnnnnn"],
  pick:[".ssssss.","ss.nn.ss","s..nn..s","...nn...","...nn...","...nn...","...nn...","...nn..."],
