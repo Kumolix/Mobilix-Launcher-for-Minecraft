@@ -199,3 +199,26 @@ class MobDialog(private val ctx: Context) {
         return d
     }
 }
+
+
+/** Пиксельная иконка из строк-символов: масштаб целый, без сглаживания. */
+class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: Map<Char, Int>) : View(ctx) {
+    private val p = Paint()
+    override fun onDraw(c: Canvas) {
+        val h = rows.size; val w = rows.maxOf { it.length }
+        val s = minOf(width / w, height / h).coerceAtLeast(1)
+        val ox = (width - w * s) / 2; val oy = (height - h * s) / 2
+        for (y in rows.indices) for (x in rows[y].indices) {
+            val col = pal[rows[y][x]] ?: continue
+            p.color = col
+            c.drawRect((ox + x * s).toFloat(), (oy + y * s).toFloat(), (ox + (x + 1) * s).toFloat(), (oy + (y + 1) * s).toFloat(), p)
+        }
+    }
+
+    companion object {
+        val PENCIL = listOf(".......pp", "......mpp", ".....Ymm.", "....YyY..", "...YyY...", "..YyY....", "..wY.....", ".k.......", ".........")
+        val PENCIL_PAL = mapOf('p' to 0xFFF096AA.toInt(), 'm' to 0xFFBEC4CE.toInt(), 'y' to 0xFFF5C846.toInt(), 'Y' to 0xFFC8961E.toInt(), 'w' to 0xFFEBCDA0.toInt(), 'k' to 0xFF463C32.toInt())
+        val TRASH = listOf("...rrr...", "rrrrrrrrr", ".RRRRRRR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RRRRRRR.")
+        val TRASH_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'R' to 0xFFA3231C.toInt())
+    }
+}

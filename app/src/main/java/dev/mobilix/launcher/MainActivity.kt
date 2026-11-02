@@ -15,6 +15,7 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.SeekBar
 import android.widget.ImageView
+import android.graphics.drawable.GradientDrawable
 import android.widget.FrameLayout
 import android.view.Gravity
 import android.graphics.Color
@@ -106,10 +107,13 @@ class MainActivity : Activity() {
             }
             col.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
-        link("GitHub", if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else "Kumolix/Mobilix-Launcher-for-Minecraft",
-            "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", updateVer != null)
+        val upd = if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else null
+        link(tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Launcher-for-Minecraft",
+            "https://kumolix.github.io/Mobilix-Launcher-for-Minecraft/", upd != null)
+        link("GitHub", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
+            "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", upd != null)
+        link("Telegram", upd ?: "@mobilix_launcher", "https://t.me/mobilix_launcher", upd != null)
         link("TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
-        link("Telegram", "@mobilix_launcher", "https://t.me/mobilix_launcher")
         link(tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
         return col
     }
@@ -123,7 +127,10 @@ class MainActivity : Activity() {
     /** Сверяет номер версии в репозитории с установленной; при новой показывает метку на главном экране и подсвечивает GitHub в меню. */
     private fun checkUpdate() {
         try {
-            val remote = fetchText("https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/main/VERSION").trim()
+            // обновление считается только по опубликованному релизу (тег APK-<версия>): тестовые сборки из Actions не в счёт
+            val rel = JSONObject(fetchText("https://api.github.com/repos/Kumolix/Mobilix-Launcher-for-Minecraft/releases/latest"))
+            if (rel.optBoolean("draft") || rel.optBoolean("prerelease")) return
+            val remote = rel.optString("tag_name").removePrefix("APK-").trim()
             val cur = packageManager.getPackageInfo(packageName, 0).versionName ?: return
             val r = verParts(remote) ?: return
             val c = verParts(cur) ?: return
@@ -245,7 +252,7 @@ class MainActivity : Activity() {
 
         // полоса версии + выпадающий вверх список
         val vrow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        versionText = bar(tr("Версия: ", "Version: ") + prettyProfile(selectedProfile()), 0xFF14301D.toInt(), 17f, 56) {}
+        versionText = bar(verTitle(), 0xFF14301D.toInt(), 17f, 56) {}
         vrow.addView(versionText, LinearLayout.LayoutParams(0, dp(56), 1f))
         val arrow = bar("▲", 0xFF0F2416.toInt(), 18f, 56) {}
         arrow.setOnClickListener { showVersions() }
@@ -285,14 +292,25 @@ class MainActivity : Activity() {
             text = "Mobilix"; textSize = 26f; setTextColor(Th.accent); gravity = Gravity.CENTER_VERTICAL
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f; setPadding(dp(72), 0, 0, 0)
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
-        fun item(ru: String, en: String, onClick: () -> Unit): TextView {
+        fun item(ru: String, en: String, badge: String? = null, onClick: () -> Unit): TextView {
             val t = TextView(this).apply {
                 text = tr(ru, en); textSize = 18f; setTextColor(Th.text); gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(28), 0, dp(16), 0); isClickable = true; background = sel(Th.drawer)
                 setOnClickListener { onClick() }
             }
             drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-            drawer.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+            if (badge == null) drawer.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+            else {
+                val fl = FrameLayout(this)
+                fl.addView(t, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                fl.addView(TextView(this).apply {
+                    text = badge; textSize = 13f; setTextColor(0xCC5BD67B.toInt()); typeface = Typeface.DEFAULT_BOLD
+                    setPadding(dp(10), dp(4), dp(10), dp(4))
+                    background = GradientDrawable().apply { setColor(0x332EA84F); setStroke(dp(1), 0x662EA84F); cornerRadius = dp(6).toFloat() }
+                    isClickable = false
+                }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = dp(20) })
+                drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+            }
             return t
         }
         item("Аккаунт", "Account") { openPage(tr("Аккаунт", "Account"), accountPage()) }
@@ -302,7 +320,7 @@ class MainActivity : Activity() {
         item("Раскладка управления", "Controls layout") { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
         menuWipe = item("Удалить скачанное", "Delete downloads") { confirmWipe() }
         ghItem = item("Соцсети", "Social") { openPage(tr("Соцсети", "Social"), socialPage()) }
-        item("Язык", "Language") { chooseLanguage() }
+        item("Язык", "Language", lang().uppercase()) { chooseLanguage() }
         drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         drawer.addView(TextView(this).apply {
             text = tr("Пользовательское соглашение", "User agreement"); textSize = 13f; setTextColor(Th.dim)
@@ -680,7 +698,7 @@ class MainActivity : Activity() {
     // индекс скачанного: projectId -> {t: тип, f: имя файла, n: название}
     private fun idx(): JSONObject = try { JSONObject(prefs.getString("installed", "{}")) } catch (_: Exception) { JSONObject() }
     private fun idxSave(o: JSONObject) { prefs.edit().putString("installed", o.toString()).apply() }
-    private fun typeDir(type: String) = when (type) { "resourcepack" -> "resourcepacks"; "shader" -> "shaderpacks"; else -> "mods" }
+    private fun typeDir(type: String) = when (type) { "resourcepack" -> "resourcepacks"; "shader" -> "shaderpacks"; "datapack" -> "datapacks"; else -> "mods" }
     private fun packFile(type: String, name: String) = File(curGameDir(), typeDir(type) + "/" + name)
 
     /** Кнопки строки каталога: «Скачать» или «Загружено» + «Удалить». */
@@ -708,7 +726,177 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Каталог: вверху переключатель «Каталог» (быстро скачать) / «Сборки» (менеджер). */
     private fun catalogPage(): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val holder = FrameLayout(this)
+        fun show(i: Int) {
+            holder.removeAllViews()
+            holder.addView(if (i == 0) modsCatalogPage() else buildsPage(), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        box.addView(tabRows(listOf(listOf(tr("Каталог", "Catalog"), tr("Сборки", "Builds"))), 0) { show(it) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(8) })
+        box.addView(holder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        show(0)
+        return box
+    }
+
+    /** Кнопки-вкладки на всю ширину, несколькими рядами; индекс сквозной по всем рядам. */
+    private fun tabRows(rows: List<List<String>>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val views = ArrayList<TextView>()
+        fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) 0xFF2EA84F.toInt() else 0xFF14301D.toInt()) }
+        var n = 0
+        rows.forEachIndexed { r, labels ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = if (r == 0) 0 else dp(6) })
+            labels.forEachIndexed { c, l ->
+                val index = n++
+                val t = TextView(this).apply {
+                    text = l; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1
+                    setPadding(dp(6), dp(12), dp(6), dp(12))
+                    setOnClickListener { paint(index); onPick(index) }
+                }
+                views.add(t)
+                row.addView(t, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = if (c == 0) 0 else dp(6) })
+            }
+        }
+        paint(selected)
+        return col
+    }
+
+    /** После скачивания датапака предлагает положить его в один из миров (датапаки работают только внутри мира). */
+    private fun offerDatapackWorld(file: File) {
+        val worlds = File(curGameDir(), "saves").listFiles { f -> f.isDirectory }?.sortedBy { it.name }.orEmpty()
+        if (worlds.isEmpty()) {
+            Toast.makeText(this, tr("Датапак скачан в папку datapacks. Создайте мир в игре и добавьте его вручную.", "Datapack saved to the datapacks folder. Create a world in the game and add it manually."), Toast.LENGTH_LONG).show()
+            return
+        }
+        val names = worlds.map { it.name } + tr("Пропустить", "Skip")
+        MobDialog(this).setTitle(tr("Добавить датапак в мир", "Add datapack to a world")).setItems(names.toTypedArray()) { _, i ->
+            if (i < worlds.size) try {
+                val dir = File(worlds[i], "datapacks").apply { mkdirs() }
+                file.copyTo(File(dir, file.name), overwrite = true)
+                Toast.makeText(this, tr("Добавлено в мир ${worlds[i].name}", "Added to world ${worlds[i].name}"), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) { Toast.makeText(this, e.message ?: e.toString(), Toast.LENGTH_LONG).show() }
+        }.setNegativeButton(tr("Закрыть", "Close"), null).show()
+    }
+
+    // ---------- менеджер сборок ----------
+    private fun buildsPage(): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(12), dp(12), 0) }
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(24)) }
+        fun iconBg() = android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(0x33FFFFFF))
+            addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        }
+        fun render() {
+            list.removeAllViews()
+            val a = builds()
+            val act = activeBuild()?.optString("id")
+            if (a.length() == 0) list.addView(TextView(this).apply {
+                text = tr("Сборок пока нет. У каждой сборки своя папка: моды, миры и настройки не смешиваются с обычной игрой.",
+                    "No builds yet. Each build has its own folder: mods, worlds and settings stay apart from the regular game.")
+                setTextColor(Th.dim); textSize = 14f; setPadding(dp(4), dp(8), dp(4), 0)
+            })
+            for (i in 0 until a.length()) {
+                val b = a.getJSONObject(i)
+                val on = b.optString("id") == act
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    background = sel(if (on) 0xFF1B6E34.toInt() else 0xFF14301D.toInt()); isClickable = true
+                    setOnClickListener {
+                        prefs.edit().putString("profile", b.optString("profile")).putString("build", b.optString("id")).apply()
+                        versionText.text = verTitle()
+                        Toast.makeText(this@MainActivity, tr("Выбрана сборка: ${b.optString("name")}", "Build selected: ${b.optString("name")}"), Toast.LENGTH_SHORT).show()
+                        render()
+                    }
+                }
+                val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(8), dp(10)) }
+                col.addView(TextView(this).apply { text = (if (on) "● " else "") + b.optString("name"); textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                col.addView(TextView(this).apply { text = prettyProfile(b.optString("profile")); textSize = 12f; setTextColor(if (on) 0xFFBFE8C9.toInt() else Th.dim) })
+                row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                val edit = PixelIcon(this, PixelIcon.PENCIL, PixelIcon.PENCIL_PAL).apply {
+                    isClickable = true; background = iconBg(); setPadding(dp(11), dp(11), dp(11), dp(11))
+                    setOnClickListener { editBuild(b) { render() } }
+                }
+                val del = PixelIcon(this, PixelIcon.TRASH, PixelIcon.TRASH_PAL).apply {
+                    isClickable = true; background = iconBg(); setPadding(dp(11), dp(11), dp(11), dp(11))
+                    setOnClickListener {
+                        MobDialog(this@MainActivity).setTitle(tr("Удалить сборку?", "Delete build?"))
+                            .setMessage(tr("«${b.optString("name")}»: моды, миры и настройки этой сборки будут удалены.", "“${b.optString("name")}”: its mods, worlds and settings will be deleted."))
+                            .setPositiveButton(tr("Удалить", "Delete")) { _, _ ->
+                                val id = b.optString("id")
+                                val keep = JSONArray()
+                                val all = builds()
+                                for (k in 0 until all.length()) if (all.getJSONObject(k).optString("id") != id) keep.put(all.getJSONObject(k))
+                                buildsSave(keep)
+                                if (prefs.getString("build", "") == id) prefs.edit().putString("build", "").apply()
+                                versionText.text = verTitle()
+                                Thread { buildDir(id).deleteRecursively() }.start()
+                                render()
+                            }.setNegativeButton(tr("Отмена", "Cancel"), null).show()
+                    }
+                }
+                row.addView(edit, LinearLayout.LayoutParams(dp(48), dp(48)))
+                row.addView(del, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(6) })
+                list.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+            }
+        }
+        val add = TextView(this).apply {
+            text = tr("＋ Добавить сборку", "＋ Add build"); textSize = 16f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            setPadding(dp(12), dp(14), dp(12), dp(14)); background = sel(0xFF2EA84F.toInt()); isClickable = true
+            setOnClickListener { editBuild(null) { render() } }
+        }
+        box.addView(add, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
+        val sv = ScrollView(this); sv.addView(list)
+        box.addView(sv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        render()
+        return box
+    }
+
+    /** Окно создания/правки сборки: название и версия игры. */
+    private fun editBuild(existing: JSONObject?, done: () -> Unit) {
+        val installed = ArrayList(installedProfiles())
+        if (installed.isEmpty()) installed.add(VERSION)
+        var profile = existing?.optString("profile")?.takeIf { installed.contains(it) }
+            ?: selectedProfile().takeIf { installed.contains(it) } ?: installed[0]
+        val pane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val name = android.widget.EditText(this).apply {
+            setText(existing?.optString("name") ?: ""); hint = tr("Название сборки", "Build name")
+            setTextColor(Th.text); setHintTextColor(Th.hint); setSingleLine(true); setPadding(dp(4), dp(10), dp(4), dp(10))
+        }
+        pane.addView(name, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val verBtn = TextView(this).apply {
+            text = tr("Версия: ", "Version: ") + prettyProfile(profile); textSize = 15f; setTextColor(Color.WHITE)
+            setPadding(dp(14), dp(12), dp(14), dp(12)); background = sel(0xFF14301D.toInt()); isClickable = true
+            setOnClickListener {
+                MobDialog(this@MainActivity).setTitle(tr("Версия для сборки", "Build version"))
+                    .setItems(installed.map { prettyProfile(it) }.toTypedArray()) { _, i ->
+                        profile = installed[i]; text = tr("Версия: ", "Version: ") + prettyProfile(profile)
+                    }.setNegativeButton(tr("Закрыть", "Close"), null).show()
+            }
+        }
+        pane.addView(verBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        MobDialog(this).setTitle(if (existing == null) tr("Новая сборка", "New build") else tr("Правка сборки", "Edit build")).setView(pane)
+            .setPositiveButton(tr("Сохранить", "Save")) { _, _ ->
+                val n = name.text.toString().trim().ifEmpty { tr("Сборка", "Build") }
+                val all = builds()
+                if (existing == null) {
+                    all.put(JSONObject().put("id", "b" + System.currentTimeMillis()).put("name", n).put("profile", profile))
+                } else {
+                    for (k in 0 until all.length()) {
+                        val b = all.getJSONObject(k)
+                        if (b.optString("id") == existing.optString("id")) { b.put("name", n); b.put("profile", profile) }
+                    }
+                }
+                buildsSave(all)
+                versionText.text = verTitle()
+                done()
+            }.setNegativeButton(tr("Отмена", "Cancel"), null).show()
+    }
+
+    private fun modsCatalogPage(): View {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         var type = "mod"; var loader = if (selectedProfile().contains("forge")) "forge" else "fabric"
         var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
@@ -749,7 +937,7 @@ class MainActivity : Activity() {
                 val f = packFile(o.optString("t"), o.optString("f"))
                 if (f.exists()) { known.add(f.path); row(o.optString("n", f.name), typeDir(o.optString("t")) + " · " + f.name, o.optString("t"), f, id) }
             }
-            for (t in listOf("mod", "resourcepack", "shader")) {
+            for (t in listOf("mod", "resourcepack", "shader", "datapack")) {
                 File(curGameDir(), typeDir(t)).listFiles()?.sortedBy { it.name }?.forEach {
                     if (it.isFile && !known.contains(it.path) && !it.name.endsWith(".part")) row(it.name, typeDir(t), t, it, null)
                 }
@@ -875,16 +1063,18 @@ class MainActivity : Activity() {
                 }
             }.start()
         }
-        val types = listOf("mod" to tr("Моды", "Mods"), "resourcepack" to tr("Ресурспаки", "Resource packs"), "shader" to tr("Шейдеры", "Shaders"), "downloaded" to tr("Скачанные", "Downloaded"))
+        // порядок вкладок: ряд 1 — моды, шейдеры, скачанные; ряд 2 — ресурспаки, датапаки
+        val types = listOf("mod" to tr("Моды", "Mods"), "shader" to tr("Шейдеры", "Shaders"), "downloaded" to tr("Скачанные", "Downloaded"),
+            "resourcepack" to tr("Ресурспаки", "Resource packs"), "datapack" to tr("Датапаки", "Datapacks"))
         val loaders = listOf("fabric", "forge")
         val loaderRow = chipRow(loaders.map { it.replaceFirstChar { c -> c.uppercase() } }, loaders.indexOf(loader).coerceAtLeast(0)) { i -> loader = loaders[i]; if (type == "mod") search() }
-        val typeRow = chipRow(types.map { it.second }, 0) { i ->
+        val typeRow = tabRows(listOf(types.subList(0, 3).map { it.second }, types.subList(3, 5).map { it.second }), 0) { i ->
             type = types[i].first
             loaderRow.visibility = if (type == "mod") View.VISIBLE else View.GONE
             q.visibility = if (type == "downloaded") View.GONE else View.VISIBLE
             search()
         }
-        box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
+        box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(4); bottomMargin = dp(8) })
         // кнопка фильтров справа от Fabric/Forge: иконка с ползунками и числом включённых фильтров
         val filt = FilterView(this)
         fun refreshFilt() { filt.count = (if (strict) 1 else 0) + (if (hideDl) 1 else 0) }
@@ -916,10 +1106,13 @@ class MainActivity : Activity() {
                 .setPositiveButton(tr("Готово", "Done"), null).show()
         }
         val filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        filterRow.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // Fabric/Forge по центру строки, кнопка фильтров справа
         filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
-        filterRow.addView(filt, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginEnd = dp(12) })
-        box.addView(filterRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
+        filterRow.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val filtBox = FrameLayout(this)
+        filtBox.addView(filt, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.CENTER_VERTICAL))
+        filterRow.addView(filtBox, LinearLayout.LayoutParams(0, dp(42), 1f))
+        box.addView(filterRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); bottomMargin = dp(6) })
         val sv = ScrollView(this); sv.addView(list)
         box.addView(sv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         q.setOnEditorActionListener { _, _, _ -> search(); true }
@@ -950,6 +1143,7 @@ class MainActivity : Activity() {
         btn.isEnabled = false; btn.alpha = 0.6f; btn.text = tr("Скачивание…", "Downloading…")
         Thread {
             var res = ""
+            var destFile: File? = null
             try {
                 val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") +
                     (if (type == "mod") "&loaders=" + java.net.URLEncoder.encode("[\"$loader\"]", "UTF-8") else "")
@@ -958,16 +1152,15 @@ class MainActivity : Activity() {
                 val files = vers.getJSONObject(0).getJSONArray("files")
                 var f = files.getJSONObject(0)
                 for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
-                val dir = when (type) { "resourcepack" -> "resourcepacks"; "shader" -> "shaderpacks"; else -> "mods" }
-                val root = getExternalFilesDir(null) ?: filesDir
-                val dest = File(curGameDir(), "$dir/" + f.getString("filename"))
+                val dest = File(curGameDir(), typeDir(type) + "/" + f.getString("filename"))
+                destFile = dest
                 val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
                 if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
                 idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title)) })
                 res = "ok"
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
-                if (res == "ok") { onDone() }
+                if (res == "ok") { onDone(); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
                 else {
                     btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download")
                     // нет файла под вашу версию/загрузчик: предлагаем выбрать любой файл вручную
@@ -1017,11 +1210,13 @@ class MainActivity : Activity() {
         Toast.makeText(this, tr("Скачивание…", "Downloading…"), Toast.LENGTH_SHORT).show()
         Thread {
             var res = ""
+            var dl: File? = null
             try {
                 val files = v.getJSONArray("files")
                 var f = files.getJSONObject(0)
                 for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
                 val dest = File(curGameDir(), typeDir(type) + "/" + f.getString("filename"))
+                dl = dest
                 val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
                 if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
                 idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title)) })
@@ -1029,6 +1224,7 @@ class MainActivity : Activity() {
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
                 if (res == "ok") {
+                    if (type == "datapack") dl?.let { offerDatapackWorld(it) }
                     Toast.makeText(this, tr("Скачано: $title. Версия может не подойти к вашей игре.", "Downloaded: $title. The version may not fit your game."), Toast.LENGTH_LONG).show()
                     onDone()
                 } else Toast.makeText(this, res, Toast.LENGTH_LONG).show()
@@ -1584,7 +1780,7 @@ class MainActivity : Activity() {
                     else -> prepareAndRun(mc, false)
                 }
                 prefs.edit().putString("profile", id).apply()
-                runOnUiThread { versionText.text = tr("Версия: ", "Version: ") + prettyProfile(id) }
+                runOnUiThread { versionText.text = verTitle() }
                 log("Готово: $id")
             } catch (e: Throwable) {
                 log("ОШИБКА установки: $e")
@@ -1642,7 +1838,7 @@ class MainActivity : Activity() {
                         setOnClickListener {
                             if (pid != null) {
                                 prefs.edit().putString("profile", pid).apply()
-                                versionText.text = tr("Версия: ", "Version: ") + prettyProfile(pid)
+                                versionText.text = verTitle()
                                 render()
                             } else if (busy) {
                                 Toast.makeText(this@MainActivity, tr("Подождите: идёт другая загрузка", "Wait: another download is in progress"), Toast.LENGTH_SHORT).show()
@@ -1676,7 +1872,7 @@ class MainActivity : Activity() {
                                     .setPositiveButton(tr("Удалить", "Delete")) { _, _ ->
                                         File(dataRoot(), "versions/$id").deleteRecursively()
                                         if (selectedProfile() == id) prefs.edit().remove("profile").apply()
-                                        versionText.text = tr("Версия: ", "Version: ") + prettyProfile(selectedProfile())
+                                        versionText.text = verTitle()
                                         render()
                                     }.show()
                             }
@@ -1753,8 +1949,8 @@ class MainActivity : Activity() {
         MobDialog(this).setTitle(tr("Версия для игры", "Game version")).setItems(names.toTypedArray()) { _, i ->
             if (i == installed.size) openPage(tr("Загрузчик версий", "Version loader"), versionsPage())
             else {
-                prefs.edit().putString("profile", installed[i]).apply()
-                versionText.text = tr("Версия: ", "Version: ") + prettyProfile(installed[i])
+                prefs.edit().putString("profile", installed[i]).putString("build", "").apply()
+                versionText.text = verTitle()
             }
         }.setNegativeButton(tr("Закрыть", "Close"), null).show()
     }
@@ -1946,7 +2142,7 @@ class MainActivity : Activity() {
                 }
                 prefs.edit().remove("profile").remove("installed").apply()
                 cacheDir.mkdirs()
-                runOnUiThread { versionText.text = tr("Версия: ", "Version: ") + prettyProfile(selectedProfile()) }
+                runOnUiThread { versionText.text = verTitle() }
                 log("Удалено: ${freed / 1024 / 1024} МБ. " + if (everything) "Миры тоже удалены." else "Папка saves сохранена.")
             } catch (e: Throwable) {
                 log("ОШИБКА удаления: $e")
@@ -1963,12 +2159,33 @@ class MainActivity : Activity() {
 
     /** Папка игры выбранного профиля: старые версии (формат до 1.13) играют в своей папке. */
     internal fun curGameDir(): File {
+        activeBuild()?.let { return buildDir(it.optString("id")).apply { mkdirs() } }
         val base = curBase()
         val legacy = try { JSONObject(File(dataRoot(), "versions/$base/$base.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
         return File(dataRoot(), if (legacy) "game-$base" else "game")
     }
 
     internal fun selectedProfile(): String = prefs.getString("profile", VERSION) ?: VERSION
+
+    // ---------- сборки: у каждой своя папка игры (моды, миры, настройки) и своя версия ----------
+    private fun builds(): JSONArray = try { JSONArray(prefs.getString("builds", "[]")) } catch (_: Exception) { JSONArray() }
+    private fun buildsSave(a: JSONArray) { prefs.edit().putString("builds", a.toString()).apply() }
+    private fun buildDir(id: String) = File(dataRoot(), "builds/$id")
+
+    /** Выбранная сборка. Если после неё сменили версию игры, сборка считается снятой. */
+    internal fun activeBuild(): JSONObject? {
+        val id = prefs.getString("build", "") ?: ""
+        if (id.isEmpty()) return null
+        val a = builds()
+        for (i in 0 until a.length()) {
+            val b = a.getJSONObject(i)
+            if (b.optString("id") == id) return if (b.optString("profile") == selectedProfile()) b else null
+        }
+        return null
+    }
+
+    internal fun verTitle(): String = activeBuild()?.let { tr("Сборка: ", "Build: ") + it.optString("name") }
+        ?: (tr("Версия: ", "Version: ") + prettyProfile(selectedProfile()))
 
     /** Базовая версия игры выбранного профиля (для Fabric/Forge берётся из inheritsFrom). */
     internal fun curBase(): String {
@@ -2048,7 +2265,7 @@ class MainActivity : Activity() {
                 log("=== Конец лога прошлого запуска игры ===")
                 tail.forEach { log("  $it") }
             }
-            root.listFiles()?.filter { it.isDirectory && it.name.startsWith("game") }?.forEach { d ->
+            (root.listFiles()?.toList().orEmpty() + File(root, "builds").listFiles()?.toList().orEmpty()).filter { it.isDirectory && (it.name.startsWith("game") || it.parentFile?.name == "builds") }.forEach { d ->
                 val cr = File(d, "crash-reports").listFiles()?.maxByOrNull { it.lastModified() }
                 if (cr != null && System.currentTimeMillis() - cr.lastModified() < 30 * 60 * 1000) {
                     log("=== Отчёт о крэше ${d.name}/${cr.name} ===")
@@ -2056,7 +2273,7 @@ class MainActivity : Activity() {
                 }
             }
         } catch (_: Exception) {}
-        root.listFiles()?.filter { it.isDirectory && (it.name == "game" || it.name.startsWith("game-")) }?.forEach { d ->
+        (root.listFiles()?.toList().orEmpty() + File(root, "builds").listFiles()?.toList().orEmpty()).filter { it.isDirectory && (it.name == "game" || it.name.startsWith("game-") || it.parentFile?.name == "builds") }.forEach { d ->
             val hs = File(d, "hs_err.log")
             if (hs.exists()) {
                 log("=== Предыдущий запуск упал (${d.name}/hs_err.log), начало: ===")
@@ -2084,7 +2301,8 @@ class MainActivity : Activity() {
         log("Нужна Java: $javaMajor")
         val legacy = JSONObject(versionJsonFile.readText()).optJSONObject("arguments") == null
         // старые версии играют в своей папке: настройки и миры 1.13+ ломают их (options.txt и т.п.)
-        val gameDir = (if (legacy) File(root, "game-$baseVer") else File(root, "game")).apply { mkdirs() }
+        val gameDir = (activeBuild()?.let { buildDir(it.optString("id")) }
+            ?: if (legacy) File(root, "game-$baseVer") else File(root, "game")).apply { mkdirs() }
         if (legacy && child != null && !profile.contains("forge")) throw RuntimeException("Fabric и другие загрузчики для версий 1.12.2 и ниже не поддерживаются, только Forge")
         val oldForge = legacy && child != null
         val oldGl = legacy || javaMajor < 16

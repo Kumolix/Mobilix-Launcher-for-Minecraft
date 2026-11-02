@@ -33,7 +33,7 @@ ru:{
   ["Чем это отличается от PojavLauncher?","Mobilix на нём не основан: у него свой запуск Java 21, LWJGL, gl4es для версий 1.8–1.16.5 и MobileGlues для 1.17 и новее."],
   ["На каких телефонах работает?","Нужен Android 9 или новее и процессор arm64. Проверялся на Galaxy S24 FE, Galaxy A52 и планшете SM-T595. На старых моделях игра медленнее, автонастройка графики помогает."],
   ["Лаунчер собирает данные?","Нет. Подробности в политике конфиденциальности."],
-  ["Безопасно ли ставить APK?","Исходный код открыт, а APK подписан постоянным ключом: новая версия ставится поверх старой без потери данных."],
+  ["Безопасно ли ставить APK?","<p>Полной гарантии не даёт никто, но проверить можно самому. Вот факты.</p><ul><li>Исходный код открыт на GitHub, а APK собирает GitHub Actions из этого кода. Скачивайте только отсюда или из раздела Releases на GitHub: файлы из чатов и с чужих сайтов не наши.</li><li>Разрешения: интернет, служба переднего плана и уведомления (чтобы загрузка не прерывалась), блокировка сна на время загрузки. Контакты, местоположение, камера, микрофон, фото и файлы вне папки приложения недоступны.</li><li>Рекламы, аналитики и отчётов о сбоях нет. Ник, настройки и миры остаются на устройстве.</li><li>APK подписан постоянным ключом, поэтому новая версия ставится поверх старой и не теряет данные. Подделка с другой подписью поверх не установится.</li></ul><p>Android и Play Protect могут предупредить об установке. Так бывает с любым приложением не из Google Play, особенно новым и таким, которое запускает Java внутри себя. Само предупреждение не значит, что внутри вредоносный код.</p><p>Чтобы убедиться, загрузите APK на VirusTotal и посмотрите отчёт. Если не доверяете сборке, соберите её сами из исходников: инструкция в README репозитория.</p>"],
   ["Нашёл ошибку, куда писать?","В раздел Issues на GitHub или в Telegram. Приложите файл game.log, если игра вылетает."]
  ]
 },
@@ -68,11 +68,37 @@ en:{
   ["How is this different from PojavLauncher?","Mobilix is not based on it. It has its own Java 21 launch, LWJGL, gl4es for 1.8–1.16.5 and MobileGlues for 1.17 and newer."],
   ["Which phones does it run on?","Android 9 or newer with an arm64 processor. Tested on a Galaxy S24 FE, a Galaxy A52 and an SM-T595 tablet. Older models are slower, and automatic graphics setup helps."],
   ["Does the launcher collect data?","No. See the privacy policy for details."],
-  ["Is it safe to install the APK?","The source code is open and the APK is signed with a permanent key, so a new version installs over the old one and keeps your data."],
+  ["Is it safe to install the APK?","<p>Nobody can give a full guarantee, but you can check it yourself. Here are the facts.</p><ul><li>The source code is open on GitHub and the APK is built by GitHub Actions from that code. Download only from here or from GitHub Releases: files from chats or other sites are not ours.</li><li>Permissions: internet, a foreground service and notifications (so downloads are not interrupted), and a wake lock while downloading. Contacts, location, camera, microphone, photos and files outside the app folder are not accessible.</li><li>No ads, no analytics, no crash reports. Your nickname, settings and worlds stay on the device.</li><li>The APK is signed with a permanent key, so a new version installs over the old one and keeps your data. A fake signed with another key cannot install over it.</li></ul><p>Android and Play Protect may warn you before installing. That happens with any app that is not from Google Play, especially a new one that runs Java inside itself. The warning alone does not mean there is malicious code.</p><p>To be sure, upload the APK to VirusTotal and read the report. If you do not trust the build, compile it yourself from the source: see the repository README.</p>"],
   ["I found a bug, where do I report it?","In GitHub Issues or in Telegram. Attach game.log if the game crashes."]
  ]
 }};
 
+var DG={
+"0":[".###.","#...#","#..##","#.#.#","##..#","#...#",".###."],
+"1":["..#..",".##..","..#..","..#..","..#..","..#..",".###."],
+"2":[".###.","#...#","....#","...#.","..#..",".#...","#####"],
+"3":["####.","....#","....#",".###.","....#","....#","####."],
+"4":["...#.","..##.",".#.#.","#..#.","#####","...#.","...#."],
+"5":["#####","#....","#....","####.","....#","#...#",".###."],
+"6":[".###.","#....","#....","####.","#...#","#...#",".###."],
+"7":["#####","....#","....#","...##","...#.","...#.","...#."],
+"8":[".###.","#...#","#...#",".###.","#...#","#...#",".###."],
+"9":[".###.","#...#","#...#",".####","....#","....#",".###."],
+".":[".",".",".",".",".",".","#"],
+" ":["...","...","...","...","...","...","..."]
+};
+/* свои пиксельные цифры 5x7: шрифт Pixelify Sans рисует 1, 2, 5, 7 неудачно */
+function pxnum(str,scale){
+ var x=0,r="";
+ str=String(str).replace(/[\u00a0\u202f\u2009]/g," ");
+ for(var i=0;i<str.length;i++){
+  var g=DG[str[i]];if(!g)continue;
+  for(var y=0;y<7;y++)for(var k=0;k<g[y].length;k++)if(g[y][k]==="#")r+='<rect x="'+(x+k)+'" y="'+y+'" width="1" height="1"/>';
+  x+=g[0].length+1;
+ }
+ x=Math.max(x-1,1);
+ return '<svg class="pxn" role="img" aria-label="'+str+'" viewBox="0 0 '+x+' 7" width="'+(x*scale)+'" height="'+(7*scale)+'" fill="currentColor" shape-rendering="crispEdges">'+r+'</svg>';
+}
 var SPR={
  cursor:[".w......",".ww.....",".www....",".wwww...",".wwwww..",".wwww...",".w.ww...","...ww..."],
  chip:[".g.gg.g.","gggggggg",".gGGGGg.","ggGddGgg","ggGddGgg",".gGGGGg.","gggggggg",".g.gg.g."],
@@ -103,7 +129,7 @@ function pickLang(){
 function buildSlots(){
  var box=$(".slots");
  box.innerHTML=ORDER.map(function(k,i){
-  return '<button type="button" class="slot px" role="tab" data-i="'+i+'" aria-selected="'+(i===sel)+'" aria-label="'+T[lang].feats[i][0]+'">'+sprite(k)+'<i>'+(i+1)+'</i></button>';
+  return '<button type="button" class="slot px" role="tab" data-i="'+i+'" aria-selected="'+(i===sel)+'" aria-label="'+T[lang].feats[i][0]+'">'+sprite(k)+'<i>'+pxnum(i+1,2)+'</i></button>';
  }).join("");
  $$(".slot").forEach(function(b){b.addEventListener("click",function(){select(+b.dataset.i);});});
 }
@@ -115,6 +141,7 @@ function select(i){
 }
 
 function applyLang(l){
+ $$(".sn").forEach(function(el){el.innerHTML=pxnum(el.dataset.n,4);});
  lang=l;document.documentElement.lang=l;
  try{localStorage.setItem("lang",l);}catch(e){}
  $$("[data-lang]").forEach(function(b){b.setAttribute("aria-pressed",b.dataset.lang===l);});
@@ -145,7 +172,7 @@ function renderLog(){
  box.innerHTML=shown.map(function(r,i){
   var v=(r.tag_name||"").replace(/^APK-/,"");
   var li=notes(r.body).map(function(x){return "<li>"+esc(x)+"</li>";}).join("");
-  return '<details'+(i===0?" open":"")+'><summary><span class="ver">'+esc(v)+'</span><span class="date">'+fmtDate(r.published_at)+'</span></summary><div class="body"><ul>'+li+'</ul></div></details>';
+  return '<details'+(i===0?" open":"")+'><summary><span class="ver">'+pxnum(v,3)+'</span><span class="date">'+fmtDate(r.published_at)+'</span></summary><div class="body"><ul>'+li+'</ul></div></details>';
  }).join("");
 }
 function renderStats(){
@@ -163,7 +190,7 @@ function renderStats(){
    var form=new Intl.PluralRules(lang==="ru"?"ru":"en").select(total);
    var w=T[lang].dl_n[form==="one"?0:form==="few"?1:2];
    var c=$("#count");c.hidden=false;
-   c.innerHTML=(T[lang].dl_pre?T[lang].dl_pre+" ":"")+'<span class="count">'+total.toLocaleString(lang==="ru"?"ru-RU":"en-GB")+'</span> '+w;
+   c.innerHTML=(T[lang].dl_pre?T[lang].dl_pre+" ":"")+'<span class="count">'+pxnum(total.toLocaleString(lang==="ru"?"ru-RU":"en-GB"),3)+'</span> '+w;
   }
  }
 }
