@@ -1780,10 +1780,19 @@ class MainActivity : Activity() {
                         }
                         if (!got) throw RuntimeException("не удалось скачать установщик Forge: $lastErr")
                         val legacyMc = try { JSONObject(File(root, "versions/$mc/$mc.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
+                        var legacyId: String? = null
                         if (legacyMc) {
                             // Старые версии: установщик не запускаем, берём из него описание версии и файл Forge
                             log("Forge: распаковка установщика…")
-                            id = installLegacyForge(installer, root)
+                            try { legacyId = installLegacyForge(installer, root) }
+                            catch (e: RuntimeException) {
+                                // у части сборок 1.12.2 в установщике нет versionInfo: тогда запускаем установщик целиком
+                                if (e.message?.contains("versionInfo") == true) log("Forge: в установщике нет versionInfo, запускаю его целиком")
+                                else throw e
+                            }
+                        }
+                        if (legacyId != null) {
+                            id = legacyId
                             log("Профиль $id создан, докачиваю библиотеки…")
                             prepareAndRun(id, false)
                         } else {
@@ -1799,6 +1808,7 @@ class MainActivity : Activity() {
                                 if (found != null) break
                             }
                             id = found ?: throw RuntimeException("Forge установился, но профиль не найден")
+                            if (legacyMc) { log("Профиль $id создан, докачиваю библиотеки…"); prepareAndRun(id, false) }
                         }
                     }
                     else -> prepareAndRun(mc, false)
