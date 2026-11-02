@@ -219,6 +219,35 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
         val PENCIL = listOf(".......pp", "......mpp", ".....Ymm.", "....YyY..", "...YyY...", "..YyY....", "..wY.....", ".k.......", ".........")
         val PENCIL_PAL = mapOf('p' to 0xFFF096AA.toInt(), 'm' to 0xFFBEC4CE.toInt(), 'y' to 0xFFF5C846.toInt(), 'Y' to 0xFFC8961E.toInt(), 'w' to 0xFFEBCDA0.toInt(), 'k' to 0xFF463C32.toInt())
         val TRASH = listOf("...rrr...", "rrrrrrrrr", ".RRRRRRR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RRRRRRR.")
+        val SHIELD = listOf(".sssssss.", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", ".sSSSSSs.", "..sSSSs..", "...sSs...", "....s....")
+        val SHIELD_PAL = mapOf('s' to 0xFF2EA84F.toInt(), 'S' to 0xFF5BD67B.toInt())
         val TRASH_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'R' to 0xFFA3231C.toInt())
     }
+}
+
+
+/** Квадратная кнопка в стиле фильтров: пиксельная стрелка вверх (панель открыта) или вниз (свёрнута). */
+class CaretView(ctx: Context) : View(ctx) {
+    var up = true
+        set(v) { field = v; invalidate() }
+    private val back = Paint().apply { color = 0xFF14301D.toInt() }
+    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF2EA84F.toInt() }
+    private val fill = Paint().apply { color = 0xFF43E06A.toInt() }
+    init { isClickable = true }
+    override fun onDraw(c: Canvas) {
+        val d = resources.displayMetrics.density
+        val w = width.toFloat(); val h = height.toFloat()
+        val box = RectF(1f * d, 1f * d, w - 1f * d, h - 1f * d)
+        c.drawRect(box, back)
+        frame.strokeWidth = 2f * d
+        c.drawRect(box, frame)
+        val s = 3f * d
+        val cx = w / 2f; val cy = h / 2f
+        for (r in 0..3) {
+            val y = if (up) cy - 2f * s + r * s else cy + s - r * s
+            c.drawRect(cx - r * s - s / 2, y, cx - r * s + s / 2, y + s, fill)
+            if (r > 0) c.drawRect(cx + r * s - s / 2, y, cx + r * s + s / 2, y + s, fill)
+        }
+    }
+
 }

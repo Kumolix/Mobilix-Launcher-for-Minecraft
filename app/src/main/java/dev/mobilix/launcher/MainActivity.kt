@@ -98,23 +98,35 @@ class MainActivity : Activity() {
 
     private fun socialPage(): View {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(24), dp(24), dp(24)) }
-        fun link(title: String, sub: String, url: String, hi: Boolean = false) {
-            val t = TextView(this).apply {
-                text = title + "\n" + sub; textSize = 16f; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(18), 0, dp(18), 0)
-                setTextColor(if (hi) Th.altText else Color.WHITE)
+        fun asset(name: String, smooth: Boolean): android.graphics.drawable.Drawable? = try {
+            assets.open("social/$name").use { android.graphics.BitmapFactory.decodeStream(it) }?.let {
+                android.graphics.drawable.BitmapDrawable(resources, it).apply { setFilterBitmap(smooth) }
+            }
+        } catch (_: Exception) { null }
+        fun link(icon: String?, title: String, sub: String, url: String, hi: Boolean = false) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(16), 0, dp(14), 0)
                 background = sel(if (hi) Th.altBg else 0xFF14301D.toInt()); isClickable = true
                 setOnClickListener { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {} }
             }
-            col.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
+            val ic: View = if (icon != null) ImageView(this).apply { setImageDrawable(asset(icon, icon == "site.png")); scaleType = ImageView.ScaleType.FIT_CENTER }
+                else PixelIcon(this, PixelIcon.SHIELD, PixelIcon.SHIELD_PAL)
+            row.addView(ic, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(16) })
+            val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            txt.addView(TextView(this).apply { text = title; textSize = 16f; setTextColor(if (hi) Th.altText else Color.WHITE) })
+            // адрес и пояснения: мелко и светло-зелёным, это второстепенное
+            txt.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(if (hi) Th.altText else 0xFF8FD6A3.toInt()); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+            row.addView(txt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
         val upd = if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else null
-        link(tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Launcher-for-Minecraft",
+        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Launcher-for-Minecraft",
             "https://kumolix.github.io/Mobilix-Launcher-for-Minecraft/", upd != null)
-        link("GitHub", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
+        link("github.png", "GitHub", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
             "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", upd != null)
-        link("Telegram", upd ?: "@mobilix_launcher", "https://t.me/mobilix_launcher", upd != null)
-        link("TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
-        link(tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
+        link("telegram.png", "Telegram", upd ?: "@mobilix_launcher", "https://t.me/mobilix_launcher", upd != null)
+        link("tiktok.png", "TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
+        link(null, tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
         return col
     }
 
@@ -1071,7 +1083,7 @@ class MainActivity : Activity() {
         val typeRow = tabRows(listOf(types.subList(0, 3).map { it.second }, types.subList(3, 5).map { it.second }), 0) { i ->
             type = types[i].first
             loaderRow.visibility = if (type == "mod") View.VISIBLE else View.GONE
-            q.visibility = if (type == "downloaded") View.GONE else View.VISIBLE
+            q.visibility = if (type == "downloaded" || prefs.getBoolean("catCollapsed", false)) View.GONE else View.VISIBLE
             search()
         }
         box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(4); bottomMargin = dp(8) })
@@ -1106,8 +1118,20 @@ class MainActivity : Activity() {
                 .setPositiveButton(tr("Готово", "Done"), null).show()
         }
         val filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        // слева кнопка-стрелка: сворачивает поиск и вкладки, чтобы список занимал больше места
+        val caret = CaretView(this)
+        fun applyCollapse() {
+            val c = prefs.getBoolean("catCollapsed", false)
+            caret.up = !c
+            typeRow.visibility = if (c) View.GONE else View.VISIBLE
+            q.visibility = if (c || type == "downloaded") View.GONE else View.VISIBLE
+        }
+        caret.setOnClickListener { prefs.edit().putBoolean("catCollapsed", !prefs.getBoolean("catCollapsed", false)).apply(); applyCollapse() }
+        applyCollapse()
+        val caretBox = FrameLayout(this)
+        caretBox.addView(caret, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.START or Gravity.CENTER_VERTICAL))
         // Fabric/Forge по центру строки, кнопка фильтров справа
-        filterRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        filterRow.addView(caretBox, LinearLayout.LayoutParams(0, dp(42), 1f))
         filterRow.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val filtBox = FrameLayout(this)
         filtBox.addView(filt, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.CENTER_VERTICAL))
