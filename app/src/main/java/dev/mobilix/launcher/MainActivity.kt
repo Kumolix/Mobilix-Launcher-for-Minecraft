@@ -169,7 +169,20 @@ class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("launcher", MODE_PRIVATE)
     private var setupHint: View? = null
     internal fun lang() = prefs.getString("lang", "ru") ?: "ru"
-    internal fun tr(ru: String, en: String) = if (lang() == "en") en else ru
+    private var zhMap: Map<String, String>? = null
+    /** Китайский словарь: файл assets/lang/zh.tsv, строки «русский текст<TAB>перевод»; чего нет в словаре, показывается по-английски. */
+    private fun zhDict(): Map<String, String> {
+        zhMap?.let { return it }
+        val m = HashMap<String, String>()
+        try {
+            assets.open("lang/zh.tsv").bufferedReader().useLines { ls ->
+                for (l in ls) { val i = l.indexOf('\t'); if (i > 0) m[l.substring(0, i).replace("\\n", "\n")] = l.substring(i + 1).replace("\\n", "\n") }
+            }
+        } catch (_: Exception) {}
+        zhMap = m
+        return m
+    }
+    internal fun tr(ru: String, en: String) = when (lang()) { "en" -> en; "zh" -> zhDict()[ru] ?: en; else -> ru }
     internal fun elyOn() = !prefs.getString("ely_token", "").isNullOrEmpty()
     /** Включить, когда Mojang одобрит appID: до этого вход через Microsoft всё равно получает 403. */
     private val MS_APPROVED = false
@@ -332,7 +345,7 @@ class MainActivity : Activity() {
         item("Раскладка управления", "Controls layout") { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
         menuWipe = item("Удалить скачанное", "Delete downloads") { confirmWipe() }
         ghItem = item("Соцсети", "Social") { openPage(tr("Соцсети", "Social"), socialPage()) }
-        item("Язык", "Language", lang().uppercase()) { chooseLanguage() }
+        item("Язык", "Language", if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
         drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         drawer.addView(TextView(this).apply {
             text = tr("Пользовательское соглашение", "User agreement"); textSize = 13f; setTextColor(Th.dim)
@@ -424,11 +437,14 @@ class MainActivity : Activity() {
     }
 
     private fun chooseLanguage() {
+        val codes = listOf("ru", "en", "zh")
+        val names = listOf("Русский", "English", "中文 (简体)")
+        val cur = lang()
         MobDialog(this).setTitle(tr("Язык", "Language"))
-            .setItems(arrayOf("Русский", "English")) { _, i ->
-                prefs.edit().putString("lang", if (i == 1) "en" else "ru").apply()
+            .setItems(names.mapIndexed { i, n -> if (codes[i] == cur) "$n  ✓" else n }.toTypedArray()) { _, i ->
+                prefs.edit().putString("lang", codes[i]).apply()
                 recreate()
-            }.show()
+            }.setNegativeButton(tr("Закрыть", "Close"), null).show()
     }
 
     // ---------- настройки ----------
@@ -558,6 +574,12 @@ class MainActivity : Activity() {
             prefs.edit().putBoolean("multiDl", i == 1).apply()
         })
         col.addView(note(tr("Скачивает файлы игры в 16 потоков вместо 3: намного быстрее. Если интернет нестабилен или появляются ошибки загрузки, выключите.", "Downloads game files in 16 threads instead of 3: much faster. Turn off if your connection is unstable or downloads fail.")))
+        col.addView(TextView(this).apply { text = tr("Автообновление модов под загрузчик", "Auto-update mods for the loader"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("modAuto", true)) 1 else 0) { i ->
+            prefs.edit().putBoolean("modAuto", i == 1).apply()
+        })
+        col.addView(note(tr("Перед запуском Fabric или Forge лаунчер подбирает скачанным из каталога модам файлы под вашу версию игры и загрузчик, докачивает обязательные зависимости и предупреждает, если чего-то не хватает. Моды другого загрузчика отключаются всегда (папка mods-disabled), это не зависит от переключателя.",
+            "Before a Fabric or Forge launch, the launcher picks files for mods downloaded from the catalog that match your game version and loader, downloads required dependencies and warns about anything missing. Mods for another loader are always disabled (mods-disabled folder), regardless of this switch.")))
         col.addView(TextView(this).apply { text = tr("Управление движением", "Movement control"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Крестовина (WASD)", "D-pad (WASD)"), tr("Джойстик", "Joystick")), if (prefs.getBoolean("joystick", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("joystick", i == 1).apply(); writeGameSettings()
@@ -2342,6 +2364,9 @@ class MainActivity : Activity() {
         val oldGl = legacy || javaMajor < 16
         applyMipmap(gameDir, oldGl)
         applyPreset(gameDir, baseVer)
+        val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.contains("forge", true) -> "forge"; else -> null }
+        syncMods(gameDir, modLoader)
+        autoUpdateMods(gameDir, modLoader, baseVer)
         if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
         else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
         val newLwjgl = "3.3.3"
@@ -2520,7 +2545,10 @@ class MainActivity : Activity() {
             gameArgs = if (oldForge) g0 + listOf("--tweakClass", "dev.mobilix.loader.MobilixTweaker") else g0
         } else {
             val args = v.getJSONObject("arguments")
-            jvmArgs = collectArgs(args.optJSONArray("jvm"), sub)
+            // Forge 1.17+: ванильный jar игры не должен попасть в модульный слой, иначе «Module minecraft contains package …»
+            jvmArgs = collectArgs(args.optJSONArray("jvm"), sub).map {
+                if (it.startsWith("-DignoreList=") && !it.contains("$baseVer.jar")) "$it,$baseVer.jar" else it
+            }
             gameArgs = collectArgs(args.optJSONArray("game"), sub)
         }
         val cmd = ArrayList<String>()
@@ -2632,6 +2660,102 @@ class MainActivity : Activity() {
     }
 
     /** Записывает выбранный пресет в options.txt этой папки игры один раз; дальше игрок может менять параметры сам. */
+    /** Какие загрузчики поддерживает мод (по файлам описания внутри jar). */
+    private fun modLoaders(jar: File): Set<String> = try {
+        java.util.zip.ZipFile(jar).use { z ->
+            val r = HashSet<String>()
+            if (z.getEntry("fabric.mod.json") != null) r.add("fabric")
+            if (z.getEntry("quilt.mod.json") != null) { r.add("quilt"); r.add("fabric") }
+            if (z.getEntry("META-INF/neoforge.mods.toml") != null) r.add("neoforge")
+            if (z.getEntry("META-INF/mods.toml") != null || z.getEntry("mcmod.info") != null) r.add("forge")
+            r
+        }
+    } catch (_: Exception) { emptySet() }
+
+    /** Моды не под текущий загрузчик уходят в mods-disabled, подходящие возвращаются обратно: чужой мод не должен ломать запуск. */
+    private fun syncMods(gameDir: File, loader: String?) {
+        if (loader == null) return
+        try {
+            val mods = File(gameDir, "mods"); val off = File(gameDir, "mods-disabled")
+            val moved = ArrayList<String>()
+            mods.listFiles { f -> f.isFile && f.name.endsWith(".jar") }?.forEach { f ->
+                val ls = modLoaders(f)
+                if (ls.isNotEmpty() && !ls.contains(loader)) { off.mkdirs(); if (f.renameTo(File(off, f.name))) moved.add(f.name) }
+            }
+            off.listFiles { f -> f.isFile && f.name.endsWith(".jar") }?.forEach { f ->
+                if (modLoaders(f).contains(loader)) { mods.mkdirs(); f.renameTo(File(mods, f.name)) }
+            }
+            if (moved.isNotEmpty()) {
+                log("Моды не под $loader отключены (папка mods-disabled): " + moved.joinToString(", "))
+                runOnUiThread { Toast.makeText(this, tr("Отключено модов не под этот загрузчик: ${moved.size}", "Mods for another loader disabled: ${moved.size}"), Toast.LENGTH_LONG).show() }
+            }
+        } catch (e: Throwable) { log("Проверка загрузчиков модов: $e") }
+    }
+
+    /** Подтягивает файлы скачанных модов под текущую версию игры и загрузчик, докачивает обязательные зависимости, предупреждает о нехватке. */
+    private fun autoUpdateMods(gameDir: File, loader: String?, baseVer: String) {
+        if (loader == null || !prefs.getBoolean("modAuto", true)) return
+        val t0 = System.currentTimeMillis()
+        try {
+            val index = idx()
+            val ids = ArrayList<String>(); val keys = index.keys(); while (keys.hasNext()) ids.add(keys.next())
+            fun enc(x: String) = java.net.URLEncoder.encode(x, "UTF-8")
+            fun versionsFor(id: String) = JSONArray(apiGet("/project/$id/version?game_versions=" + enc("[\"$baseVer\"]") + "&loaders=" + enc("[\"$loader\"]")))
+            fun fetch(id: String, v: JSONObject, title: String): String? {
+                val files = v.getJSONArray("files"); var f = files.getJSONObject(0)
+                for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
+                val name = f.getString("filename")
+                val dest = File(gameDir, "mods/$name")
+                if (!dest.exists() && !download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) return null
+                index.put(id, JSONObject().put("t", "mod").put("f", name).put("n", title))
+                return name
+            }
+            var updated = 0; var added = 0
+            val noVersion = ArrayList<String>(); val noDeps = ArrayList<String>()
+            for (id in ids.take(40)) {
+                if (System.currentTimeMillis() - t0 > 40000) { log("Автообновление модов: остановлено по времени"); break }
+                val rec = index.optJSONObject(id) ?: continue
+                if (rec.optString("t") != "mod") continue
+                val cur = File(gameDir, "mods/" + rec.optString("f"))
+                if (!cur.exists()) continue
+                val title = rec.optString("n", id)
+                try {
+                    val vers = versionsFor(id)
+                    if (vers.length() == 0) { noVersion.add(title); continue }
+                    val v = vers.getJSONObject(0)
+                    val old = rec.optString("f")
+                    val nn = fetch(id, v, title)
+                    if (nn != null && nn != old) { cur.delete(); updated++ }
+                    val deps = v.optJSONArray("dependencies")
+                    if (deps != null) for (k in 0 until deps.length()) {
+                        val d = deps.getJSONObject(k)
+                        val pid = d.optString("project_id", "")
+                        if (d.optString("dependency_type") != "required" || pid.isEmpty()) continue
+                        val have = index.optJSONObject(pid)
+                        if (have != null && File(gameDir, "mods/" + have.optString("f")).exists()) continue
+                        try {
+                            val dv = versionsFor(pid)
+                            if (dv.length() == 0) { noDeps.add(title); continue }
+                            val pt = try { JSONObject(apiGet("/project/$pid")).optString("title", pid) } catch (_: Exception) { pid }
+                            if (fetch(pid, dv.getJSONObject(0), pt) != null) added++ else noDeps.add("$pt ($title)")
+                        } catch (_: Exception) { noDeps.add(title) }
+                    }
+                } catch (_: Exception) {}
+            }
+            idxSave(index)
+            if (updated > 0 || added > 0) log("Автообновление модов: обновлено $updated, докачано зависимостей $added")
+            val warn = ArrayList<String>()
+            if (noVersion.isNotEmpty()) warn.add(tr("нет версии под $baseVer/$loader: ", "no build for $baseVer/$loader: ") + noVersion.joinToString(", "))
+            if (noDeps.isNotEmpty()) warn.add(tr("не хватает зависимостей: ", "missing dependencies: ") + noDeps.joinToString(", "))
+            if (warn.isNotEmpty() || updated > 0 || added > 0) {
+                val msg = (if (updated + added > 0) tr("Моды обновлены: $updated, зависимостей: $added. ", "Mods updated: $updated, dependencies: $added. ") else "") +
+                    warn.joinToString(". ") + (if (warn.isNotEmpty()) tr(". Автообновление можно отключить в Настройках.", ". You can turn auto-update off in Settings.") else "")
+                log("Автообновление модов: $msg")
+                runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+            }
+        } catch (e: Throwable) { log("Автообновление модов: $e") }
+    }
+
     private fun applyPreset(gameDir: File, ver: String) {
         try {
             val id = prefs.getInt("preset", 0)
