@@ -1,1 +1,231 @@
-{ "downloads": 0, "updated": null }
+{
+ "downloads": 14,
+ "updated": "2026-11-02T10:57:39Z",
+ "releases": [
+  {
+   "tag_name": "APK-1.9.0",
+   "published_at": "2026-10-31T14:35:21Z",
+   "body": "\n**EN: What's new**\n- Virtual mouse: a \"Mouse\" button in the controls turns on a cursor moved with one finger (tap = left click), with LMB / RMB (hold) and scroll buttons; two fingers scroll lists and settings. Split stacks, move single items, scroll settings\n- Quick graphics presets (Settings > Game): Minimal / Low / Medium / High - chunks, FPS cap, resolution, mipmaps, lighting and more in one tap; applied once, every option can still be changed separately\n- Auto render resolution and mipmap levels (Auto / 0-4) chosen by your GPU. Fixes ~1 FPS in the world on older Adreno phones such as the Galaxy A52\n- Mod catalog: filters button (version compatibility, hide downloaded), manual download of files that do not match your version or loader, search explains what was filtered out and why; fixed stray results in \"Downloaded\"\n- New launcher-styled windows instead of system dialogs (version choice, language, Ely.by sign-in, downloads and more)\n- Diagnostics: FPS, GPU and per-frame timing in game.log, GC log in gc.log, render-thread profile when FPS is low\n- Sign in with Microsoft is not available yet: Mojang has not approved the app registration\n\n**RU: Что нового?**\n- Виртуальная мышь: кнопка «Мышь» в управлении включает курсор, который двигается одним пальцем (касание = левый клик), с кнопками ЛКМ / ПКМ (удержание) и прокрутки; два пальца прокручивают списки и настройки. Можно делить стаки, переносить по одному предмету, листать настройки\n- Быстрые настройки графики (Настройки > Игра): Минимальные / Низкие / Средние / Высокие — чанки, лимит FPS, разрешение, мипмапы, освещение и другое одним нажатием; применяются один раз, каждый параметр потом можно менять отдельно\n- Авто-разрешение рендера и уровень мипмапов (Авто / 0–4) по вашему видеочипу. Исправляет ~1 FPS в мире на старых телефонах с Adreno, например Galaxy A52\n- Каталог модов: кнопка фильтров (совместимость версий, не показывать скачанное), ручная загрузка файлов, не подходящих под вашу версию или загрузчик, поиск объясняет, что и почему отфильтровано; исправлены лишние результаты во вкладке «Скачанные»\n- Новые окна в стиле лаунчера вместо системных (выбор версии, язык, вход через Ely.by, загрузки и другое)\n- Диагностика: FPS, видеочип и время кадра в game.log, журнал сборщика мусора в gc.log, профиль потока рендера при низком FPS\n- Вход через Microsoft пока недоступен: Mojang не одобрил регистрацию приложения\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.9.0.apk",
+     "size": 10484295,
+     "download_count": 10,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.9.0/Mobilix-launcher-v-1.9.0.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.37",
+   "published_at": "2026-10-30T10:43:10Z",
+   "body": "\n**EN: What's new**\n- Mipmap levels setting (Settings > Game): Auto / 0-4. On old GPUs (Adreno 6xx) mipmaps made the world run at ~1 FPS; Auto detects the GPU after the first launch and sets 0 once. Fixes very low FPS on Galaxy A52-class phones\n- Virtual mouse: a \"Mouse\" button in the controls turns on a cursor you move with one finger (tap = left click), with LMB / RMB (hold) and scroll buttons; two fingers scroll lists and settings. Split stacks, move single items, scroll settings\n- Sign in with Microsoft (experimental): device-code login for your own Minecraft account; works once Mojang approves the app registration\n- More memory by default for 1.17+ versions\n- Diagnostics: FPS, GPU info and per-frame timing (GPU vs game) are written to game.log, GC log to gc.log; when FPS is below 15 a render-thread profile is added to game.log\n\n**RU: Что нового?**\n- Настройка мипмапов (Настройки > Игра): Авто / 0–4. На старых видеочипах (Adreno 6xx) мипмапы роняли FPS в мире до ~1; «Авто» определяет видеочип после первого запуска и один раз ставит 0. Исправляет очень низкий FPS на телефонах уровня Galaxy A52\n- Виртуальная мышь: кнопка «Мышь» в управлении включает курсор, который двигается одним пальцем (касание = левый клик), с кнопками ЛКМ / ПКМ (удержание) и прокрутки; два пальца прокручивают списки и настройки. Можно делить стаки, переносить по одному предмету, листать настройки\n- Вход через Microsoft (экспериментально): вход по коду для своего аккаунта Minecraft; заработает после одобрения регистрации приложения Mojang\n- Больше памяти по умолчанию для версий 1.17+\n- Диагностика: FPS, данные о видеочипе и время кадра (GPU или игра) пишутся в game.log, журнал сборщика мусора в gc.log; при FPS ниже 15 в game.log добавляется профиль потока рендера\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.37.apk",
+     "size": 10441295,
+     "download_count": 2,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.37/Mobilix-launcher-v-1.8.37.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.36",
+   "published_at": "2026-10-30T10:28:03Z",
+   "body": "\n**EN: What's new**\n- Virtual mouse: a \"Mouse\" button in the controls turns on a cursor you move with one finger (tap = left click), with LMB / RMB (hold) and scroll buttons; two fingers scroll lists and settings. Split stacks, move single items, scroll settings\n- Sign in with Microsoft (experimental): device-code login for your own Minecraft account; works once Mojang approves the app registration\n- More memory by default for 1.17+ versions\n- Diagnostics: FPS, GPU info and per-frame timing (GPU vs game) are written to game.log, GC log to gc.log; when FPS is below 15 a render-thread profile is added to game.log\n\n**RU: Что нового?**\n- Виртуальная мышь: кнопка «Мышь» в управлении включает курсор, который двигается одним пальцем (касание = левый клик), с кнопками ЛКМ / ПКМ (удержание) и прокрутки; два пальца прокручивают списки и настройки. Можно делить стаки, переносить по одному предмету, листать настройки\n- Вход через Microsoft (экспериментально): вход по коду для своего аккаунта Minecraft; заработает после одобрения регистрации приложения Mojang\n- Больше памяти по умолчанию для версий 1.17+\n- Диагностика: FPS, данные о видеочипе и время кадра (GPU или игра) пишутся в game.log, журнал сборщика мусора в gc.log; при FPS ниже 15 в game.log добавляется профиль потока рендера\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.36.apk",
+     "size": 10438279,
+     "download_count": 2,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.36/Mobilix-launcher-v-1.8.36.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.35",
+   "published_at": "2026-10-30T10:16:54Z",
+   "body": "\n**EN: What's new**\n- Virtual mouse: a \"Mouse\" button in the controls turns on a cursor you move with one finger (tap = left click), with LMB / RMB (hold) and scroll buttons; two fingers scroll lists and settings. Split stacks, move single items, scroll settings\n- Sign in with Microsoft (experimental): device-code login for your own Minecraft account; works once Mojang approves the app registration\n- More memory by default for 1.17+ versions\n- Diagnostics: FPS, GPU info and per-frame timing (GPU vs game) are written to game.log, GC log to gc.log\n\n**RU: Что нового?**\n- Виртуальная мышь: кнопка «Мышь» в управлении включает курсор, который двигается одним пальцем (касание = левый клик), с кнопками ЛКМ / ПКМ (удержание) и прокрутки; два пальца прокручивают списки и настройки. Можно делить стаки, переносить по одному предмету, листать настройки\n- Вход через Microsoft (экспериментально): вход по коду для своего аккаунта Minecraft; заработает после одобрения регистрации приложения Mojang\n- Больше памяти по умолчанию для версий 1.17+\n- Диагностика: FPS, данные о видеочипе и время кадра (GPU или игра) пишутся в game.log, журнал сборщика мусора в gc.log\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.35.apk",
+     "size": 10436851,
+     "download_count": 2,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.35/Mobilix-launcher-v-1.8.35.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.34",
+   "published_at": "2026-10-30T09:46:09Z",
+   "body": "\n**EN: What's new**\n- Virtual mouse: a \"Mouse\" button in the controls turns on a cursor you move with one finger (tap = left click), with LMB / RMB (hold) and scroll buttons; two fingers scroll lists and settings. Split stacks, move single items, scroll settings\n- Sign in with Microsoft (experimental): device-code login for your own Minecraft account; works once Mojang approves the app registration\n- More memory by default for 1.17+ versions\n- Diagnostics: FPS and GPU info are written to game.log, GC log to gc.log\n- Fixed: the version list no longer shows versions below 1.8\n\n**RU: Что нового?**\n- Виртуальная мышь: кнопка «Мышь» в управлении включает курсор, который двигается одним пальцем (касание = левый клик), с кнопками ЛКМ / ПКМ (удержание) и прокрутки; два пальца прокручивают списки и настройки. Можно делить стаки, переносить по одному предмету, листать настройки\n- Вход через Microsoft (экспериментально): вход по коду для своего аккаунта Minecraft; заработает после одобрения регистрации приложения Mojang\n- Больше памяти по умолчанию для версий 1.17+\n- Диагностика: FPS и данные о видеочипе пишутся в game.log, журнал сборщика мусора в gc.log\n- Исправлено: в списке версий больше нет версий ниже 1.8\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.34.apk",
+     "size": 10436691,
+     "download_count": 2,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.34/Mobilix-launcher-v-1.8.34.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.29",
+   "published_at": "2026-10-28T19:57:59Z",
+   "body": "\n**EN: What's new**\n- Forge for old versions: 1.8 – 1.12.2 can now be installed from the version loader and launched (experimental)\n- Sign in with Ely.by: the authlib-injector agent now loads, so servers with Ely.by authentication can accept you\n- Version list shows only supported versions (1.8 and newer)\n- Mods from the catalog are installed into the folder of the selected old version\n- Fixed: Forge installer timeouts (files are re-downloaded), missing Forge profile after install\n\n**RU: Что нового?**\n- Forge для старых версий: 1.8 – 1.12.2 теперь можно установить из загрузчика версий и запустить (экспериментально)\n- Вход через Ely.by: агент authlib-injector теперь загружается, поэтому серверы с авторизацией Ely.by могут вас принять\n- В списке версий только поддерживаемые (1.8 и новее)\n- Моды из каталога ставятся в папку выбранной старой версии\n- Исправлено: таймауты установщика Forge (файлы докачиваются), пропадающий профиль Forge после установки\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.29.apk",
+     "size": 10395639,
+     "download_count": 3,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.29/Mobilix-launcher-v-1.8.29.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.16",
+   "published_at": "2026-10-27T20:54:48Z",
+   "body": "\n**EN: What's new**\n- Old Minecraft versions: 1.8 – 1.12.2 (LWJGL 2 compatibility layer) and 1.13 – 1.16.5 (LWJGL 3.3.3), rendered with gl4es\n- Sign in with Ely.by: your Ely.by skin is refreshed on every launcher start and before each game launch\n- Skin import by nickname (Ely.by / Mojang) with several fallback sources\n- Skin resource pack now works on all versions from 1.8\n- Sprint button is a toggle by default\n- Key combinations: pick the key again to add one more key; reset button and hint\n- Old versions use their own game folder; crash reports are shown in the launcher log\n- Fixed: game failing to start with Ely.by sign-in; GL error spam\n\n**RU: Что нового?**\n- Старые версии Minecraft: 1.8 – 1.12.2 (слой совместимости LWJGL 2) и 1.13 – 1.16.5 (LWJGL 3.3.3), графика через gl4es\n- Вход через Ely.by: скин Ely.by обновляется при каждом запуске лаунчера и перед каждым запуском игры\n- Импорт скина по нику (Ely.by / Mojang) с несколькими запасными источниками\n- Ресурспак со скином работает на всех версиях от 1.8\n- Кнопка бега по умолчанию переключаемая\n- Комбинации клавиш: выберите клавишу ещё раз, чтобы добавить к ней другую; есть подсказка и кнопка сброса\n- Старые версии играют в отдельной папке; отчёты о крэшах показываются в журнале лаунчера\n- Исправлено: игра не запускалась при входе через Ely.by; спам ошибок GL в логе\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.16.apk",
+     "size": 10376779,
+     "download_count": 4,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.16/Mobilix-launcher-v-1.8.16.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.8.0",
+   "published_at": "2026-10-25T14:36:17Z",
+   "body": "EN: What's new\n- Sign in with Ely.by (like ElyPrism): your Ely.by nickname and skin are used in the launcher and in the game, no Azure or card needed. Account page → \"Sign in with Ely.by\". The sign-out button is dark red\n- The repository is now Mobilix-Launcher-for-Minecraft, all links updated\n- Key combinations, skin import by nickname, user agreement link (from 1.7.5)\n\nRU: Что нового?\n- Вход через Ely.by (как в ElyPrism): ник и скин Ely.by используются в лаунчере и в игре, без Azure и карты. Страница «Аккаунт» → «Войти через Ely.by». Кнопка выхода тёмно-красная\n- Репозиторий теперь Mobilix-Launcher-for-Minecraft, все ссылки обновлены\n- Комбинации кнопок, импорт скина по нику, ссылка на соглашение (с 1.7.5)\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.8.0.apk",
+     "size": 8531827,
+     "download_count": 3,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.8.0/Mobilix-launcher-v-1.8.0.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.7.5",
+   "published_at": "2026-10-25T13:32:11Z",
+   "body": "EN: What's new\n- Key combinations: one button can press several keys at once (for example Alt + F4 or 9 + left mouse button). Edit a button in the controls layout and use \"Add a key to the combination\"\n- Skins: import a skin by nickname from Ely.by or Mojang, plus quick links to the Ely.by and SkinMC catalogs (Account page)\n- User agreement and privacy policy (RU/EN), link at the very bottom of the menu\n- Controls layout files from older versions keep working\n\nRU: Что нового?\n- Комбинации кнопок: одна кнопка может нажимать сразу несколько клавиш (например Alt + F4 или 9 + ЛКМ). Откройте кнопку в раскладке управления и нажмите «Добавить клавишу к комбинации»\n- Скины: импорт скина по нику с Ely.by или Mojang и быстрые ссылки на каталоги Ely.by и SkinMC (страница «Аккаунт»)\n- Пользовательское соглашение и политика конфиденциальности (RU/EN), ссылка в самом низу меню\n- Раскладки управления из прошлых версий продолжают работать\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.7.5.apk",
+     "size": 8522439,
+     "download_count": 1,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.7.5/Mobilix-launcher-v-1.7.5.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.7.4",
+   "published_at": "2026-10-25T10:24:15Z",
+   "body": "EN: What's new\n- Play Protect: the app now targets a modern Android version, so it no longer warns that it \"was built for an older version of Android\"\n- New package name (dev.mobilix.launcher) and a new permanent signing key: this is installed as a new app, delete the old one first (game files will be downloaded again)\n- Release build (not debug) with a privacy policy (no data is collected), link on the Social page\n- Forge installation now runs inside the built-in Java (required by modern Android)\n- Multi-threaded download (16 threads), can be turned off in Settings → Launcher\n- Warning before the first launch; the download no longer resets when the screen is rotated\n- The app can be installed on 32-bit devices and explains why the game cannot run there\n- All remaining \"SimpleMC\" names replaced with Mobilix\n\nRU: Что нового?\n- Play Protect: приложение рассчитано на современный Android, поэтому больше не пишет, что оно «создано для более ранней версии Android»\n- Новое имя пакета (dev.mobilix.launcher) и новый постоянный ключ подписи: ставится как новое приложение, старое сначала удалите (файлы игры скачаются заново)\n- Релизная сборка (не debug), политика конфиденциальности (данные не собираются), ссылка на странице «Соцсети»\n- Установка Forge теперь идёт во встроенной Java (так требует современный Android)\n- Многопоточная загрузка (16 потоков), отключается в Настройки → Лаунчер\n- Предупреждение перед первым запуском; загрузка не сбрасывается при повороте экрана\n- Приложение ставится на 32-битные устройства и объясняет, почему игра там не запустится\n- Остатки названия «SimpleMC» заменены на Mobilix\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.7.4.apk",
+     "size": 8510287,
+     "download_count": 3,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.7.4/Mobilix-launcher-v-1.7.4.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.7.1",
+   "published_at": "2026-10-25T08:08:17Z",
+   "body": "EN: What's new\n- The app now targets a modern Android version, so Play Protect no longer warns that it \"was built for an older version of Android\"\n- Release build (not debug), still signed with the same permanent key, so it installs over the previous version\n- Privacy Policy added (no data is collected), link on the Social page\n- Forge installation now runs inside the built-in Java (required by modern Android)\n- Multi-threaded download (16 threads), can be turned off in Settings → Launcher\n- Warning before the first launch; download no longer resets when the screen is rotated\n- The app can now be installed on 32-bit devices and explains why the game cannot run there\n\nRU: Что нового?\n- Приложение теперь рассчитано на современный Android, поэтому Play Protect больше не пишет, что оно «создано для более ранней версии Android»\n- Релизная сборка (не debug), подписана тем же постоянным ключом, ставится поверх прежней версии\n- Добавлена политика конфиденциальности (данные не собираются), ссылка на странице «Соцсети»\n- Установка Forge теперь идёт во встроенной Java (так требует современный Android)\n- Многопоточная загрузка (16 потоков), отключается в Настройки → Лаунчер\n- Предупреждение перед первым запуском; загрузка не сбрасывается при повороте экрана\n- Приложение ставится на 32-битные устройства и объясняет, почему игра там не запустится\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.7.1.apk",
+     "size": 8509124,
+     "download_count": 1,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.7.1/Mobilix-launcher-v-1.7.1.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.6.0",
+   "published_at": "2026-10-24T15:12:03Z",
+   "body": "EN: What's new?\r\nBetter settings menu\r\nRU: Что нового?\r\nУлучшено меню настроек",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.6.0.apk",
+     "size": 9777343,
+     "download_count": 2,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.6.0/Mobilix-launcher-v-1.6.0.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK-1.5.3",
+   "published_at": "2026-10-24T09:32:42Z",
+   "body": "EN: What's new? \r\nDebug\r\nRAM setting\r\nVersion deleting menu\r\n(Test) Work on Android 9-10\r\nRU: Что нового?\r\nИсправление багов\r\nНастройки ОЗУ\r\nВозможность удаления версий\r\n(Тестирование) Работа на Android 9 - 15",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.5.3.apk",
+     "size": 9767555,
+     "download_count": 1,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.5.3/Mobilix-launcher-v-1.5.3.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "AKP-1.7.0",
+   "published_at": "2026-10-24T18:50:37Z",
+   "body": "EN: What's new\n- Faster first launch: multi-threaded download (16 threads), can be turned off in Settings → Launcher\n- A warning before the first launch: downloading takes a few minutes\n- Fixed: the download no longer resets when the screen is rotated\n- Better support for older devices: the app now installs on 32-bit devices and explains clearly why the game cannot run there\n- Automatic GitHub releases for important versions\n\nRU: Что нового?\n- Быстрее первая загрузка: многопоточное скачивание (16 потоков), отключается в Настройки → Лаунчер\n- Предупреждение перед первым запуском: скачивание занимает несколько минут\n- Исправлено: загрузка больше не сбрасывается при повороте экрана\n- Лучше для старых устройств: приложение теперь устанавливается на 32-битные устройства и понятно объясняет, почему игра там не запустится\n- Автоматические релизы на GitHub для важных версий\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.7.0.apk",
+     "size": 9782305,
+     "download_count": 3,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/AKP-1.7.0/Mobilix-launcher-v-1.7.0.apk"
+    }
+   ]
+  },
+  {
+   "tag_name": "APK",
+   "published_at": "2026-10-23T19:52:42Z",
+   "body": "EN: First version, that you can download. \r\n1.5.0 - What's new?\r\nMods and Resource packs now have their icons\r\nVersion Dowlander is working now\r\n1.3.5-1.4.3 - What was added?\r\nNew GUI\r\nSettings\r\nVersons\r\n3D skin preview \r\nSkin changer\r\nLog in to Microsoft (it is optional)\r\nLanguage (Ru/En)\r\nAnd a lot of small features\r\n\r\nRU: Первая версия, которую вы можете скачать. \r\n1.5.0 - Что нового?\r\nМоды и пакеты ресурсов теперь имеют свои значки\r\nВерсия Dowlander теперь работает\r\n1.3.5-1.4.3 - Что было добавлено?\r\nНовый графический интерфейс\r\nНастройки\r\nВерсии\r\nПредварительный просмотр скина \r\nИзменение скина\r\nВход через Microsoft (необязательно)\r\nЯзык (Ру/Англ)\r\nИ множество мелких функций",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.5.0.apk",
+     "size": 6531643,
+     "download_count": 2,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK/Mobilix-launcher-v-1.5.0.apk"
+    }
+   ]
+  }
+ ]
+}
