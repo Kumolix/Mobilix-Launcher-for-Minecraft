@@ -52,27 +52,33 @@ class MsLogoView(ctx: Context) : View(ctx) {
 /** Цвета светлой/тёмной темы лаунчера (зелёный акцент в обеих). */
 object Th {
     var light = false
+    /** true = старое зелёное оформление; false = новое графитовое. */
+    var classic = false
     private fun c(d: Long, l: Long) = (if (light) l else d).toInt()
-    val bg get() = c(0xFF0B0F0C, 0xFFF1F6F2)
-    val bar get() = c(0xFF121A15, 0xFFE2EDE5)
-    val drawer get() = c(0xFF0F1712, 0xFFFFFFFF)
-    val skinBg get() = c(0xFF0E1F14, 0xFFDCEBDF)
-    val accent get() = c(0xFF43E06A, 0xFF1B7F3A)
-    val text get() = c(0xFFFFFFFF, 0xFF10200F)
-    val text2 get() = c(0xFFB8E6C4, 0xFF2B4B33)
-    val dim get() = c(0xFF7FA08A, 0xFF5A7A62)
-    val line get() = c(0xFF22332A, 0xFFCADBCE)
-    val line2 get() = c(0xFF1B2A20, 0xFFDCE8DF)
-    val altBg get() = (if (light) 0xFF0B0F0C else 0xFFF1F6F2).toInt()
-    val altText get() = (if (light) 0xFF43E06A else 0xFF10200F).toInt()
-    val hint get() = c(0xFF58705F, 0xFF8AA391)
+    private fun n(cd: Long, cl: Long, nd: Long, nl: Long) = c(if (classic) cd else nd, if (classic) cl else nl)
+    val bg get() = n(0xFF0B0F0C, 0xFFF1F6F2, 0xFF0C0D0F, 0xFFF4F5F7)
+    val bar get() = n(0xFF121A15, 0xFFE2EDE5, 0xFF141518, 0xFFE9EBEE)
+    val drawer get() = n(0xFF0F1712, 0xFFFFFFFF, 0xFF111214, 0xFFFFFFFF)
+    val skinBg get() = n(0xFF0E1F14, 0xFFDCEBDF, 0xFF131519, 0xFFE3E6EA)
+    val accent get() = n(0xFF43E06A, 0xFF1B7F3A, 0xFF4ADE80, 0xFF1B7F3A)
+    val text get() = n(0xFFFFFFFF, 0xFF10200F, 0xFFF2F4F7, 0xFF14171B)
+    val text2 get() = n(0xFFB8E6C4, 0xFF2B4B33, 0xFFC9CED6, 0xFF2F353D)
+    val dim get() = n(0xFF7FA08A, 0xFF5A7A62, 0xFF8A919C, 0xFF626A75)
+    val line get() = n(0xFF22332A, 0xFFCADBCE, 0xFF25282D, 0xFFD6DAE0)
+    val line2 get() = n(0xFF1B2A20, 0xFFDCE8DF, 0xFF1B1D21, 0xFFE3E6EB)
+    val chip get() = n(0xFF14301D, 0xFF14301D, 0xFF24282E, 0xFF24282E)
+    val chip2 get() = n(0xFF0F2416, 0xFF0F2416, 0xFF1B1E23, 0xFF1B1E23)
+    val accentDk get() = n(0xFF1B6E34, 0xFF1B6E34, 0xFF1F7A45, 0xFF1F7A45)
+    val altBg get() = (if (light) (if (classic) 0xFF0B0F0C else 0xFF0C0D0F) else (if (classic) 0xFFF1F6F2 else 0xFFF4F5F7)).toInt()
+    val altText get() = (if (light) 0xFF4ADE80 else 0xFF14171B).toInt()
+    val hint get() = n(0xFF58705F, 0xFF8AA391, 0xFF5C636E, 0xFF8E96A1)
 }
 
 /** Квадратная кнопка фильтров: три ползунка (вверх, вниз, вверх) с квадратными ручками и число включённых фильтров. */
 class FilterView(ctx: Context) : View(ctx) {
     var count = 0
         set(v) { field = v; invalidate() }
-    private val back = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF14301D.toInt() }
+    private val back = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Th.chip }
     private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF2EA84F.toInt() }
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.SQUARE; color = 0xFF43E06A.toInt() }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF43E06A.toInt() }
@@ -166,7 +172,7 @@ class MobDialog(private val ctx: Context) {
                 col.addView(TextView(ctx).apply {
                     text = label; textSize = 15f; setTextColor(Th.text); setPadding(dp(10), dp(12), dp(10), dp(12))
                     background = StateListDrawable().apply {
-                        addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(0xFF14301D.toInt()))
+                        addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(Th.chip))
                         addState(intArrayOf(), ColorDrawable(0))
                     }
                     isClickable = true
@@ -181,7 +187,7 @@ class MobDialog(private val ctx: Context) {
                 text = b.text; textSize = 14f; gravity = Gravity.CENTER; isClickable = true
                 setTextColor(if (primary) Color.WHITE else Th.text2)
                 setPadding(dp(16), dp(10), dp(16), dp(10))
-                setBackgroundColor(if (primary) 0xFF2EA84F.toInt() else 0xFF14301D.toInt())
+                setBackgroundColor(if (primary) 0xFF2EA84F.toInt() else Th.chip)
                 setOnClickListener { d.dismiss(); b.l?.onClick(d, which) }
             }
             neu?.let { row.addView(button(it, DialogInterface.BUTTON_NEUTRAL, false)) }
@@ -244,7 +250,7 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
 class CaretView(ctx: Context) : View(ctx) {
     var up = true
         set(v) { field = v; invalidate() }
-    private val back = Paint().apply { color = 0xFF14301D.toInt() }
+    private val back = Paint().apply { color = Th.chip }
     private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF2EA84F.toInt() }
     private val fill = Paint().apply { color = 0xFF43E06A.toInt() }
     init { isClickable = true }
