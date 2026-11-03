@@ -1844,9 +1844,13 @@ class MainActivity : Activity() {
                                 log("Forge: установка, попытка $attempt (это долго, потерпите)…")
                                 runForgeInstaller(rt, installer, root)
                                 found = findProfile("forge", mc)
-                                if (found != null) break
+                                // профиль появляется раньше, чем постпроцессоры создадут srg/extra/client: проверяем сами файлы
+                                val miss = if (found != null) forgeMissingOutputs(installer, root, found) else emptyList()
+                                if (found != null && miss.isEmpty()) break
+                                if (miss.isNotEmpty()) log("Forge: установка не завершилась, нет файлов: ${miss.joinToString(", ")}")
+                                found = null
                             }
-                            id = found ?: throw RuntimeException("Forge установился, но профиль не найден")
+                            id = found ?: throw RuntimeException("Forge не установился до конца (не созданы файлы постобработки). Попробуйте ещё раз, закрыв другие приложения.")
                             if (legacyMc) { log("Профиль $id создан, докачиваю библиотеки…"); prepareAndRun(id, false) }
                         }
                     }
@@ -2389,6 +2393,14 @@ class MainActivity : Activity() {
         val javaMajor = v.optJSONObject("javaVersion")?.optInt("majorVersion", 0) ?: 0
         log("Нужна Java: $javaMajor")
         val legacy = JSONObject(versionJsonFile.readText()).optJSONObject("arguments") == null
+        if (!legacy && profile.contains("forge")) {
+            val inst = File(root, "forge-installer.jar")
+            val miss = if (inst.exists()) forgeMissingOutputs(inst, root, profile) else emptyList()
+            if (miss.isNotEmpty()) {
+                File(root, "versions/$profile").deleteRecursively()
+                throw RuntimeException("Forge установлен не полностью (нет ${miss.joinToString(", ")}). Профиль сброшен: установите Forge заново в разделе «Загрузчик версий».")
+            }
+        }
         // старые версии играют в своей папке: настройки и миры 1.13+ ломают их (options.txt и т.п.)
         val gameDir = (activeBuild()?.let { buildDir(it.optString("id")) }
             ?: if (legacy) File(root, "game-$baseVer") else File(root, "game")).apply { mkdirs() }
@@ -3218,6 +3230,37 @@ class MainActivity : Activity() {
     }
 
     /** Запускает установщик Forge внутри процесса :game (в нём уже есть встроенная Java). */
+    /** Файлы, которые постпроцессоры установщика Forge 1.13+ должны создать (srg, extra, пропатченный клиент); пусто, если всё на месте. */
+    private fun forgeMissingOutputs(installer: File, root: File, profile: String? = null): List<String> {
+        return try {
+            java.util.zip.ZipFile(installer).use { z ->
+                val prof = JSONObject(z.getInputStream(z.getEntry("install_profile.json")).bufferedReader().readText())
+                val data = prof.optJSONObject("data") ?: return emptyList()
+                val patched = data.optJSONObject("PATCHED")?.optString("client", "") ?: ""
+                // установщик в корне мог остаться от другой версии Forge: тогда ничего не проверяем
+                if (profile != null && patched.length > 2) {
+                    val ver = patched.trim('[', ']').split(":").getOrNull(2) ?: ""
+                    if (ver.contains("-") && !profile.contains(ver.substringAfter("-"))) return emptyList()
+                }
+                val missing = ArrayList<String>()
+                for (k in listOf("MC_SRG", "MC_EXTRA", "PATCHED")) {
+                    val v = data.optJSONObject(k)?.optString("client", "") ?: continue
+                    if (v.startsWith("[") && v.endsWith("]")) {
+                        val f = File(File(root, "libraries"), mavenPath(v.substring(1, v.length - 1)))
+                        if (!f.exists() || f.length() < 1000) missing.add(f.name)
+                    }
+                }
+                missing
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun installerHeapMb(): Int {
+        val mi = android.app.ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+        return if (mi.totalMem / 1024 / 1024 >= 6000) 1280 else 768
+    }
+
     private fun runForgeInstaller(rt: File, installer: File, root: File) {
         val mainClass = try {
             java.util.jar.JarFile(installer).use { it.manifest?.mainAttributes?.getValue("Main-Class") }
@@ -3225,7 +3268,7 @@ class MainActivity : Activity() {
         val j = JSONObject()
         j.put("javaHome", rt.path)
         j.put("main", mainClass)
-        j.put("jvm", JSONArray(listOf("-cp", installer.path, "-Xmx768M", "-XX:+UseSerialGC", "-Djava.awt.headless=true",
+        j.put("jvm", JSONArray(listOf("-cp", installer.path, "-Xmx${installerHeapMb()}M", "-XX:+UseSerialGC", "-Djava.awt.headless=true",
             "-Duser.home=${root.path}", "-Djava.io.tmpdir=${cacheDir.path}", "-Duser.dir=${root.path}")))
         j.put("game", JSONArray(listOf("--installClient", root.path)))
         j.put("glLib", "")
