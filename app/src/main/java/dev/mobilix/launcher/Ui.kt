@@ -335,7 +335,7 @@ class FxView(ctx: Context, private val kind: String) : View(ctx) {
 }
 
 /** Мини-превью оформления: фон, верхняя полоса, область скина, строка версии и кнопка «Играть» в цветах выбранной гаммы. */
-class StyleCard(ctx: Context, private val c: IntArray, var selected: Boolean) : View(ctx) {
+class StyleCard(ctx: Context, private val c: IntArray, private val chosen: Boolean) : View(ctx) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onDraw(cv: Canvas) {
         val d = resources.displayMetrics.density
@@ -357,8 +357,8 @@ class StyleCard(ctx: Context, private val c: IntArray, var selected: Boolean) : 
         for (i in 0 until 4) { p.color = if (i == 1) c[3] else c[4]; p.alpha = if (i == 1) 255 else 120; cv.drawRect(w * (0.12f + i * 0.22f), h * 0.945f, w * (0.12f + i * 0.22f) + 8f * d, h * 0.945f + 8f * d, p); p.alpha = 255 }
         cv.restore()
         p.style = Paint.Style.STROKE
-        p.strokeWidth = (if (selected) 3f else 1f) * d
-        p.color = if (selected) c[3] else 0x55888888
+        p.strokeWidth = (if (chosen) 3f else 1f) * d
+        p.color = if (chosen) c[3] else 0x55888888
         cv.drawRoundRect(RectF(p.strokeWidth / 2, p.strokeWidth / 2, w - p.strokeWidth / 2, h - p.strokeWidth / 2), r, r, p)
     }
 }
