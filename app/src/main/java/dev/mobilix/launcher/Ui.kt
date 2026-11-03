@@ -235,13 +235,19 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
         val SHIELD = listOf(".sssssss.", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", ".sSSSSSs.", "..sSSSs..", "...sSs...", "....s....")
         val SHIELD_PAL = mapOf('s' to 0xFF2EA84F.toInt(), 'S' to 0xFF5BD67B.toInt())
         val MENU_PAL = mapOf('g' to 0xFF2EA84F.toInt(), 'G' to 0xFF5BD67B.toInt(), 'W' to 0xFFE8F5EC.toInt())
-        val I_USER = listOf("............", "....GGGG....", "...GGGGGG...", "...GGGGGG...", "...GGGGGG...", "....gggg....", "............", "..GGGGGGGG..", ".GGGGGGGGGG.", ".GGGGGGGGGG.", ".GGGGGGGGGG.", ".gggggggggg.")
-        val I_GEAR = listOf(".....GGG.....", "..GG.GGG.GG..", ".GGGGGGGGGGG.", "..GGGGGGGGG..", "..GGG...GGG..", "GGGG.....GGGG", "GGGG.....GGGG", "GGGG.....GGGG", "..GGG...GGG..", "..GGGGGGGGG..", ".GGGGGGGGGGG.", "..GG.GGG.GG..", ".....GGG.....")
+        val I_USER = listOf("....gggg....", "...gGGGGg...", "...gGGGGg...", "...gGGGGg...", "....gggg....", "............", "..gggggggg..", ".gGGGGGGGGg.", ".gGGGGGGGGg.", ".gGGGGGGGGg.", ".gggggggggg.")
+        val I_GEAR = listOf(".....ggg.....", "..gg.gGg.gg..", ".gGGgGGGgGGg.", "..gGGgggGGg..", "..gGg...gGg..", "ggGg.....gGgg", "gGGg.....gGGg", "ggGg.....gGgg", "..gGg...gGg..", "..gGGgggGGg..", ".gGGgGGGgGGg.", "..gg.gGg.gg..", ".....ggg.....")
         val I_VERS = listOf("....g....", "....G....", "....G....", ".gggGggg.", "..gGGGg..", "...gGg...", "....g....", "g.......g", "ggggggggg")
         val I_CAT = listOf("gggg.gggg", "gGGg.gGGg", "gGGg.gGGg", "gggg.gggg", ".........", "gggg.gggg", "gGGg.gGGg", "gGGg.gGGg", "gggg.gggg")
-        val I_PAD = listOf("..GGGGGGGGGGG..", ".GGGGGGGGGGGGG.", "GGGGgGGGGGGgGGG", "GGGgggGGGGgGgGG", "GGGGgGGGGGGgGGG", "GGGGGGGGGGGGGGG", ".GGGGGGGGGGGGG.", ".GGGGG...GGGGG.", "..GGG.....GGG..")
+        val I_PAD = listOf("....g....", "...gGg...", ".........", ".g.GgG.g.", "gG.ggg.Gg", ".g.GgG.g.", ".........", "...gGg...", "....g....")
         val I_CHAT = listOf(".ggggggg.", "gGGGGGGGg", "gGWGWGWGg", "gGGGGGGGg", ".ggggggg.", "..gG.....", "..g......")
         val I_GLOBE = listOf(".....GGG.....", "...GGGGGGG...", "..G.GG.GG.G..", ".G.GG...GG.G.", ".G.G.....G.G.", "G..G.....G..G", "GGGGGGGGGGGGG", "G..G.....G..G", ".G.G.....G.G.", ".G.GG...GG.G.", "..G.GG.GG.G..", "...GGGGGGG...", ".....GGG.....")
+        val PUMPKIN = listOf("....uu...", "..oouoo..", ".ooooooo.", "ookoookoo", "ookkokkoo", "ooooooooo", "okokokoko", ".okkkkko.", "..OOOOO..")
+        val SNOWFLAKE = listOf("...w...", ".w.w.w.", "..www..", "wwwwwww", "..www..", ".w.w.w.", "...w...")
+        val BAT = listOf("k.......k", "kk.k.k.kk", "kkkkkkkkk", ".kk.k.kk.")
+        val PUMPKIN_PAL = mapOf('o' to 0xFFF28A1E.toInt(), 'O' to 0xFFC25A0A.toInt(), 'u' to 0xFF4C9A2A.toInt(), 'k' to 0xFF2A1608.toInt())
+        val SNOW_PAL = mapOf('w' to 0xFFDCEBFF.toInt())
+        val BAT_PAL = mapOf('k' to 0xFF8A6BD6.toInt())
         val TRASH_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'R' to 0xFFA3231C.toInt())
     }
 }
@@ -271,4 +277,88 @@ class CaretView(ctx: Context) : View(ctx) {
         }
     }
 
+}
+
+
+/** Праздничные эффекты поверх лаунчера (не ловят касания): снег на Новый год, тыквы и летучие мыши на Хеллоуин. */
+class FxView(ctx: Context, private val kind: String) : View(ctx) {
+    private class P(var x: Float, var y: Float, var vx: Float, var vy: Float, var ph: Float, val bmp: android.graphics.Bitmap, val size: Float, val bat: Boolean)
+    private val ps = ArrayList<P>()
+    private val paint = Paint().apply { isFilterBitmap = false }
+    private val rnd = java.util.Random()
+    private var last = 0L
+    private val d = resources.displayMetrics.density
+    private fun bmp(rows: List<String>, pal: Map<Char, Int>): android.graphics.Bitmap {
+        val w = rows.maxOf { it.length }
+        val b = android.graphics.Bitmap.createBitmap(w, rows.size, android.graphics.Bitmap.Config.ARGB_8888)
+        for (y in rows.indices) for (x in rows[y].indices) pal[rows[y][x]]?.let { b.setPixel(x, y, it) }
+        return b
+    }
+    private val pump = bmp(PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
+    private val snow = bmp(PixelIcon.SNOWFLAKE, PixelIcon.SNOW_PAL)
+    private val bat = bmp(PixelIcon.BAT, PixelIcon.BAT_PAL)
+    private fun spawn(top: Boolean): P {
+        val w = width.toFloat().coerceAtLeast(1f); val h = height.toFloat().coerceAtLeast(1f)
+        val x = rnd.nextFloat() * w; val y = if (top) -20f * d else rnd.nextFloat() * h
+        return if (kind == "newyear") {
+            val big = rnd.nextInt(4) == 0
+            P(x, y, (rnd.nextFloat() - 0.5f) * 14f * d, (22f + rnd.nextFloat() * 28f) * d, rnd.nextFloat() * 6f, snow, (if (big) 14f else 8f + rnd.nextFloat() * 3f) * d, false)
+        } else if (rnd.nextInt(3) == 0) {
+            P(x, rnd.nextFloat() * h * 0.7f, (if (rnd.nextBoolean()) 1 else -1) * (30f + rnd.nextFloat() * 30f) * d, 0f, rnd.nextFloat() * 6f, bat, 20f * d, true)
+        } else {
+            P(x, y, (rnd.nextFloat() - 0.5f) * 10f * d, (16f + rnd.nextFloat() * 20f) * d, rnd.nextFloat() * 6f, pump, (16f + rnd.nextFloat() * 8f) * d, false)
+        }
+    }
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        ps.clear()
+        val n = if (kind == "newyear") 30 else 14
+        repeat(n) { ps.add(spawn(false)) }
+    }
+    override fun onDraw(c: Canvas) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val dt = if (last == 0L) 0.016f else minOf(50L, now - last) / 1000f
+        last = now
+        val w = width.toFloat(); val h = height.toFloat()
+        for (i in ps.indices) {
+            val p = ps[i]
+            p.ph += dt * (if (p.bat) 5f else 1.5f)
+            p.x += p.vx * dt + (if (p.bat) 0f else Math.sin(p.ph.toDouble()).toFloat() * 8f * d * dt)
+            p.y += p.vy * dt + (if (p.bat) Math.sin(p.ph.toDouble()).toFloat() * 30f * d * dt else 0f)
+            if (p.bat) { if (p.x < -30f * d) p.x = w + 20f * d else if (p.x > w + 30f * d) p.x = -20f * d }
+            else if (p.y > h + 20f * d) ps[i] = spawn(true)
+            val sw = p.size; val sh = p.size * p.bmp.height / p.bmp.width
+            paint.alpha = if (kind == "newyear") 210 else 235
+            c.drawBitmap(p.bmp, null, RectF(p.x, p.y, p.x + sw, p.y + sh), paint)
+        }
+        postInvalidateOnAnimation()
+    }
+}
+
+/** Мини-превью оформления: фон, верхняя полоса, область скина, строка версии и кнопка «Играть» в цветах выбранной гаммы. */
+class StyleCard(ctx: Context, private val c: IntArray, var selected: Boolean) : View(ctx) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    override fun onDraw(cv: Canvas) {
+        val d = resources.displayMetrics.density
+        val w = width.toFloat(); val h = height.toFloat()
+        val r = 10f * d
+        val clip = android.graphics.Path().apply { addRoundRect(RectF(0f, 0f, w, h), r, r, android.graphics.Path.Direction.CW) }
+        cv.save(); cv.clipPath(clip)
+        p.style = Paint.Style.FILL
+        p.color = c[0]; cv.drawRect(0f, 0f, w, h, p)
+        p.color = c[1]; cv.drawRect(0f, 0f, w, h * 0.16f, p)
+        p.color = c[3]; cv.drawRect(w * 0.36f, h * 0.06f, w * 0.64f, h * 0.10f, p)
+        p.color = c[5]; cv.drawRect(0f, h * 0.16f, w, h * 0.58f, p)
+        p.color = c[3]; cv.drawCircle(w / 2, h * 0.30f, 7f * d, p)
+        p.color = c[4]; cv.drawRect(w / 2 - 9f * d, h * 0.30f + 10f * d, w / 2 + 9f * d, h * 0.30f + 24f * d, p)
+        p.color = c[2]; cv.drawRect(0f, h * 0.58f, w, h * 0.74f, p)
+        p.color = c[4]; cv.drawRect(w * 0.10f, h * 0.64f, w * 0.40f, h * 0.68f, p)
+        p.color = 0xFF2EA84F.toInt(); cv.drawRect(0f, h * 0.76f, w, h * 0.92f, p)
+        p.color = c[1]; cv.drawRect(0f, h * 0.92f, w, h, p)
+        for (i in 0 until 4) { p.color = if (i == 1) c[3] else c[4]; p.alpha = if (i == 1) 255 else 120; cv.drawRect(w * (0.12f + i * 0.22f), h * 0.945f, w * (0.12f + i * 0.22f) + 8f * d, h * 0.945f + 8f * d, p); p.alpha = 255 }
+        cv.restore()
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = (if (selected) 3f else 1f) * d
+        p.color = if (selected) c[3] else 0x55888888
+        cv.drawRoundRect(RectF(p.strokeWidth / 2, p.strokeWidth / 2, w - p.strokeWidth / 2, h - p.strokeWidth / 2), r, r, p)
+    }
 }

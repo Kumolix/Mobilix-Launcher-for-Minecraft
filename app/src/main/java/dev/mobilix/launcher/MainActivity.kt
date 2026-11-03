@@ -96,6 +96,23 @@ class MainActivity : Activity() {
     private lateinit var ghItem: TextView
     private val menuEntries = ArrayList<Triple<String, Pair<List<String>, Map<Char, Int>>, () -> Unit>>()
     private var ghTab: View? = null
+    /** Цвета гаммы для превью: фон, панель, кнопка, акцент, текст, область скина. */
+    private fun stylePalette(light: Boolean, classic: Boolean): IntArray {
+        val ol = Th.light; val oc = Th.classic
+        Th.light = light; Th.classic = classic
+        val r = intArrayOf(Th.bg, Th.bar, Th.chip, Th.accent, Th.text, Th.skinBg)
+        Th.light = ol; Th.classic = oc
+        return r
+    }
+    /** Праздничный сезон за неделю до и после: Хеллоуин 24 окт – 7 ноя, Новый год 25 дек – 8 янв. */
+    internal fun season(): String? {
+        val c = java.util.Calendar.getInstance(); val m = c.get(java.util.Calendar.MONTH); val d = c.get(java.util.Calendar.DAY_OF_MONTH)
+        return when {
+            (m == java.util.Calendar.OCTOBER && d >= 24) || (m == java.util.Calendar.NOVEMBER && d <= 7) -> "halloween"
+            (m == java.util.Calendar.DECEMBER && d >= 25) || (m == java.util.Calendar.JANUARY && d <= 8) -> "newyear"
+            else -> null
+        }
+    }
     internal fun navBottom() = prefs.getString("nav", "bottom") != "side"
     private var updateVer: String? = null
 
@@ -227,7 +244,13 @@ class MainActivity : Activity() {
         // верхняя полоса: название по центру, лог справа (кнопка-меню рисуется поверх всего)
         val top = FrameLayout(this).apply { setBackgroundColor(Th.bar) }
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-        titleBox.addView(TextView(this).apply { text = "Mobilix"; textSize = 22f; setTextColor(Th.accent); gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f })
+        val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        titleRow.addView(TextView(this).apply { text = "Mobilix"; textSize = 22f; setTextColor(Th.accent); gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f })
+        season()?.let { sn ->
+            val st = if (sn == "newyear") PixelIcon(this, PixelIcon.SNOWFLAKE, mapOf('w' to 0xFF8FD0FF.toInt())) else PixelIcon(this, PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
+            titleRow.addView(st, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(6) })
+        }
+        titleBox.addView(titleRow)
         verLabel = TextView(this).apply {
             text = versionLabel(); textSize = 11f; setTextColor(Th.dim); gravity = Gravity.CENTER
             setOnClickListener { if (updateVer != null) openGithub() }
@@ -392,6 +415,26 @@ class MainActivity : Activity() {
 
         pageLayer = FrameLayout(this).apply { visibility = View.GONE }
         rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom()) bottomMargin = dp(57) })
+
+        season()?.let { sn ->
+            val fx = FxView(this, sn)
+            fx.visibility = if (prefs.getBoolean("fxOn", true)) View.VISIBLE else View.GONE
+            rootFrame.addView(fx, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            // временная кнопка эффектов у скина: есть только в праздничную неделю
+            val ico = if (sn == "newyear") PixelIcon(this, PixelIcon.SNOWFLAKE, mapOf('w' to 0xFF8FD0FF.toInt())) else PixelIcon(this, PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
+            val btn = FrameLayout(this).apply {
+                isClickable = true; alpha = if (fx.visibility == View.VISIBLE) 1f else 0.4f
+                background = GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.accent); cornerRadius = dp(8).toFloat() }
+                setOnClickListener {
+                    val on = fx.visibility != View.VISIBLE
+                    prefs.edit().putBoolean("fxOn", on).apply()
+                    fx.visibility = if (on) View.VISIBLE else View.GONE
+                    alpha = if (on) 1f else 0.4f
+                }
+            }
+            btn.addView(ico, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+            skinBox.addView(btn, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END or Gravity.BOTTOM).apply { marginEnd = dp(10); bottomMargin = dp(10) })
+        }
 
         setContentView(rootFrame)
         Thread { loadSkin() }.start()
@@ -588,16 +631,25 @@ class MainActivity : Activity() {
         val sv = ScrollView(this)
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), dp(24)) }
         col.addView(header(tr("Лаунчер", "Launcher")))
-        col.addView(TextView(this).apply { text = tr("Тема", "Theme"); setTextColor(Th.text); setPadding(0, 0, 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Тёмная", "Dark"), tr("Светлая", "Light")), if (Th.light) 1 else 0) { i ->
-            prefs.edit().putString("theme", if (i == 1) "light" else "dark").apply()
-            recreate()
-        })
-        col.addView(TextView(this).apply { text = tr("Оформление", "Style"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Новое", "New"), tr("Старое", "Classic")), if (Th.classic) 1 else 0) { i ->
-            prefs.edit().putString("style", if (i == 1) "old" else "new").apply()
-            recreate()
-        })
+        col.addView(TextView(this).apply { text = tr("Оформление", "Appearance"); setTextColor(Th.text); setPadding(0, 0, 0, dp(8)) })
+        val cards = listOf(
+            Triple(tr("Графит · тёмная", "Graphite · dark"), false, false), Triple(tr("Графит · светлая", "Graphite · light"), true, false),
+            Triple(tr("Классика · тёмная", "Classic · dark"), false, true), Triple(tr("Классика · светлая", "Classic · light"), true, true))
+        for (rowI in 0..1) {
+            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (k in 0..1) {
+                val (label, lt, cl) = cards[rowI * 2 + k]
+                val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; isClickable = true }
+                cell.addView(StyleCard(this, stylePalette(lt, cl), Th.light == lt && Th.classic == cl), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)))
+                cell.addView(TextView(this).apply { text = label; textSize = 13f; setTextColor(Th.text2); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(6)) })
+                cell.setOnClickListener {
+                    prefs.edit().putString("theme", if (lt) "light" else "dark").putString("style", if (cl) "old" else "new").apply()
+                    recreate()
+                }
+                line.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { if (k == 0) marginEnd = dp(6) else marginStart = dp(6) })
+            }
+            col.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) })
+        }
         col.addView(TextView(this).apply { text = tr("Меню", "Menu"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Нижняя панель", "Bottom bar"), tr("Боковое", "Side")), if (navBottom()) 0 else 1) { i ->
             prefs.edit().putString("nav", if (i == 0) "bottom" else "side").apply()
