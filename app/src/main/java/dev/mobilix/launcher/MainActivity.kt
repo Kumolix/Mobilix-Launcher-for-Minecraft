@@ -116,7 +116,7 @@ class MainActivity : Activity() {
                 else PixelIcon(this, PixelIcon.SHIELD, PixelIcon.SHIELD_PAL)
             row.addView(ic, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(16) })
             val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            txt.addView(TextView(this).apply { text = title; textSize = 16f; setTextColor(if (hi) Th.altText else Color.WHITE) })
+            txt.addView(TextView(this).apply { text = title; textSize = 16f; setTextColor(if (hi) Th.altText else Th.chipText) })
             // адрес и пояснения: мелко и светло-зелёным, это второстепенное
             txt.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(if (hi) Th.altText else 0xFF8FD6A3.toInt()); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
             row.addView(txt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -206,7 +206,7 @@ class MainActivity : Activity() {
     }
 
     private fun bar(text: String, color: Int, sizeSp: Float, h: Int, onClick: () -> Unit) = TextView(this).apply {
-        this.text = text; textSize = sizeSp; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+        this.text = text; textSize = sizeSp; setTextColor(Th.chipText); gravity = Gravity.CENTER
         background = sel(color); isClickable = true; minHeight = dp(h)
         setOnClickListener { onClick() }
     }
@@ -490,7 +490,7 @@ class MainActivity : Activity() {
                 col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = if (i == 0) 0 else dp(6) })
             }
             val t = TextView(this).apply {
-                text = l; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(dp(10), dp(12), dp(10), dp(12))
+                text = l; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(10), dp(12), dp(10), dp(12))
                 setOnClickListener { paint(i); onPick(i) }
             }
             views.add(t)
@@ -506,7 +506,7 @@ class MainActivity : Activity() {
         fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) 0xFF2EA84F.toInt() else Th.chip) }
         labels.forEachIndexed { i, l ->
             val t = TextView(this).apply {
-                text = l; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(dp(14), dp(10), dp(14), dp(10))
+                text = l; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnClickListener { paint(i); onPick(i) }
             }
             views.add(t)
@@ -620,7 +620,7 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Джойстик: тяните в сторону, чтобы идти; за край круга — бег.", "Joystick: drag to walk; beyond the ring to sprint.")))
         col.addView(Button(this).apply {
-            text = tr("Открыть папку игры", "Open game folder"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(Th.chip)
+            text = tr("Открыть папку игры", "Open game folder"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
             setOnClickListener { openGameFolder() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(14) })
         col.addView(note(tr("Откроется «Мои файлы» (Samsung) или стандартный проводник. Путь также скопирован в буфер.", "Opens My Files (Samsung) or the system file manager. The path is also copied.")))
@@ -733,7 +733,7 @@ class MainActivity : Activity() {
         }
         col.addView(mirror)
         col.addView(Button(this).apply {
-            text = tr("Сбросить адрес", "Reset address"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(Th.chip)
+            text = tr("Сбросить адрес", "Reset address"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
             setOnClickListener { mirror.setText(DEFAULT_MIRROR); prefs.edit().putString("mirrorApi", DEFAULT_MIRROR).apply() }
         }, LinearLayout.LayoutParams(dp(180), dp(40)).apply { topMargin = dp(6) })
         col.addView(note(tr("Если Modrinth недоступен, выберите Modrinth Black. Если зеркало не отвечает, поправьте адрес API здесь.",
@@ -775,10 +775,10 @@ class MainActivity : Activity() {
         val rec = idx().optJSONObject(id)
         if (rec != null && packFile(rec.optString("t"), rec.optString("f")).exists()) {
             box.addView(Button(this).apply {
-                text = tr("Загружено", "Downloaded"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(Th.chip); isEnabled = false
+                text = tr("Загружено", "Downloaded"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip); isEnabled = false
             }, LinearLayout.LayoutParams(dp(120), dp(40)))
             box.addView(Button(this).apply {
-                text = tr("Удалить", "Delete"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(0xFFB3261E.toInt())
+                text = tr("Удалить", "Delete"); isAllCaps = false; setTextColor(Th.chipText); background = sel(0xFFB3261E.toInt())
                 setOnClickListener {
                     packFile(rec.optString("t"), rec.optString("f")).delete()
                     idxSave(idx().apply { remove(id) })
@@ -787,7 +787,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(100), dp(40)).apply { marginStart = dp(8) })
         } else {
             val btn = Button(this).apply {
-                text = tr("Скачать", "Download"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(0xFF2EA84F.toInt())
+                text = tr("Скачать", "Download"); isAllCaps = false; setTextColor(Th.chipText); background = sel(0xFF2EA84F.toInt())
             }
             btn.setOnClickListener { installProject(id, type, loader, title, btn) { fillActions(box, id, type, loader, title) } }
             box.addView(btn, LinearLayout.LayoutParams(dp(150), dp(40)))
@@ -821,7 +821,7 @@ class MainActivity : Activity() {
             labels.forEachIndexed { c, l ->
                 val index = n++
                 val t = TextView(this).apply {
-                    text = l; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 1
+                    text = l; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; maxLines = 1
                     setPadding(dp(6), dp(12), dp(6), dp(12))
                     setOnClickListener { paint(index); onPick(index) }
                 }
@@ -875,7 +875,7 @@ class MainActivity : Activity() {
                     background = sel(if (on) Th.accentDk else Th.chip)
                 }
                 val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(8), dp(10)) }
-                col.addView(TextView(this).apply { text = (if (on) "● " else "") + b.optString("name"); textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                col.addView(TextView(this).apply { text = (if (on) "● " else "") + b.optString("name"); textSize = 17f; setTextColor(Th.chipText); typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
                 col.addView(TextView(this).apply { text = prettyProfile(b.optString("profile")); textSize = 12f; setTextColor(if (on) 0xFFBFE8C9.toInt() else Th.dim) })
                 row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 val edit = PixelIcon(this, PixelIcon.PENCIL, PixelIcon.PENCIL_PAL).apply {
@@ -906,7 +906,7 @@ class MainActivity : Activity() {
             }
         }
         val add = TextView(this).apply {
-            text = tr("＋ Добавить сборку", "＋ Add build"); textSize = 16f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            text = tr("＋ Добавить сборку", "＋ Add build"); textSize = 16f; setTextColor(Th.chipText); gravity = Gravity.CENTER
             setPadding(dp(12), dp(14), dp(12), dp(14)); background = sel(0xFF2EA84F.toInt()); isClickable = true
             setOnClickListener { editBuild(null) { render() } }
         }
@@ -930,7 +930,7 @@ class MainActivity : Activity() {
         }
         pane.addView(name, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val verBtn = TextView(this).apply {
-            text = tr("Версия: ", "Version: ") + prettyProfile(profile); textSize = 15f; setTextColor(Color.WHITE)
+            text = tr("Версия: ", "Version: ") + prettyProfile(profile); textSize = 15f; setTextColor(Th.chipText)
             setPadding(dp(14), dp(12), dp(14), dp(12)); background = sel(Th.chip); isClickable = true
             setOnClickListener {
                 MobDialog(this@MainActivity).setTitle(tr("Версия для сборки", "Build version"))
@@ -968,7 +968,7 @@ class MainActivity : Activity() {
                 maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             hdr.addView(TextView(this).apply {
-                text = tr("Изменить", "Edit"); textSize = 13f; setTextColor(Color.WHITE); setPadding(dp(14), dp(8), dp(14), dp(8))
+                text = tr("Изменить", "Edit"); textSize = 13f; setTextColor(Th.chipText); setPadding(dp(14), dp(8), dp(14), dp(8))
                 background = sel(Th.chip); isClickable = true
                 setOnClickListener {
                     editBuild(build) {
@@ -1005,7 +1005,7 @@ class MainActivity : Activity() {
                 col.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(Th.dim) })
                 r.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 r.addView(Button(this).apply {
-                    text = tr("Удалить", "Delete"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(0xFFB3261E.toInt())
+                    text = tr("Удалить", "Delete"); isAllCaps = false; setTextColor(Th.chipText); background = sel(0xFFB3261E.toInt())
                     setOnClickListener {
                         file.delete()
                         if (id != null) idxSave(idx().apply { remove(id) })
@@ -1132,7 +1132,7 @@ class MainActivity : Activity() {
                                 })
                                 val pid = h.optString("project_id"); val ptype = h.optString("project_type", type); val ptitle = h.optString("title")
                                 list.addView(Button(this).apply {
-                                    text = tr("Скачать вручную…", "Download manually…"); isAllCaps = false; setTextColor(Color.WHITE); background = sel(Th.chip)
+                                    text = tr("Скачать вручную…", "Download manually…"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
                                     setOnClickListener { openManualDownload(pid, ptype, ptitle) {} }
                                 }, LinearLayout.LayoutParams(dp(200), dp(40)).apply { bottomMargin = dp(8) })
                             }
@@ -1168,7 +1168,7 @@ class MainActivity : Activity() {
             fun chip(label: String, note: String, on: Boolean, onToggle: (Boolean) -> Unit) {
                 var state = on
                 val t = TextView(this).apply {
-                    text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER_VERTICAL
+                    text = label; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(14), dp(12), dp(14), dp(12))
                     fun paint() { setBackgroundColor(if (state) 0xFF2EA84F.toInt() else Th.chip); text = (if (state) "✓  " else "") + label }
                     paint()
@@ -1336,7 +1336,7 @@ class MainActivity : Activity() {
         accountSkin = skin
         skinFile()?.let { skin.setSkin(android.graphics.BitmapFactory.decodeFile(it.path)) }
         col.addView(skin, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(260)))
-        fun btn(t: String, bg: Int, fg: Int = Color.WHITE, onClick: () -> Unit) = Button(this).apply {
+        fun btn(t: String, bg: Int, fg: Int = Th.chipText, onClick: () -> Unit) = Button(this).apply {
             text = t; isAllCaps = false; setTextColor(fg); background = sel(bg); setOnClickListener { onClick() }
         }
         skin.slim = prefs.getBoolean("slim", false)
@@ -1348,7 +1348,7 @@ class MainActivity : Activity() {
         }
         for ((i, label) in listOf(tr("Широкий", "Wide"), tr("Стройный", "Slim")).withIndex()) {
             val t = TextView(this).apply {
-                text = label; textSize = 15f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; isClickable = true
+                text = label; textSize = 15f; setTextColor(Th.chipText); gravity = Gravity.CENTER; isClickable = true
                 setOnClickListener {
                     prefs.edit().putBoolean("slim", i == 1).apply()
                     skin.slim = i == 1; skinView.slim = i == 1; paintModel()
@@ -1943,7 +1943,7 @@ class MainActivity : Activity() {
                     r.addView(TextView(this).apply { text = v; textSize = 17f; setTextColor(Th.text) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     r.addView(Button(this).apply {
                         text = when { sel -> tr("✓ Выбрана", "✓ Selected"); pid != null -> tr("Выбрать", "Select"); else -> tr("Скачать", "Download") }
-                        isAllCaps = false; textSize = 12f; setTextColor(Color.WHITE)
+                        isAllCaps = false; textSize = 12f; setTextColor(Th.chipText)
                         background = sel(if (pid != null) Th.chip else 0xFF2EA84F.toInt())
                         setOnClickListener {
                             if (pid != null) {
@@ -1972,7 +1972,7 @@ class MainActivity : Activity() {
                         val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(4)) }
                         r.addView(TextView(this).apply { text = prettyProfile(id) + if (id == selectedProfile()) "  ✓" else ""; textSize = 17f; setTextColor(Th.text) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                         r.addView(Button(this).apply {
-                            text = tr("Удалить", "Delete"); isAllCaps = false; textSize = 12f; setTextColor(Color.WHITE); background = sel(0xFFB3261E.toInt())
+                            text = tr("Удалить", "Delete"); isAllCaps = false; textSize = 12f; setTextColor(Th.chipText); background = sel(0xFFB3261E.toInt())
                             setOnClickListener {
                                 if (busy) { Toast.makeText(this@MainActivity, tr("Подождите: идёт загрузка", "Wait: a download is in progress"), Toast.LENGTH_SHORT).show(); return@setOnClickListener }
                                 MobDialog(this@MainActivity)
@@ -2001,7 +2001,7 @@ class MainActivity : Activity() {
         }
         for ((k, label) in listOf("all" to tr("Все", "All"), "vanilla" to "Vanilla", "fabric" to "Fabric", "forge" to "Forge", "downloaded" to tr("Скачанные", "Downloaded"))) {
             val t = TextView(this).apply {
-                text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8))
+                text = label; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8))
                 setOnClickListener { loader = k; refreshChips(); render() }
             }
             chipViews.add(k to t)
