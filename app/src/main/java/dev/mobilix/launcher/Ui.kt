@@ -227,6 +227,14 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
         val TRASH = listOf("...rrr...", "rrrrrrrrr", ".RRRRRRR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RRRRRRR.")
         val SHIELD = listOf(".sssssss.", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", ".sSSSSSs.", "..sSSSs..", "...sSs...", "....s....")
         val SHIELD_PAL = mapOf('s' to 0xFF2EA84F.toInt(), 'S' to 0xFF5BD67B.toInt())
+        val MENU_PAL = mapOf('g' to 0xFF2EA84F.toInt(), 'G' to 0xFF5BD67B.toInt(), 'W' to 0xFFE8F5EC.toInt())
+        val I_USER = listOf("...ggg...", "..gGGGg..", "..gGGGg..", "...ggg...", ".ggggggg.", "gGGGGGGGg", "gGGGGGGGg", "gGGGGGGGg")
+        val I_GEAR = listOf("....g....", ".g.gGg.g.", "..gGGGg..", "ggGG.GGgg", ".gG...Gg.", "ggGG.GGgg", "..gGGGg..", ".g.gGg.g.", "....g....")
+        val I_VERS = listOf("....g....", "....G....", "....G....", ".gggGggg.", "..gGGGg..", "...gGg...", "....g....", "g.......g", "ggggggggg")
+        val I_CAT = listOf("gggg.gggg", "gGGg.gGGg", "gGGg.gGGg", "gggg.gggg", ".........", "gggg.gggg", "gGGg.gGGg", "gGGg.gGGg", "gggg.gggg")
+        val I_PAD = listOf(".ggggggg.", "gGGWGGGWg", "gGWWWGWGg", "gGGWGGGWg", "ggGGGGGGg", "gg.....gg")
+        val I_CHAT = listOf(".ggggggg.", "gGGGGGGGg", "gGWGWGWGg", "gGGGGGGGg", ".ggggggg.", "..gG.....", "..g......")
+        val I_GLOBE = listOf("..ggggg..", ".gGGgGGg.", "gGGGgGGGg", "ggggggggg", "gGGGgGGGg", ".gGGgGGg.", "..ggggg..")
         val TRASH_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'R' to 0xFFA3231C.toInt())
     }
 }

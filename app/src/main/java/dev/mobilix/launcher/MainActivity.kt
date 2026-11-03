@@ -94,6 +94,9 @@ class MainActivity : Activity() {
     private var accountSkin: SkinView? = null
     private lateinit var verLabel: TextView
     private lateinit var ghItem: TextView
+    private val menuEntries = ArrayList<Triple<String, Pair<List<String>, Map<Char, Int>>, () -> Unit>>()
+    private var ghTab: View? = null
+    internal fun navBottom() = prefs.getString("nav", "bottom") != "side"
     private var updateVer: String? = null
 
     private fun socialPage(): View {
@@ -157,7 +160,7 @@ class MainActivity : Activity() {
                 verLabel.text = "v-$cur  ·  ⬆ " + tr("Вышло обновление $remote", "Update $remote available")
                 verLabel.setTextColor(Th.accent); verLabel.typeface = Typeface.DEFAULT_BOLD
                 ghItem.text = "● " + tr("Соцсети: обновление $remote", "Social: update $remote")
-                ghItem.setTextColor(Th.altText); ghItem.background = sel(Th.altBg)
+                ghItem.setTextColor(Th.altText); ghItem.background = sel(Th.altBg); ghTab?.background = sel(Th.altBg)
                 if (prefs.getString("updToast", "") != remote) {
                     prefs.edit().putString("updToast", remote).apply()
                     Toast.makeText(this, tr("Вышло обновление Mobilix $remote", "Mobilix update $remote is available"), Toast.LENGTH_LONG).show()
@@ -317,17 +320,20 @@ class MainActivity : Activity() {
             text = "Mobilix"; textSize = 26f; setTextColor(Th.accent); gravity = Gravity.CENTER_VERTICAL
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f; setPadding(dp(72), 0, 0, 0)
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
-        fun item(ru: String, en: String, badge: String? = null, onClick: () -> Unit): TextView {
+        fun item(ru: String, en: String, ico: Pair<List<String>, Map<Char, Int>>, badge: String? = null, onClick: () -> Unit): TextView {
+            menuEntries.add(Triple(tr(ru, en), ico, onClick))
             val t = TextView(this).apply {
                 text = tr(ru, en); textSize = 18f; setTextColor(Th.text); gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(28), 0, dp(16), 0); isClickable = true; background = sel(Th.drawer)
+                setPadding(dp(72), 0, dp(16), 0); isClickable = true; background = sel(Th.drawer)
                 setOnClickListener { onClick() }
             }
             drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-            if (badge == null) drawer.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+            val icon = PixelIcon(this, ico.first, ico.second)
+            val fl = FrameLayout(this)
+            fl.addView(t, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            fl.addView(icon, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = dp(28) })
+            if (badge == null) drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
             else {
-                val fl = FrameLayout(this)
-                fl.addView(t, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 fl.addView(TextView(this).apply {
                     text = badge; textSize = 13f; setTextColor(0xCC5BD67B.toInt()); typeface = Typeface.DEFAULT_BOLD
                     setPadding(dp(10), dp(4), dp(10), dp(4))
@@ -338,14 +344,14 @@ class MainActivity : Activity() {
             }
             return t
         }
-        item("Аккаунт", "Account") { openPage(tr("Аккаунт", "Account"), accountPage()) }
-        item("Настройки", "Settings") { openPage(tr("Настройки", "Settings"), settingsPage()) }
-        item("Загрузчик версий", "Version loader") { openPage(tr("Загрузчик версий", "Version loader"), versionsPage()) }
-        item("Каталог", "Catalog") { openPage(tr("Каталог", "Catalog"), catalogPage()) }
-        item("Раскладка управления", "Controls layout") { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
-        menuWipe = item("Удалить скачанное", "Delete downloads") { confirmWipe() }
-        ghItem = item("Соцсети", "Social") { openPage(tr("Соцсети", "Social"), socialPage()) }
-        item("Язык", "Language", if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
+        item("Аккаунт", "Account", PixelIcon.I_USER to PixelIcon.MENU_PAL) { openPage(tr("Аккаунт", "Account"), accountPage()) }
+        item("Настройки", "Settings", PixelIcon.I_GEAR to PixelIcon.MENU_PAL) { openPage(tr("Настройки", "Settings"), settingsPage()) }
+        item("Загрузчик версий", "Version loader", PixelIcon.I_VERS to PixelIcon.MENU_PAL) { openPage(tr("Загрузчик версий", "Version loader"), versionsPage()) }
+        item("Каталог", "Catalog", PixelIcon.I_CAT to PixelIcon.MENU_PAL) { openPage(tr("Каталог", "Catalog"), catalogPage()) }
+        item("Раскладка управления", "Controls layout", PixelIcon.I_PAD to PixelIcon.MENU_PAL) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
+        menuWipe = item("Удалить скачанное", "Delete downloads", PixelIcon.TRASH to PixelIcon.TRASH_PAL) { confirmWipe() }
+        ghItem = item("Соцсети", "Social", PixelIcon.I_CHAT to PixelIcon.MENU_PAL) { openPage(tr("Соцсети", "Social"), socialPage()) }
+        item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
         drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         drawer.addView(TextView(this).apply {
             text = tr("Пользовательское соглашение", "User agreement"); textSize = 13f; setTextColor(Th.dim)
@@ -359,6 +365,22 @@ class MainActivity : Activity() {
 
         hamb = HamburgerView(this).apply { setOnClickListener { setDrawer(!drawerOpen) } }
         rootFrame.addView(hamb, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.START or Gravity.TOP))
+        if (navBottom()) {
+            // нижняя панель только с иконками (как в мессенджерах); боковое меню не используется
+            hamb.visibility = View.GONE; drawer.visibility = View.GONE; scrim.visibility = View.GONE
+            val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Th.bar) }
+            menuEntries.forEachIndexed { i, e ->
+                val cell = FrameLayout(this).apply { isClickable = true; background = sel(Th.bar); setOnClickListener { e.third() } }
+                cell.contentDescription = e.first
+                cell.addView(PixelIcon(this, e.second.first, e.second.second), FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
+                if (i == 6) ghTab = cell
+                nav.addView(cell, LinearLayout.LayoutParams(0, dp(56), 1f))
+            }
+            val navBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            navBox.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+            navBox.addView(nav)
+            root.addView(navBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(57)))
+        }
 
         val logBtn = TextView(this).apply {
             text = tr("Лог", "Log"); textSize = 12f; setTextColor(Th.accent); gravity = Gravity.CENTER
@@ -368,7 +390,7 @@ class MainActivity : Activity() {
         rootFrame.addView(logBtn, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END or Gravity.TOP).apply { topMargin = dp(8); marginEnd = dp(10) })
 
         pageLayer = FrameLayout(this).apply { visibility = View.GONE }
-        rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom()) bottomMargin = dp(57) })
 
         setContentView(rootFrame)
         Thread { loadSkin() }.start()
@@ -568,6 +590,11 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply { text = tr("Тема", "Theme"); setTextColor(Th.text); setPadding(0, 0, 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Тёмная", "Dark"), tr("Светлая", "Light")), if (Th.light) 1 else 0) { i ->
             prefs.edit().putString("theme", if (i == 1) "light" else "dark").apply()
+            recreate()
+        })
+        col.addView(TextView(this).apply { text = tr("Меню", "Menu"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Нижняя панель", "Bottom bar"), tr("Боковое", "Side")), if (navBottom()) 0 else 1) { i ->
+            prefs.edit().putString("nav", if (i == 0) "bottom" else "side").apply()
             recreate()
         })
         col.addView(TextView(this).apply { text = tr("Многопоточная загрузка", "Multi-threaded download"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
