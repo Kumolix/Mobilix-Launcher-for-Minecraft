@@ -1,7 +1,22 @@
 {
- "downloads": 14,
- "updated": "2026-11-02T10:57:39Z",
+ "downloads": 18,
+ "updated": "2026-11-03T10:47:30Z",
  "releases": [
+  {
+   "tag_name": "APK-1.9.1",
+   "published_at": "2026-11-02T20:39:11Z",
+   "body": "\n**EN: What's new**\n- Builds: a new \"Builds\" tab in the catalog. Each build has its own folder (mods, worlds, settings) and version; the pencil opens a catalog for that build; pick a build at the bottom of the version list\n- Catalog: tabs in two rows, new Datapacks tab (can be added to a world right after download), a button that collapses search and tabs, Fabric/Forge centered\n- Mods: mods for another loader are disabled automatically (mods-disabled folder); mods from the catalog are updated for your game version and loader, required dependencies are downloaded, and you get a warning if something is missing. Switch in Settings\n- Forge: fix for the 1.20.1 launch hang (module conflict with the vanilla jar); Forge 1.12.2 installs even when the installer has no versionInfo\n- Update notice appears only when a new release is published; Social page now has a website link and icons, the menu shows the current language\n- Language menu with Chinese (translations are being added, untranslated text stays in English)\n- Windows in launcher style, new website: kumolix.github.io/Mobilix-Launcher-for-Minecraft\n\n**RU: Что нового?**\n- Сборки: новая вкладка «Сборки» в каталоге. У каждой сборки своя папка (моды, миры, настройки) и версия; карандаш открывает каталог для этой сборки; выбрать сборку можно внизу списка версий\n- Каталог: вкладки в два ряда, новая вкладка «Датапаки» (после скачивания можно добавить в мир), кнопка, которая сворачивает поиск и вкладки, Fabric/Forge по центру\n- Моды: моды другого загрузчика отключаются сами (папка mods-disabled); моды из каталога обновляются под вашу версию игры и загрузчик, обязательные зависимости докачиваются, а если чего-то не хватает, будет предупреждение. Переключатель в Настройках\n- Forge: исправление зависания при запуске 1.20.1 (конфликт модулей с ванильным jar); Forge 1.12.2 ставится, даже если в установщике нет versionInfo\n- Уведомление об обновлении появляется только при выходе релиза; в «Соцсетях» появились ссылка на сайт и иконки, в меню видно текущий язык\n- Меню выбора языка с китайским (перевод дописывается, непереведённое показывается по-английски)\n- Окна в стиле лаунчера, новый сайт: kumolix.github.io/Mobilix-Launcher-for-Minecraft\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.9.1.apk",
+     "size": 10528475,
+     "download_count": 4,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.9.1/Mobilix-launcher-v-1.9.1.apk"
+    }
+   ]
+  },
   {
    "tag_name": "APK-1.9.0",
    "published_at": "2026-10-31T14:35:21Z",
@@ -12,7 +27,7 @@
     {
      "name": "Mobilix-launcher-v-1.9.0.apk",
      "size": 10484295,
-     "download_count": 10,
+     "download_count": 12,
      "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.9.0/Mobilix-launcher-v-1.9.0.apk"
     }
    ]
