@@ -113,7 +113,7 @@ class MainActivity : Activity() {
             else -> null
         }
     }
-    internal fun navBottom() = prefs.getString("nav", "bottom") != "side"
+    internal fun navBottom() = prefs.getString("nav", "side") == "bottom"
     private var updateVer: String? = null
 
     private fun socialPage(): View {
@@ -676,6 +676,11 @@ class MainActivity : Activity() {
             setOnClickListener { openGameFolder() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(14) })
         col.addView(note(tr("Откроется «Мои файлы» (Samsung) или стандартный проводник. Путь также скопирован в буфер.", "Opens My Files (Samsung) or the system file manager. The path is also copied.")))
+        col.addView(Button(this).apply {
+            text = tr("Импорт файлов из памяти телефона", "Import files from phone storage"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
+            setOnClickListener { importFiles() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
+        col.addView(note(tr("Выберите тип и файлы в системном окне: моды, шейдеры, ресурспаки, датапаки или карты (zip). Файлы копируются в папку текущей версии или сборки, Shizuku не нужен.", "Pick a type and files in the system picker: mods, shaders, resource packs, datapacks or maps (zip). Files are copied into the current version or build folder; no Shizuku needed.")))
         col.addView(header(tr("Игра", "Game")))
         // быстрые настройки графики: между двумя линиями
         col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(6); bottomMargin = dp(10) })
@@ -1833,8 +1838,74 @@ class MainActivity : Activity() {
     }
 
     @Deprecated("Deprecated in Java")
+    private var importKind = "mods"
+    /** Импорт из памяти телефона через системный выбор файлов (SAF): копирует в папку текущей версии/сборки. */
+    private fun importFiles() {
+        val kinds = listOf("mods", "shaderpacks", "resourcepacks", "datapacks", "saves")
+        val names = arrayOf(tr("Моды", "Mods"), tr("Шейдеры", "Shaders"), tr("Ресурспаки", "Resource packs"), tr("Датапаки", "Datapacks"), tr("Карты (zip)", "Maps (zip)"))
+        MobDialog(this).setTitle(tr("Что импортировать?", "What to import?")).setItems(names) { _, i ->
+            importKind = kinds[i]
+            try {
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                }, 78)
+            } catch (e: Throwable) { Toast.makeText(this, "Ошибка: $e", Toast.LENGTH_LONG).show() }
+        }.show()
+    }
+
+    private fun importUris(uris: List<android.net.Uri>) {
+        val kind = importKind
+        val dest = File(curGameDir(), kind).apply { mkdirs() }
+        Toast.makeText(this, tr("Копирование…", "Copying…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            var ok = 0; var fail = 0
+            for (u in uris) {
+                try {
+                    var name = "file"
+                    contentResolver.query(u, null, null, null, null)?.use { c ->
+                        val ix = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (c.moveToFirst() && ix >= 0) name = c.getString(ix) ?: name
+                    }
+                    name = name.replace('/', '_')
+                    if (kind == "saves") {
+                        if (!name.endsWith(".zip", true)) throw Exception("not zip")
+                        val base = name.substring(0, name.length - 4)
+                        val entries = ArrayList<Pair<String, ByteArray>>()
+                        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+                            var e = z.nextEntry
+                            while (e != null) { if (!e.isDirectory) entries.add(e.name to z.readBytes()); e = z.nextEntry }
+                        }
+                        val roots = entries.map { it.first.substringBefore('/', "") }.toSet()
+                        val single = roots.size == 1 && roots.first().isNotEmpty() && entries.all { it.first.contains('/') }
+                        val worldDir = File(dest, if (single) roots.first() else base)
+                        for ((n, b) in entries) {
+                            val rel = if (single) n.substringAfter('/') else n
+                            val out = File(if (single) dest else File(dest, base), if (single) roots.first() + "/" + rel else rel)
+                            if (!out.canonicalPath.startsWith(dest.canonicalPath + File.separator)) continue
+                            out.parentFile?.mkdirs(); out.writeBytes(b)
+                        }
+                        if (!worldDir.exists()) throw Exception("empty")
+                    } else {
+                        contentResolver.openInputStream(u)!!.use { inp -> File(dest, name).outputStream().use { inp.copyTo(it) } }
+                    }
+                    ok++
+                } catch (_: Throwable) { fail++ }
+            }
+            runOnUiThread {
+                Toast.makeText(this, tr("Импортировано: $ok", "Imported: $ok") + (if (fail > 0) tr(", ошибок: $fail", ", failed: $fail") else ""), Toast.LENGTH_LONG).show()
+            }
+        }.start()
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 78 && resultCode == RESULT_OK && data != null) {
+            val list = ArrayList<android.net.Uri>()
+            data.clipData?.let { cd -> for (i in 0 until cd.itemCount) list.add(cd.getItemAt(i).uri) }
+            if (list.isEmpty()) data.data?.let { list.add(it) }
+            if (list.isNotEmpty()) importUris(list)
+            return
+        }
         if (requestCode != 77 || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         try {
