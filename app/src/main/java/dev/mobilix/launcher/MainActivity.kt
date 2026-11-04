@@ -1870,21 +1870,40 @@ class MainActivity : Activity() {
                     if (kind == "saves") {
                         if (!name.endsWith(".zip", true)) throw Exception("not zip")
                         val base = name.substring(0, name.length - 4)
-                        val entries = ArrayList<Pair<String, ByteArray>>()
+                        fun clean(n: String) = n.replace('\\', '/').trimStart('/')
+                        val names = ArrayList<String>()
                         java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
                             var e = z.nextEntry
-                            while (e != null) { if (!e.isDirectory) entries.add(e.name to z.readBytes()); e = z.nextEntry }
+                            while (e != null) { val n = clean(e.name); if (!e.isDirectory && !n.startsWith("__MACOSX/")) names.add(n); e = z.nextEntry }
                         }
-                        val roots = entries.map { it.first.substringBefore('/', "") }.toSet()
-                        val single = roots.size == 1 && roots.first().isNotEmpty() && entries.all { it.first.contains('/') }
-                        val worldDir = File(dest, if (single) roots.first() else base)
-                        for ((n, b) in entries) {
-                            val rel = if (single) n.substringAfter('/') else n
-                            val out = File(if (single) dest else File(dest, base), if (single) roots.first() + "/" + rel else rel)
-                            if (!out.canonicalPath.startsWith(dest.canonicalPath + File.separator)) continue
-                            out.parentFile?.mkdirs(); out.writeBytes(b)
+                        // мир = папка, где лежит level.dat; всё вне неё (readme, картинки и т.п.) отбрасывается
+                        var roots = names.filter { it.substringAfterLast('/').equals("level.dat", true) }
+                            .map { if (it.contains('/')) it.substringBeforeLast('/') + "/" else "" }.distinct()
+                        roots = roots.filter { r -> roots.none { o -> o != r && o.isNotEmpty() && r.startsWith(o) } }
+                        if (roots.isEmpty()) throw Exception("no level.dat")
+                        val targets = HashMap<String, File>()
+                        for (root in roots) {
+                            val wn = (if (root.isEmpty()) base else root.trimEnd('/').substringAfterLast('/')).replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { base }
+                            var target = File(dest, wn); var k = 2
+                            while (target.exists() || targets.containsValue(target)) { target = File(dest, "$wn ($k)"); k++ }
+                            targets[root] = target
                         }
-                        if (!worldDir.exists()) throw Exception("empty")
+                        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+                            var e = z.nextEntry
+                            while (e != null) {
+                                val n = clean(e.name)
+                                val root = if (e.isDirectory) null else roots.firstOrNull { n.startsWith(it) }
+                                if (root != null) {
+                                    val target = targets[root]!!
+                                    val out = File(target, n.substring(root.length))
+                                    if (out.canonicalPath.startsWith(target.canonicalPath + File.separator)) {
+                                        out.parentFile?.mkdirs()
+                                        out.outputStream().use { z.copyTo(it) }
+                                    }
+                                }
+                                e = z.nextEntry
+                            }
+                        }
                     } else {
                         contentResolver.openInputStream(u)!!.use { inp -> File(dest, name).outputStream().use { inp.copyTo(it) } }
                     }
