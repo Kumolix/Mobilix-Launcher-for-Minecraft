@@ -1261,7 +1261,20 @@ class MainActivity : Activity() {
         caretBox.addView(caret, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.START or Gravity.CENTER_VERTICAL))
         // Fabric/Forge по центру строки, кнопка фильтров справа
         filterRow.addView(caretBox, LinearLayout.LayoutParams(0, dp(42), 1f))
-        filterRow.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        val centerBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        centerBox.addView(loaderRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // «Импорт» рядом с Fabric/Forge: копирует файлы из памяти телефона в папку выбранного типа
+        val impBtn = TextView(this).apply {
+            text = "＋ " + tr("Импорт", "Import"); textSize = 14f; setTextColor(Th.accent); gravity = Gravity.CENTER
+            setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true
+            background = GradientDrawable().apply { setColor(Th.chip2); setStroke(dp(2), 0xFF2EA84F.toInt()) }
+            setOnClickListener {
+                val kind = when (type) { "mod" -> "mods"; "shader" -> "shaderpacks"; "resourcepack" -> "resourcepacks"; "datapack" -> "datapacks"; else -> null }
+                importFiles(kind) { search() }
+            }
+        }
+        centerBox.addView(impBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+        filterRow.addView(centerBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val filtBox = FrameLayout(this)
         filtBox.addView(filt, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.END or Gravity.CENTER_VERTICAL))
         filterRow.addView(filtBox, LinearLayout.LayoutParams(0, dp(42), 1f))
@@ -1840,16 +1853,22 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     private var importKind = "mods"
     /** Импорт из памяти телефона через системный выбор файлов (SAF): копирует в папку текущей версии/сборки. */
-    private fun importFiles() {
+    private var importAfter: (() -> Unit)? = null
+    private fun pickImport() {
+        try {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }, 78)
+        } catch (e: Throwable) { Toast.makeText(this, "Ошибка: $e", Toast.LENGTH_LONG).show() }
+    }
+    private fun importFiles(direct: String? = null, after: (() -> Unit)? = null) {
+        importAfter = after
+        if (direct != null) { importKind = direct; pickImport(); return }
         val kinds = listOf("mods", "shaderpacks", "resourcepacks", "datapacks", "saves")
         val names = arrayOf(tr("Моды", "Mods"), tr("Шейдеры", "Shaders"), tr("Ресурспаки", "Resource packs"), tr("Датапаки", "Datapacks"), tr("Карты (zip)", "Maps (zip)"))
         MobDialog(this).setTitle(tr("Что импортировать?", "What to import?")).setItems(names) { _, i ->
             importKind = kinds[i]
-            try {
-                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                }, 78)
-            } catch (e: Throwable) { Toast.makeText(this, "Ошибка: $e", Toast.LENGTH_LONG).show() }
+            pickImport()
         }.show()
     }
 
@@ -1911,6 +1930,7 @@ class MainActivity : Activity() {
                 } catch (_: Throwable) { fail++ }
             }
             runOnUiThread {
+                importAfter?.invoke()
                 Toast.makeText(this, tr("Импортировано: $ok", "Imported: $ok") + (if (fail > 0) tr(", ошибок: $fail", ", failed: $fail") else ""), Toast.LENGTH_LONG).show()
             }
         }.start()
