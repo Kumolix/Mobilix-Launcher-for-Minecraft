@@ -113,6 +113,14 @@ class MainActivity : Activity() {
             else -> null
         }
     }
+    private val fxList = ArrayList<FxView>()
+    private fun newFx(): FxView? {
+        val sn = season() ?: return null
+        return FxView(this, sn).also {
+            it.visibility = if (prefs.getBoolean("fxOn", true)) View.VISIBLE else View.GONE
+            fxList.add(it)
+        }
+    }
     internal fun navBottom() = prefs.getString("nav", "side") == "bottom"
     private var updateVer: String? = null
 
@@ -417,18 +425,18 @@ class MainActivity : Activity() {
         rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom()) bottomMargin = dp(57) })
 
         season()?.let { sn ->
-            val fx = FxView(this, sn)
-            fx.visibility = if (prefs.getBoolean("fxOn", true)) View.VISIBLE else View.GONE
-            rootFrame.addView(fx, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            // эффекты лежат за текстом и кнопками: у скина (скин их закрывает) и на каждой странице; боковое меню закрывает всё
+            newFx()?.let { skinBox.addView(it, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
             // временная кнопка эффектов у скина: есть только в праздничную неделю
             val ico = if (sn == "newyear") PixelIcon(this, PixelIcon.SNOWFLAKE, mapOf('w' to 0xFF8FD0FF.toInt())) else PixelIcon(this, PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
             val btn = FrameLayout(this).apply {
-                isClickable = true; alpha = if (fx.visibility == View.VISIBLE) 1f else 0.4f
+                isClickable = true; alpha = if (prefs.getBoolean("fxOn", true)) 1f else 0.4f
                 background = GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.accent); cornerRadius = dp(8).toFloat() }
                 setOnClickListener {
-                    val on = fx.visibility != View.VISIBLE
+                    val on = !prefs.getBoolean("fxOn", true)
                     prefs.edit().putBoolean("fxOn", on).apply()
-                    fx.visibility = if (on) View.VISIBLE else View.GONE
+                    fxList.removeAll { !it.isAttachedToWindow }
+                    fxList.forEach { it.visibility = if (on) View.VISIBLE else View.GONE }
                     alpha = if (on) 1f else 0.4f
                 }
             }
@@ -463,7 +471,9 @@ class MainActivity : Activity() {
 
     private fun openPage(title: String, content: View, animate: Boolean = true) {
         pageLayer.removeAllViews()
-        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Th.bg); isClickable = true }
+        val pageWrap = FrameLayout(this).apply { setBackgroundColor(Th.bg); isClickable = true }
+        newFx()?.let { pageWrap.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
+        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val head = FrameLayout(this).apply { setBackgroundColor(Th.bar) }
         head.addView(TextView(this).apply {
             text = "‹"; textSize = 34f; setTextColor(Th.accent); gravity = Gravity.CENTER
@@ -474,13 +484,14 @@ class MainActivity : Activity() {
         }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(56), Gravity.CENTER))
         page.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
         page.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        pageLayer.addView(page, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        pageWrap.addView(page, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        pageLayer.addView(pageWrap, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         pageLayer.visibility = View.VISIBLE
         pageOpen = true
         val h = rootFrame.height.toFloat().coerceAtLeast(resources.displayMetrics.heightPixels.toFloat())
         if (animate) {
-            page.translationY = h
-            page.animate().translationY(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            pageWrap.translationY = h
+            pageWrap.animate().translationY(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
         }
     }
 
@@ -891,21 +902,87 @@ class MainActivity : Activity() {
     }
 
     /** После скачивания датапака предлагает положить его в один из миров (датапаки работают только внутри мира). */
-    private fun offerDatapackWorld(file: File) {
+    /** Формат датапака для версии игры (по таблице релизов); null — версия неизвестна. */
+    private fun dpFormat(mc: String): Int? {
+        val m = Regex("^1\\.(\\d+)(?:\\.(\\d+))?").find(mc) ?: return null
+        val mi = m.groupValues[1].toInt(); val pa = m.groupValues[2].ifEmpty { "0" }.toInt()
+        return when {
+            mi in 13..14 -> 4
+            mi == 15 || (mi == 16 && pa <= 1) -> 5
+            mi == 16 -> 6
+            mi == 17 -> 7
+            mi == 18 -> if (pa >= 2) 9 else 8
+            mi == 19 -> if (pa >= 4) 12 else 10
+            mi == 20 -> when { pa <= 1 -> 15; pa == 2 -> 18; pa <= 4 -> 26; else -> 41 }
+            mi == 21 -> when { pa <= 1 -> 48; pa <= 3 -> 57; pa == 4 -> 61; pa == 5 -> 71; pa == 6 -> 80; pa <= 8 -> 81; else -> null }
+            else -> null
+        }
+    }
+    /** Версия мира из level.dat (Data → Version → Name); null, если не прочиталось. */
+    private fun worldVersion(world: File): String? = try {
+        java.io.DataInputStream(java.io.BufferedInputStream(java.util.zip.GZIPInputStream(File(world, "level.dat").inputStream()))).use { d ->
+            fun skip(n: Long) { var left = n; while (left > 0) { val k = d.skipBytes(minOf(left, Int.MAX_VALUE.toLong()).toInt()); if (k <= 0) { d.readByte(); left-- } else left -= k } }
+            fun skipTag(t: Int) {
+                when (t) {
+                    1 -> skip(1); 2 -> skip(2); 3, 5 -> skip(4); 4, 6 -> skip(8)
+                    7 -> skip(d.readInt().toLong()); 8 -> skip(d.readUnsignedShort().toLong())
+                    9 -> { val et = d.readByte().toInt(); val n = d.readInt(); for (i in 0 until n) skipTag(et) }
+                    10 -> while (true) { val tt = d.readByte().toInt(); if (tt == 0) break; skip(d.readUnsignedShort().toLong()); skipTag(tt) }
+                    11 -> skip(d.readInt() * 4L); 12 -> skip(d.readInt() * 8L)
+                }
+            }
+            fun find(path: List<String>): String? {
+                while (true) {
+                    val t = d.readByte().toInt(); if (t == 0) return null
+                    val key = d.readUTF()
+                    if (key == path[0] && path.size == 1 && t == 8) return d.readUTF()
+                    if (key == path[0] && path.size > 1 && t == 10) { val r = find(path.drop(1)); if (r != null) return r }
+                    else skipTag(t)
+                }
+            }
+            d.readByte(); d.readUTF()
+            find(listOf("Data", "Version", "Name"))
+        }
+    } catch (_: Throwable) { null }
+    /** Форматы, на которые рассчитан датапак (pack.mcmeta внутри zip); пусто — не прочиталось. */
+    private fun datapackFormats(file: File): Pair<Int, Int>? = try {
+        java.util.zip.ZipFile(file).use { z ->
+            val e = z.getEntry("pack.mcmeta") ?: return null
+            val pack = JSONObject(z.getInputStream(e).readBytes().toString(Charsets.UTF_8)).getJSONObject("pack")
+            var lo = pack.optInt("pack_format", -1); var hi = lo
+            pack.optJSONObject("supported_formats")?.let { lo = it.optInt("min_inclusive", lo); hi = it.optInt("max_inclusive", hi) }
+            pack.optJSONArray("supported_formats")?.let { if (it.length() >= 2) { lo = it.optInt(0, lo); hi = it.optInt(1, hi) } }
+            if (lo < 0) null else lo to hi
+        }
+    } catch (_: Throwable) { null }
+
+    private fun offerDatapackWorld(file: File, next: (() -> Unit)? = null) {
         val worlds = File(curGameDir(), "saves").listFiles { f -> f.isDirectory }?.sortedBy { it.name }.orEmpty()
         if (worlds.isEmpty()) {
-            Toast.makeText(this, tr("Датапак скачан в папку datapacks. Создайте мир в игре и добавьте его вручную.", "Datapack saved to the datapacks folder. Create a world in the game and add it manually."), Toast.LENGTH_LONG).show()
-            return
+            Toast.makeText(this, tr("Датапак ${file.name} в папке datapacks. Создайте мир в игре и добавьте его вручную.", "Datapack ${file.name} is in the datapacks folder. Create a world in the game and add it manually."), Toast.LENGTH_LONG).show()
+            next?.invoke(); return
         }
-        val names = worlds.map { it.name } + tr("Пропустить", "Skip")
-        MobDialog(this).setTitle(tr("Добавить датапак в мир", "Add datapack to a world")).setItems(names.toTypedArray()) { _, i ->
-            if (i < worlds.size) try {
-                val dir = File(worlds[i], "datapacks").apply { mkdirs() }
-                file.copyTo(File(dir, file.name), overwrite = true)
-                Toast.makeText(this, tr("Добавлено в мир ${worlds[i].name}", "Added to world ${worlds[i].name}"), Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) { Toast.makeText(this, e.message ?: e.toString(), Toast.LENGTH_LONG).show() }
-        }.setNegativeButton(tr("Закрыть", "Close"), null).show()
+        val fmt = datapackFormats(file)
+        // подходящие версии сверху: ✓ формат датапака совпадает с версией мира, ⚠ нет, без значка — версия неизвестна
+        class W(val dir: File, val ver: String?, val ok: Boolean?)
+        val ws = worlds.map { w ->
+            val v = worldVersion(w); val wf = v?.let { dpFormat(it) }
+            W(w, v, if (fmt != null && wf != null) wf in fmt.first..fmt.second else null)
+        }.sortedWith(compareBy({ when (it.ok) { true -> 0; null -> 1; false -> 2 } }, { it.dir.name }))
+        val names = ws.map { (when (it.ok) { true -> "✓ "; false -> "⚠ "; null -> "" }) + it.dir.name + (it.ver?.let { v -> " ($v)" } ?: "") } + tr("Пропустить", "Skip")
+        MobDialog(this).setTitle(tr("Куда добавить датапак?", "Add the datapack to which world?"))
+            .setMessage(file.name + (fmt?.let { tr("\nФормат датапака: ${it.first}" + (if (it.second != it.first) "–${it.second}" else ""), "\nDatapack format: ${it.first}" + (if (it.second != it.first) "–${it.second}" else "")) } ?: "") +
+                tr("\n✓ подходит по версии, ⚠ другая версия игры", "\n✓ matches the world version, ⚠ different game version"))
+            .setItems(names.toTypedArray()) { _, i ->
+                if (i < ws.size) try {
+                    val dir = File(ws[i].dir, "datapacks").apply { mkdirs() }
+                    file.copyTo(File(dir, file.name), overwrite = true)
+                    Toast.makeText(this, tr("Добавлено в мир ${ws[i].dir.name}", "Added to world ${ws[i].dir.name}"), Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) { Toast.makeText(this, e.message ?: e.toString(), Toast.LENGTH_LONG).show() }
+                next?.invoke()
+            }.setNegativeButton(tr("Закрыть", "Close")) { _, _ -> next?.invoke() }.show()
     }
+
 
     // ---------- менеджер сборок ----------
     private fun buildsPage(): View {
@@ -931,7 +1008,12 @@ class MainActivity : Activity() {
                     orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                     background = sel(if (on) Th.accentDk else Th.chip)
                 }
-                val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(10), dp(8), dp(10)) }
+                val bi = buildIcon(b.optString("id"))
+                if (bi.exists()) row.addView(ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setImageBitmap(android.graphics.BitmapFactory.decodeFile(bi.path))
+                }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(10) })
+                val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(if (bi.exists()) 12 else 16), dp(10), dp(8), dp(10)) }
                 col.addView(TextView(this).apply { text = (if (on) "● " else "") + b.optString("name"); textSize = 17f; setTextColor(Th.chipText); typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
                 col.addView(TextView(this).apply { text = prettyProfile(b.optString("profile")); textSize = 12f; setTextColor(if (on) 0xFFBFE8C9.toInt() else Th.dim) })
                 row.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -952,11 +1034,16 @@ class MainActivity : Activity() {
                                 buildsSave(keep)
                                 if (prefs.getString("build", "") == id) prefs.edit().putString("build", "").apply()
                                 versionText.text = verTitle()
-                                Thread { buildDir(id).deleteRecursively() }.start()
+                                buildIcon(id).delete(); Thread { buildDir(id).deleteRecursively() }.start()
                                 render()
                             }.setNegativeButton(tr("Отмена", "Cancel"), null).show()
                     }
                 }
+                val share = PixelIcon(this, PixelIcon.I_SHARE, PixelIcon.MENU_PAL).apply {
+                    isClickable = true; background = iconBg(); setPadding(dp(11), dp(11), dp(11), dp(11))
+                    setOnClickListener { shareBuild(b) }
+                }
+                row.addView(share, LinearLayout.LayoutParams(dp(48), dp(48)))
                 row.addView(edit, LinearLayout.LayoutParams(dp(48), dp(48)))
                 row.addView(del, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(6) })
                 list.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
@@ -986,6 +1073,27 @@ class MainActivity : Activity() {
             setTextColor(Th.text); setHintTextColor(Th.hint); setSingleLine(true); setPadding(dp(4), dp(10), dp(4), dp(10))
         }
         pane.addView(name, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // фото сборки: показывается слева от названия, хранится 128×128
+        var newIcon: android.graphics.Bitmap? = null; var dropIcon = false
+        val thumb = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(Th.chip2) }
+        existing?.optString("id")?.let { id -> buildIcon(id).takeIf { it.exists() }?.let { thumb.setImageBitmap(android.graphics.BitmapFactory.decodeFile(it.path)) } }
+        val photoRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        photoRow.addView(thumb, LinearLayout.LayoutParams(dp(56), dp(56)))
+        photoRow.addView(TextView(this).apply {
+            text = tr("Выбрать фото", "Choose photo"); textSize = 15f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), 0, dp(14), 0)
+            background = sel(Th.chip); isClickable = true
+            setOnClickListener {
+                iconPick = { bmp -> newIcon = bmp; dropIcon = false; thumb.setImageBitmap(bmp) }
+                try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "image/*" }, 80) }
+                catch (e: Throwable) { Toast.makeText(this@MainActivity, "Ошибка: $e", Toast.LENGTH_LONG).show() }
+            }
+        }, LinearLayout.LayoutParams(0, dp(56), 1f).apply { marginStart = dp(10) })
+        photoRow.addView(TextView(this).apply {
+            text = tr("Убрать", "Remove"); textSize = 15f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), 0, dp(14), 0)
+            background = sel(Th.chip2); isClickable = true
+            setOnClickListener { newIcon = null; dropIcon = true; thumb.setImageDrawable(null) }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(56)).apply { marginStart = dp(8) })
+        pane.addView(photoRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         val verBtn = TextView(this).apply {
             text = tr("Версия: ", "Version: ") + prettyProfile(profile); textSize = 15f; setTextColor(Th.chipText)
             setPadding(dp(14), dp(12), dp(14), dp(12)); background = sel(Th.chip); isClickable = true
@@ -1001,8 +1109,13 @@ class MainActivity : Activity() {
             .setPositiveButton(tr("Сохранить", "Save")) { _, _ ->
                 val n = name.text.toString().trim().ifEmpty { tr("Сборка", "Build") }
                 val all = builds()
+                val bid = existing?.optString("id") ?: ("b" + System.currentTimeMillis())
+                try {
+                    if (newIcon != null) { buildIcon(bid).parentFile?.mkdirs(); buildIcon(bid).outputStream().use { newIcon!!.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) } }
+                    else if (dropIcon) buildIcon(bid).delete()
+                } catch (_: Throwable) {}
                 if (existing == null) {
-                    all.put(JSONObject().put("id", "b" + System.currentTimeMillis()).put("name", n).put("profile", profile))
+                    all.put(JSONObject().put("id", bid).put("name", n).put("profile", profile))
                 } else {
                     for (k in 0 until all.length()) {
                         val b = all.getJSONObject(k)
@@ -1269,8 +1382,7 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true
             background = GradientDrawable().apply { setColor(Th.chip2); setStroke(dp(2), 0xFF2EA84F.toInt()) }
             setOnClickListener {
-                val kind = when (type) { "mod" -> "mods"; "shader" -> "shaderpacks"; "resourcepack" -> "resourcepacks"; "datapack" -> "datapacks"; else -> null }
-                importFiles(kind) { search() }
+                importFiles { search() }
             }
         }
         centerBox.addView(impBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
@@ -1851,93 +1963,273 @@ class MainActivity : Activity() {
     }
 
     @Deprecated("Deprecated in Java")
-    private var importKind = "mods"
-    /** Импорт из памяти телефона через системный выбор файлов (SAF): копирует в папку текущей версии/сборки. */
     private var importAfter: (() -> Unit)? = null
-    private fun pickImport() {
-        try {
-            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            }, 78)
-        } catch (e: Throwable) { Toast.makeText(this, "Ошибка: $e", Toast.LENGTH_LONG).show() }
-    }
-    private fun importFiles(direct: String? = null, after: (() -> Unit)? = null) {
+    /** Импорт: тип каждого файла определяется сам (мод, шейдер, ресурспак, датапак, карта, сборка Mobilix). */
+    private fun importFiles(after: (() -> Unit)? = null) {
         importAfter = after
-        if (direct != null) { importKind = direct; pickImport(); return }
-        val kinds = listOf("mods", "shaderpacks", "resourcepacks", "datapacks", "saves")
-        val names = arrayOf(tr("Моды", "Mods"), tr("Шейдеры", "Shaders"), tr("Ресурспаки", "Resource packs"), tr("Датапаки", "Datapacks"), tr("Карты (zip)", "Maps (zip)"))
-        MobDialog(this).setTitle(tr("Что импортировать?", "What to import?")).setItems(names) { _, i ->
-            importKind = kinds[i]
-            pickImport()
-        }.show()
+        MobDialog(this).setTitle(tr("Импорт файлов", "Import files"))
+            .setMessage(tr("Выберите один или несколько файлов. Тип определяется автоматически: моды (.jar), шейдеры, ресурспаки, датапаки, карты (zip) и сборки Mobilix (zip). Файлы копируются в папку текущей версии или сборки.",
+                "Pick one or more files. The type is detected automatically: mods (.jar), shaders, resource packs, datapacks, maps (zip) and Mobilix builds (zip). Files are copied into the current version or build folder."))
+            .setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Выбрать файлы", "Choose files")) { _, _ ->
+                try {
+                    startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }, 78)
+                } catch (e: Throwable) { Toast.makeText(this, "Ошибка: $e", Toast.LENGTH_LONG).show() }
+            }.show()
+    }
+
+    private fun uriName(u: android.net.Uri): String {
+        var name = "file"
+        contentResolver.query(u, null, null, null, null)?.use { c ->
+            val ix = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (c.moveToFirst() && ix >= 0) name = c.getString(ix) ?: name
+        }
+        return name.replace('/', '_')
+    }
+    private fun zipClean(n: String) = n.replace('\\', '/').trimStart('/')
+
+    /** Читает оглавление zip (и mobilix-build.json, если он есть). */
+    private fun zipScan(u: android.net.Uri): Pair<List<String>, String?> {
+        val names = ArrayList<String>(); var manifest: String? = null
+        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+            var e = z.nextEntry
+            while (e != null) {
+                val n = zipClean(e.name)
+                if (!n.startsWith("__MACOSX/")) {
+                    names.add(if (e.isDirectory && !n.endsWith("/")) "$n/" else n)
+                    if (n == "mobilix-build.json") manifest = String(z.readBytes(), Charsets.UTF_8)
+                }
+                e = z.nextEntry
+            }
+        }
+        return names to manifest
+    }
+
+    /** Тип zip по содержимому: build, saves, shaderpacks, resourcepacks, datapacks или null. */
+    private fun zipKind(names: List<String>, hasManifest: Boolean): String? {
+        val files = names.filter { !it.endsWith("/") }
+        return when {
+            hasManifest -> "build"
+            files.any { it.substringAfterLast('/').equals("level.dat", true) } -> "saves"
+            files.any { Regex("^([^/]+/)?shaders/.+").matches(it) } && files.none { it == "pack.mcmeta" && files.any { f -> f.startsWith("assets/") } } -> "shaderpacks"
+            files.contains("pack.mcmeta") && files.any { it.startsWith("assets/") } -> "resourcepacks"
+            files.contains("pack.mcmeta") && files.any { it.startsWith("data/") } -> "datapacks"
+            files.any { Regex("^([^/]+/)?shaders/.+").matches(it) } -> "shaderpacks"
+            else -> null
+        }
+    }
+
+    private fun extractWorlds(u: android.net.Uri, names: List<String>, base: String, dest: File) {
+        var roots = names.filter { !it.endsWith("/") && it.substringAfterLast('/').equals("level.dat", true) }
+            .map { if (it.contains('/')) it.substringBeforeLast('/') + "/" else "" }.distinct()
+        roots = roots.filter { r -> roots.none { o -> o != r && o.isNotEmpty() && r.startsWith(o) } }
+        val targets = HashMap<String, File>()
+        for (root in roots) {
+            val wn = (if (root.isEmpty()) base else root.trimEnd('/').substringAfterLast('/')).replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { base }
+            var target = File(dest, wn); var k = 2
+            while (target.exists() || targets.containsValue(target)) { target = File(dest, "$wn ($k)"); k++ }
+            targets[root] = target
+        }
+        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+            var e = z.nextEntry
+            while (e != null) {
+                val n = zipClean(e.name)
+                val root = if (e.isDirectory) null else roots.firstOrNull { n.startsWith(it) }
+                if (root != null) {
+                    val target = targets[root]!!
+                    val out = File(target, n.substring(root.length))
+                    if (out.canonicalPath.startsWith(target.canonicalPath + File.separator)) { out.parentFile?.mkdirs(); out.outputStream().use { z.copyTo(it) } }
+                }
+                e = z.nextEntry
+            }
+        }
     }
 
     private fun importUris(uris: List<android.net.Uri>) {
-        val kind = importKind
-        val dest = File(curGameDir(), kind).apply { mkdirs() }
+        val gameDir = curGameDir()
         Toast.makeText(this, tr("Копирование…", "Copying…"), Toast.LENGTH_SHORT).show()
         Thread {
-            var ok = 0; var fail = 0
+            val counts = LinkedHashMap<String, Int>(); var fail = 0
+            val builds = ArrayList<Pair<android.net.Uri, JSONObject>>()
+            val dps = ArrayList<File>()
             for (u in uris) {
                 try {
-                    var name = "file"
-                    contentResolver.query(u, null, null, null, null)?.use { c ->
-                        val ix = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                        if (c.moveToFirst() && ix >= 0) name = c.getString(ix) ?: name
-                    }
-                    name = name.replace('/', '_')
-                    if (kind == "saves") {
-                        if (!name.endsWith(".zip", true)) throw Exception("not zip")
-                        val base = name.substring(0, name.length - 4)
-                        fun clean(n: String) = n.replace('\\', '/').trimStart('/')
-                        val names = ArrayList<String>()
-                        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
-                            var e = z.nextEntry
-                            while (e != null) { val n = clean(e.name); if (!e.isDirectory && !n.startsWith("__MACOSX/")) names.add(n); e = z.nextEntry }
+                    val name = uriName(u)
+                    val low = name.lowercase()
+                    when {
+                        low.endsWith(".jar") -> {
+                            val d = File(gameDir, "mods").apply { mkdirs() }
+                            contentResolver.openInputStream(u)!!.use { inp -> File(d, name).outputStream().use { inp.copyTo(it) } }
+                            counts["mods"] = (counts["mods"] ?: 0) + 1
                         }
-                        // мир = папка, где лежит level.dat; всё вне неё (readme, картинки и т.п.) отбрасывается
-                        var roots = names.filter { it.substringAfterLast('/').equals("level.dat", true) }
-                            .map { if (it.contains('/')) it.substringBeforeLast('/') + "/" else "" }.distinct()
-                        roots = roots.filter { r -> roots.none { o -> o != r && o.isNotEmpty() && r.startsWith(o) } }
-                        if (roots.isEmpty()) throw Exception("no level.dat")
-                        val targets = HashMap<String, File>()
-                        for (root in roots) {
-                            val wn = (if (root.isEmpty()) base else root.trimEnd('/').substringAfterLast('/')).replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { base }
-                            var target = File(dest, wn); var k = 2
-                            while (target.exists() || targets.containsValue(target)) { target = File(dest, "$wn ($k)"); k++ }
-                            targets[root] = target
-                        }
-                        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
-                            var e = z.nextEntry
-                            while (e != null) {
-                                val n = clean(e.name)
-                                val root = if (e.isDirectory) null else roots.firstOrNull { n.startsWith(it) }
-                                if (root != null) {
-                                    val target = targets[root]!!
-                                    val out = File(target, n.substring(root.length))
-                                    if (out.canonicalPath.startsWith(target.canonicalPath + File.separator)) {
-                                        out.parentFile?.mkdirs()
-                                        out.outputStream().use { z.copyTo(it) }
-                                    }
-                                }
-                                e = z.nextEntry
+                        low.endsWith(".zip") -> {
+                            val (names, mf) = zipScan(u)
+                            val kind = zipKind(names, mf != null) ?: throw Exception("unknown")
+                            if (kind == "build") { builds.add(u to JSONObject(mf!!)) }
+                            else if (kind == "saves") {
+                                val d = File(gameDir, "saves").apply { mkdirs() }
+                                extractWorlds(u, names, name.substring(0, name.length - 4), d)
+                                counts[kind] = (counts[kind] ?: 0) + 1
+                            } else {
+                                val d = File(gameDir, kind).apply { mkdirs() }
+                                contentResolver.openInputStream(u)!!.use { inp -> File(d, name).outputStream().use { inp.copyTo(it) } }
+                                counts[kind] = (counts[kind] ?: 0) + 1
+                                if (kind == "datapacks") dps.add(File(d, name))
                             }
                         }
-                    } else {
-                        contentResolver.openInputStream(u)!!.use { inp -> File(dest, name).outputStream().use { inp.copyTo(it) } }
+                        else -> throw Exception("unknown")
                     }
-                    ok++
                 } catch (_: Throwable) { fail++ }
             }
             runOnUiThread {
+                val label = mapOf("mods" to tr("моды", "mods"), "shaderpacks" to tr("шейдеры", "shaders"), "resourcepacks" to tr("ресурспаки", "resource packs"),
+                    "datapacks" to tr("датапаки", "datapacks"), "saves" to tr("карты", "maps"))
+                val parts = counts.map { (k, v) -> "${label[k]}: $v" }.toMutableList()
+                if (builds.isNotEmpty()) parts.add(tr("сборки: ${builds.size}", "builds: ${builds.size}"))
+                if (fail > 0) parts.add(tr("не распознано: $fail", "unrecognized: $fail"))
+                Toast.makeText(this, (if (parts.isEmpty()) tr("Ничего не импортировано", "Nothing imported") else tr("Импорт: ", "Imported: ") + parts.joinToString(", ")), Toast.LENGTH_LONG).show()
                 importAfter?.invoke()
-                Toast.makeText(this, tr("Импортировано: $ok", "Imported: $ok") + (if (fail > 0) tr(", ошибок: $fail", ", failed: $fail") else ""), Toast.LENGTH_LONG).show()
+                builds.forEach { (u, m) -> importBuild(u, m) }
+                // датапаки: по очереди спрашиваем, в какой мир положить
+                fun offer(i: Int) { if (i < dps.size) offerDatapackWorld(dps[i]) { offer(i + 1) } }
+                offer(0)
             }
         }.start()
     }
 
+    /** Сборка Mobilix из zip: создаёт новую сборку, распаковывает файлы и ставит нужную версию игры, если её ещё нет. */
+    private fun importBuild(u: android.net.Uri, m: JSONObject) {
+        val nm = m.optString("name", tr("Сборка", "Build")).ifBlank { tr("Сборка", "Build") }
+        val kind = m.optString("kind", "vanilla"); val mc = m.optString("mc")
+        if (mc.isEmpty()) { Toast.makeText(this, tr("Файл сборки повреждён", "Build file is damaged"), Toast.LENGTH_LONG).show(); return }
+        val ver = when (kind) { "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; else -> mc }
+        MobDialog(this).setTitle(tr("Импорт сборки", "Import build"))
+            .setMessage("«$nm»\n" + tr("Версия: $ver. Если её нет, лаунчер скачает её сам.", "Version: $ver. If it is missing, the launcher will download it."))
+            .setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Импортировать", "Import")) { _, _ ->
+                val id = "b" + System.currentTimeMillis()
+                val dir = buildDir(id)
+                Toast.makeText(this, tr("Распаковка сборки…", "Unpacking build…"), Toast.LENGTH_SHORT).show()
+                Thread {
+                    try {
+                        val allowed = listOf("mods/", "resourcepacks/", "shaderpacks/", "saves/", "datapacks/")
+                        dir.mkdirs()
+                        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+                            var e = z.nextEntry
+                            while (e != null) {
+                                val n = zipClean(e.name)
+                                if (n == "icon.png") { buildIcon(id).parentFile?.mkdirs(); buildIcon(id).outputStream().use { z.copyTo(it) } }
+                                if (!e.isDirectory && allowed.any { n.startsWith(it) }) {
+                                    val out = File(dir, n)
+                                    if (out.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { out.parentFile?.mkdirs(); out.outputStream().use { z.copyTo(it) } }
+                                }
+                                e = z.nextEntry
+                            }
+                        }
+                        runOnUiThread {
+                            fun finish(profile: String) {
+                                val all = builds()
+                                all.put(JSONObject().put("id", id).put("name", nm).put("profile", profile))
+                                buildsSave(all)
+                                prefs.edit().putString("profile", profile).putString("build", id).apply()
+                                versionText.text = verTitle()
+                                Toast.makeText(this, tr("Сборка «$nm» добавлена и выбрана", "Build “$nm” added and selected"), Toast.LENGTH_LONG).show()
+                            }
+                            val have = findProfile(kind, mc)
+                            if (have != null) finish(have)
+                            else installProfile(kind, mc) { runOnUiThread { finish(findProfile(kind, mc) ?: selectedProfile()) } }
+                        }
+                    } catch (e: Throwable) {
+                        dir.deleteRecursively()
+                        runOnUiThread { Toast.makeText(this, tr("Не удалось импортировать сборку: ", "Could not import the build: ") + e.message, Toast.LENGTH_LONG).show() }
+                    }
+                }.start()
+            }.show()
+    }
+
+    private fun profileKindMc(p: String): Pair<String, String> = when {
+        p.startsWith("fabric-loader-") -> "fabric" to p.substringAfterLast("-")
+        p.contains("-forge-") -> "forge" to p.substringBefore("-forge-")
+        Regex("^[\\d.]+-forge[\\d.]+-.+").matches(p) -> "forge" to p.substringBefore("-forge")
+        else -> "vanilla" to p
+    }
+
+    /** Экспорт сборки в zip и отправка в любое приложение (Telegram и т.п.). */
+    private fun shareBuild(b: JSONObject) {
+        var worlds = false
+        val pane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        pane.addView(TextView(this).apply {
+            text = tr("В архив попадут: название, версия игры, моды, ресурспаки и шейдеры.", "The archive will contain: name, game version, mods, resource packs and shaders.")
+            textSize = 14f; setTextColor(Th.text2); setPadding(0, 0, 0, dp(12))
+        })
+        val chip = TextView(this).apply {
+            textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12))
+            fun paint() { setBackgroundColor(if (worlds) 0xFF2EA84F.toInt() else Th.chip); text = (if (worlds) "✓  " else "") + tr("Миры и датапаки", "Worlds and datapacks") }
+            paint(); setOnClickListener { worlds = !worlds; paint() }
+        }
+        pane.addView(chip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        pane.addView(TextView(this).apply { text = tr("Миры могут быть большими: архив станет тяжелее.", "Worlds can be large: the archive will be heavier."); textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(4), 0, 0) })
+        MobDialog(this).setTitle(tr("Поделиться сборкой", "Share build")).setView(pane)
+            .setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Создать и отправить", "Create and send")) { _, _ ->
+                val nm = b.optString("name"); val (kind, mc) = profileKindMc(b.optString("profile"))
+                val src = buildDir(b.optString("id"))
+                val withWorlds = worlds
+                Toast.makeText(this, tr("Создаю архив…", "Creating the archive…"), Toast.LENGTH_SHORT).show()
+                Thread {
+                    try {
+                        val dir = File(cacheDir, "share").apply { deleteRecursively(); mkdirs() }
+                        val fn = nm.replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "build" } + ".zip"
+                        val out = File(dir, fn)
+                        java.util.zip.ZipOutputStream(out.outputStream().buffered()).use { z ->
+                            z.putNextEntry(java.util.zip.ZipEntry("mobilix-build.json"))
+                            z.write(JSONObject().put("mobilix", 1).put("name", nm).put("kind", kind).put("mc", mc).put("profile", b.optString("profile")).toString().toByteArray())
+                            z.closeEntry()
+                            buildIcon(b.optString("id")).takeIf { it.exists() }?.let { ic ->
+                                z.putNextEntry(java.util.zip.ZipEntry("icon.png")); ic.inputStream().use { it.copyTo(z) }; z.closeEntry()
+                            }
+                            val parts = mutableListOf("mods", "resourcepacks", "shaderpacks")
+                            if (withWorlds) { parts.add("saves"); parts.add("datapacks") }
+                            for (p in parts) File(src, p).walkTopDown().filter { it.isFile }.forEach { f ->
+                                z.putNextEntry(java.util.zip.ZipEntry(p + "/" + f.relativeTo(File(src, p)).path.replace('\\', '/')))
+                                f.inputStream().use { it.copyTo(z) }; z.closeEntry()
+                            }
+                        }
+                        val uri = android.net.Uri.parse("content://dev.mobilix.launcher.share/" + android.net.Uri.encode(fn))
+                        runOnUiThread {
+                            try {
+                                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri)
+                                    putExtra(Intent.EXTRA_SUBJECT, nm); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    clipData = android.content.ClipData.newRawUri(fn, uri)
+                                }, tr("Отправить сборку", "Send build")))
+                            } catch (e: Throwable) { Toast.makeText(this, "Ошибка: $e", Toast.LENGTH_LONG).show() }
+                        }
+                    } catch (e: Throwable) {
+                        runOnUiThread { Toast.makeText(this, tr("Не удалось создать архив: ", "Could not create the archive: ") + e.message, Toast.LENGTH_LONG).show() }
+                    }
+                }.start()
+            }.show()
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 80 && resultCode == RESULT_OK && data?.data != null) {
+            try {
+                val bytes = contentResolver.openInputStream(data.data!!)!!.use { it.readBytes() }
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+                val o2 = android.graphics.BitmapFactory.Options().apply { inSampleSize = maxOf(1, minOf(o.outWidth, o.outHeight) / 256) }
+                val src = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o2)!!
+                val side = minOf(src.width, src.height)
+                val sq = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+                val out = if (side > 128) android.graphics.Bitmap.createScaledBitmap(sq, 128, 128, true) else sq
+                iconPick?.invoke(out)
+            } catch (e: Throwable) { Toast.makeText(this, tr("Не удалось открыть картинку", "Could not open the image"), Toast.LENGTH_LONG).show() }
+            return
+        }
         if (requestCode == 78 && resultCode == RESULT_OK && data != null) {
             val list = ArrayList<android.net.Uri>()
             data.clipData?.let { cd -> for (i in 0 until cd.itemCount) list.add(cd.getItemAt(i).uri) }
@@ -2459,6 +2751,8 @@ class MainActivity : Activity() {
     private fun builds(): JSONArray = try { JSONArray(prefs.getString("builds", "[]")) } catch (_: Exception) { JSONArray() }
     private fun buildsSave(a: JSONArray) { prefs.edit().putString("builds", a.toString()).apply() }
     private fun buildDir(id: String) = File(dataRoot(), "builds/$id")
+    private fun buildIcon(id: String) = File(dataRoot(), "build-icons/$id.png")
+    private var iconPick: ((android.graphics.Bitmap) -> Unit)? = null
 
     /** Выбранная сборка. Если после неё сменили версию игры, сборка считается снятой. */
     internal fun activeBuild(): JSONObject? {

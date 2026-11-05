@@ -248,6 +248,7 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
         val PUMPKIN_PAL = mapOf('o' to 0xFFF28A1E.toInt(), 'O' to 0xFFC25A0A.toInt(), 'u' to 0xFF4C9A2A.toInt(), 'k' to 0xFF2A1608.toInt())
         val SNOW_PAL = mapOf('w' to 0xFFDCEBFF.toInt())
         val BAT_PAL = mapOf('k' to 0xFF8A6BD6.toInt())
+        val I_SHARE = listOf("....G....", "...GGG...", "..G.G.G..", "....G....", "....G....", "g.......g", "g.......g", "ggggggggg")
         val TRASH_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'R' to 0xFFA3231C.toInt())
     }
 }
