@@ -104,21 +104,29 @@ class MainActivity : Activity() {
         Th.light = ol; Th.classic = oc
         return r
     }
-    /** Праздничный сезон за неделю до и после: Хеллоуин 24 окт – 7 ноя, Новый год 25 дек – 8 янв. */
+    /** Праздничная неделя до и после: Хеллоуин 24 окт – 7 ноя, Новый год 25 дек – 8 янв, день рождения Minecraft 10–24 мая, 1 апреля 25 мар – 8 апр. */
     internal fun season(): String? {
         val c = java.util.Calendar.getInstance(); val m = c.get(java.util.Calendar.MONTH); val d = c.get(java.util.Calendar.DAY_OF_MONTH)
         return when {
             (m == java.util.Calendar.OCTOBER && d >= 24) || (m == java.util.Calendar.NOVEMBER && d <= 7) -> "halloween"
             (m == java.util.Calendar.DECEMBER && d >= 25) || (m == java.util.Calendar.JANUARY && d <= 8) -> "newyear"
+            m == java.util.Calendar.MAY && d in 10..24 -> "mcbday"
+            (m == java.util.Calendar.MARCH && d >= 25) || (m == java.util.Calendar.APRIL && d <= 8) -> "aprilfools"
             else -> null
         }
     }
-    private val fxList = ArrayList<FxView>()
-    private fun newFx(): FxView? {
-        val sn = season() ?: return null
-        return FxView(this, sn).also {
-            it.visibility = if (prefs.getBoolean("fxOn", true)) View.VISIBLE else View.GONE
-            fxList.add(it)
+    private fun seasonIcon(sn: String): PixelIcon = when (sn) {
+        "newyear" -> PixelIcon(this, PixelIcon.SNOWFLAKE, mapOf('w' to 0xFF8FD0FF.toInt()))
+        "mcbday" -> PixelIcon(this, PixelIcon.PARTYHAT, PixelIcon.HAT_PAL)
+        "aprilfools" -> PixelIcon(this, PixelIcon.CHICKEN, PixelIcon.CHICKEN_PAL)
+        else -> PixelIcon(this, PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
+    }
+    /** Фон кнопки: прозрачный в покое (видны эффекты), темнее при нажатии. */
+    private fun selT(color: Int): android.graphics.drawable.Drawable {
+        fun dk(f: Float): Int = Color.rgb((Color.red(color) * f).toInt(), (Color.green(color) * f).toInt(), (Color.blue(color) * f).toInt())
+        return android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(dk(0.55f)))
+            addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         }
     }
     internal fun navBottom() = prefs.getString("nav", "side") == "bottom"
@@ -243,6 +251,7 @@ class MainActivity : Activity() {
         }
         Th.light = prefs.getString("theme", "dark") == "light"
         Th.classic = prefs.getString("style", "new") == "old"
+        Fx.kind = season(); Fx.on = prefs.getBoolean("fxOn", true)
         drawerW = resources.displayMetrics.widthPixels - dp(64)
 
         rootFrame = FrameLayout(this).apply { setBackgroundColor(Th.bg); fitsSystemWindows = true }
@@ -250,13 +259,12 @@ class MainActivity : Activity() {
         rootFrame.addView(root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         // верхняя полоса: название по центру, лог справа (кнопка-меню рисуется поверх всего)
-        val top = FrameLayout(this).apply { setBackgroundColor(Th.bar) }
+        val top = FxFrame(this).apply { setBackgroundColor(Th.bar) }
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         titleRow.addView(TextView(this).apply { text = "Mobilix"; textSize = 22f; setTextColor(Th.accent); gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f })
         season()?.let { sn ->
-            val st = if (sn == "newyear") PixelIcon(this, PixelIcon.SNOWFLAKE, mapOf('w' to 0xFF8FD0FF.toInt())) else PixelIcon(this, PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
-            titleRow.addView(st, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(6) })
+            titleRow.addView(seasonIcon(sn), LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(6) })
         }
         titleBox.addView(titleRow)
         verLabel = TextView(this).apply {
@@ -268,7 +276,7 @@ class MainActivity : Activity() {
         root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
 
         // область 3D-скина
-        val skinBox = FrameLayout(this).apply { setBackgroundColor(Th.skinBg) }
+        val skinBox = FxFrame(this).apply { setBackgroundColor(Th.skinBg) }
         skinView = SkinView(this)
         skinBox.addView(skinView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         nickText = TextView(this).apply {
@@ -344,7 +352,7 @@ class MainActivity : Activity() {
             setOnClickListener { setDrawer(false) }
         }
         rootFrame.addView(scrim, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        drawer = LinearLayout(this).apply {
+        drawer = FxLinear(this).apply {
             orientation = LinearLayout.VERTICAL; setBackgroundColor(Th.drawer)
             translationX = -drawerW.toFloat(); isClickable = true
         }
@@ -356,7 +364,7 @@ class MainActivity : Activity() {
             menuEntries.add(Triple(tr(ru, en), ico, onClick))
             val t = TextView(this).apply {
                 text = tr(ru, en); textSize = 18f; setTextColor(Th.text); gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(72), 0, dp(16), 0); isClickable = true; background = sel(Th.drawer)
+                setPadding(dp(72), 0, dp(16), 0); isClickable = true; background = selT(Th.drawer)
                 setOnClickListener { onClick() }
             }
             drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
@@ -400,9 +408,9 @@ class MainActivity : Activity() {
         if (navBottom()) {
             // нижняя панель только с иконками (как в мессенджерах); боковое меню не используется
             hamb.visibility = View.GONE; drawer.visibility = View.GONE; scrim.visibility = View.GONE
-            val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Th.bar) }
+            val nav = FxLinear(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Th.bar) }
             menuEntries.forEachIndexed { i, e ->
-                val cell = FrameLayout(this).apply { isClickable = true; background = sel(Th.bar); setOnClickListener { e.third() } }
+                val cell = FrameLayout(this).apply { isClickable = true; background = selT(Th.bar); setOnClickListener { e.third() } }
                 cell.contentDescription = e.first
                 cell.addView(PixelIcon(this, e.second.first, e.second.second), FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
                 if (i == 6) ghTab = cell
@@ -425,22 +433,18 @@ class MainActivity : Activity() {
         rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom()) bottomMargin = dp(57) })
 
         season()?.let { sn ->
-            // эффекты лежат за текстом и кнопками: у скина (скин их закрывает) и на каждой странице; боковое меню закрывает всё
-            newFx()?.let { skinBox.addView(it, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
             // временная кнопка эффектов у скина: есть только в праздничную неделю
-            val ico = if (sn == "newyear") PixelIcon(this, PixelIcon.SNOWFLAKE, mapOf('w' to 0xFF8FD0FF.toInt())) else PixelIcon(this, PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
             val btn = FrameLayout(this).apply {
-                isClickable = true; alpha = if (prefs.getBoolean("fxOn", true)) 1f else 0.4f
+                isClickable = true; alpha = if (Fx.on) 1f else 0.4f
                 background = GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.accent); cornerRadius = dp(8).toFloat() }
                 setOnClickListener {
-                    val on = !prefs.getBoolean("fxOn", true)
-                    prefs.edit().putBoolean("fxOn", on).apply()
-                    fxList.removeAll { !it.isAttachedToWindow }
-                    fxList.forEach { it.visibility = if (on) View.VISIBLE else View.GONE }
-                    alpha = if (on) 1f else 0.4f
+                    Fx.on = !Fx.on
+                    prefs.edit().putBoolean("fxOn", Fx.on).apply()
+                    alpha = if (Fx.on) 1f else 0.4f
+                    Fx.refresh()
                 }
             }
-            btn.addView(ico, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+            btn.addView(seasonIcon(sn), FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
             skinBox.addView(btn, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END or Gravity.BOTTOM).apply { marginEnd = dp(10); bottomMargin = dp(10) })
         }
 
@@ -471,8 +475,7 @@ class MainActivity : Activity() {
 
     private fun openPage(title: String, content: View, animate: Boolean = true) {
         pageLayer.removeAllViews()
-        val pageWrap = FrameLayout(this).apply { setBackgroundColor(Th.bg); isClickable = true }
-        newFx()?.let { pageWrap.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
+        val pageWrap = FxFrame(this).apply { setBackgroundColor(Th.bg); isClickable = true }
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val head = FrameLayout(this).apply { setBackgroundColor(Th.bar) }
         head.addView(TextView(this).apply {

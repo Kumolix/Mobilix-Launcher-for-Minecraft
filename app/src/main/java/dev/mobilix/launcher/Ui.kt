@@ -249,6 +249,12 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
         val SNOW_PAL = mapOf('w' to 0xFFDCEBFF.toInt())
         val BAT_PAL = mapOf('k' to 0xFF8A6BD6.toInt())
         val I_SHARE = listOf("....G....", "...GGG...", "..G.G.G..", "....G....", "....G....", "g.......g", "g.......g", "ggggggggg")
+        val CREEPER = listOf("aaaaaaaa", "aAaaaaAa", "akkaakka", "akkaakka", "aaakkaaa", "aakkkkaa", "aakkkkaa", "aakaakaa")
+        val CHICKEN = listOf("...rr...", "..wkwo..", "..wwwo..", ".wwww...", "wwwww...", "wwwww...", ".wwww...", "..o.o...")
+        val PARTYHAT = listOf("....y....", "...rrr...", "...bbb...", "..rrrrr..", "..bbbbb..", ".rrrrrrr.", ".yyyyyyy.")
+        val CREEPER_PAL = mapOf('a' to 0xFF4CAF50.toInt(), 'A' to 0xFF2E7D32.toInt(), 'k' to 0xFF0B0B0B.toInt())
+        val CHICKEN_PAL = mapOf('w' to 0xFFF2F2F2.toInt(), 'r' to 0xFFE5484D.toInt(), 'o' to 0xFFF5A623.toInt(), 'k' to 0xFF222222.toInt())
+        val HAT_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'b' to 0xFF3FA7F5.toInt(), 'y' to 0xFFF5C846.toInt())
         val TRASH_PAL = mapOf('r' to 0xFFE5484D.toInt(), 'R' to 0xFFA3231C.toInt())
     }
 }
@@ -281,57 +287,91 @@ class CaretView(ctx: Context) : View(ctx) {
 }
 
 
-/** Праздничные эффекты поверх лаунчера (не ловят касания): снег на Новый год, тыквы и летучие мыши на Хеллоуин. */
-class FxView(ctx: Context, private val kind: String) : View(ctx) {
+/** Праздничный режим: kind = halloween / newyear / mcbday / aprilfools или null; on = включены ли эффекты. */
+object Fx {
+    var kind: String? = null
+    var on = true
+    val hosts: MutableSet<View> = java.util.Collections.newSetFromMap(java.util.WeakHashMap<View, Boolean>())
+    fun refresh() { hosts.forEach { it.invalidate() } }
+}
+
+/** Рисует праздничные частицы. Хозяин (FxFrame/FxLinear) вызывает draw() из onDraw: после фона и до детей, поэтому текст и кнопки лежат поверх. */
+class FxPainter(private val host: View) {
     private class P(var x: Float, var y: Float, var vx: Float, var vy: Float, var ph: Float, val bmp: android.graphics.Bitmap, val size: Float, val bat: Boolean)
     private val ps = ArrayList<P>()
     private val paint = Paint().apply { isFilterBitmap = false }
     private val rnd = java.util.Random()
-    private var last = 0L
-    private val d = resources.displayMetrics.density
+    private var last = 0L; private var lw = 0; private var lh = 0; private var lk: String? = null
+    private val d = host.resources.displayMetrics.density
     private fun bmp(rows: List<String>, pal: Map<Char, Int>): android.graphics.Bitmap {
         val w = rows.maxOf { it.length }
         val b = android.graphics.Bitmap.createBitmap(w, rows.size, android.graphics.Bitmap.Config.ARGB_8888)
         for (y in rows.indices) for (x in rows[y].indices) pal[rows[y][x]]?.let { b.setPixel(x, y, it) }
         return b
     }
-    private val pump = bmp(PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL)
-    private val snow = bmp(PixelIcon.SNOWFLAKE, PixelIcon.SNOW_PAL)
-    private val bat = bmp(PixelIcon.BAT, PixelIcon.BAT_PAL)
-    private fun spawn(top: Boolean): P {
-        val w = width.toFloat().coerceAtLeast(1f); val h = height.toFloat().coerceAtLeast(1f)
-        val x = rnd.nextFloat() * w; val y = if (top) -20f * d else rnd.nextFloat() * h
-        return if (kind == "newyear") {
-            val big = rnd.nextInt(4) == 0
-            P(x, y, (rnd.nextFloat() - 0.5f) * 14f * d, (22f + rnd.nextFloat() * 28f) * d, rnd.nextFloat() * 6f, snow, (if (big) 14f else 8f + rnd.nextFloat() * 3f) * d, false)
-        } else if (rnd.nextInt(3) == 0) {
-            P(x, rnd.nextFloat() * h * 0.7f, (if (rnd.nextBoolean()) 1 else -1) * (30f + rnd.nextFloat() * 30f) * d, 0f, rnd.nextFloat() * 6f, bat, 20f * d, true)
-        } else {
-            P(x, y, (rnd.nextFloat() - 0.5f) * 10f * d, (16f + rnd.nextFloat() * 20f) * d, rnd.nextFloat() * 6f, pump, (16f + rnd.nextFloat() * 8f) * d, false)
+    private val pump by lazy { bmp(PixelIcon.PUMPKIN, PixelIcon.PUMPKIN_PAL) }
+    private val snow by lazy { bmp(PixelIcon.SNOWFLAKE, PixelIcon.SNOW_PAL) }
+    private val bat by lazy { bmp(PixelIcon.BAT, PixelIcon.BAT_PAL) }
+    private val creeper by lazy { bmp(PixelIcon.CREEPER, PixelIcon.CREEPER_PAL) }
+    private val chicken by lazy { bmp(PixelIcon.CHICKEN, PixelIcon.CHICKEN_PAL) }
+    private fun spawn(kind: String, top: Boolean): P {
+        val w = lw.toFloat().coerceAtLeast(1f); val h = lh.toFloat().coerceAtLeast(1f)
+        val x = rnd.nextFloat() * w; val y = if (top) -24f * d else rnd.nextFloat() * h
+        val ph = rnd.nextFloat() * 6f
+        return when (kind) {
+            "newyear" -> { val big = rnd.nextInt(4) == 0
+                P(x, y, (rnd.nextFloat() - 0.5f) * 14f * d, (22f + rnd.nextFloat() * 28f) * d, ph, snow, (if (big) 14f else 8f + rnd.nextFloat() * 3f) * d, false) }
+            "mcbday" -> P(x, y, (rnd.nextFloat() - 0.5f) * 8f * d, (70f + rnd.nextFloat() * 60f) * d, ph, creeper, (13f + rnd.nextFloat() * 7f) * d, false)
+            "aprilfools" -> P(x, y, (rnd.nextFloat() - 0.5f) * 20f * d, (14f + rnd.nextFloat() * 14f) * d, ph, chicken, (18f + rnd.nextFloat() * 6f) * d, false)
+            else -> if (rnd.nextInt(3) == 0)
+                P(x, rnd.nextFloat() * h * 0.7f, (if (rnd.nextBoolean()) 1 else -1) * (30f + rnd.nextFloat() * 30f) * d, 0f, ph, bat, 20f * d, true)
+            else P(x, y, (rnd.nextFloat() - 0.5f) * 10f * d, (16f + rnd.nextFloat() * 20f) * d, ph, pump, (16f + rnd.nextFloat() * 8f) * d, false)
         }
     }
-    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
-        ps.clear()
-        val n = if (kind == "newyear") 30 else 14
-        repeat(n) { ps.add(spawn(false)) }
-    }
-    override fun onDraw(c: Canvas) {
+    fun draw(c: Canvas, w: Int, h: Int, kind: String) {
+        if (w != lw || h != lh || kind != lk) {
+            lw = w; lh = h; lk = kind; ps.clear()
+            val area = w.toFloat() * h / (d * d)
+            val per = if (kind == "newyear") 9000f else if (kind == "mcbday") 14000f else 20000f
+            repeat((area / per).toInt().coerceIn(2, 32)) { ps.add(spawn(kind, false)) }
+        }
         val now = android.os.SystemClock.uptimeMillis()
-        val dt = if (last == 0L) 0.016f else minOf(50L, now - last) / 1000f
+        val dt = if (last == 0L || now - last > 200) 0.016f else (now - last) / 1000f
         last = now
-        val w = width.toFloat(); val h = height.toFloat()
+        val fw = w.toFloat(); val fh = h.toFloat()
         for (i in ps.indices) {
             val p = ps[i]
             p.ph += dt * (if (p.bat) 5f else 1.5f)
             p.x += p.vx * dt + (if (p.bat) 0f else Math.sin(p.ph.toDouble()).toFloat() * 8f * d * dt)
             p.y += p.vy * dt + (if (p.bat) Math.sin(p.ph.toDouble()).toFloat() * 30f * d * dt else 0f)
-            if (p.bat) { if (p.x < -30f * d) p.x = w + 20f * d else if (p.x > w + 30f * d) p.x = -20f * d }
-            else if (p.y > h + 20f * d) ps[i] = spawn(true)
-            val sw = p.size; val sh = p.size * p.bmp.height / p.bmp.width
+            if (p.bat) { if (p.x < -30f * d) p.x = fw + 20f * d else if (p.x > fw + 30f * d) p.x = -20f * d }
+            else if (p.y > fh + 24f * d) ps[i] = spawn(kind, true)
+            val sh = p.size * p.bmp.height / p.bmp.width
             paint.alpha = if (kind == "newyear") 210 else 235
-            c.drawBitmap(p.bmp, null, RectF(p.x, p.y, p.x + sw, p.y + sh), paint)
+            c.drawBitmap(p.bmp, null, RectF(p.x, p.y, p.x + p.size, p.y + sh), paint)
         }
-        postInvalidateOnAnimation()
+    }
+}
+
+/** FrameLayout, рисующий эффекты между своим фоном и содержимым. */
+class FxFrame(ctx: Context) : android.widget.FrameLayout(ctx) {
+    private val fx = FxPainter(this)
+    init { setWillNotDraw(false); Fx.hosts.add(this) }
+    override fun onDraw(c: Canvas) {
+        super.onDraw(c)
+        val k = Fx.kind
+        if (k != null && Fx.on) { fx.draw(c, width, height, k); postInvalidateOnAnimation() }
+    }
+}
+
+/** LinearLayout с теми же эффектами под детьми. */
+class FxLinear(ctx: Context) : LinearLayout(ctx) {
+    private val fx = FxPainter(this)
+    init { setWillNotDraw(false); Fx.hosts.add(this) }
+    override fun onDraw(c: Canvas) {
+        super.onDraw(c)
+        val k = Fx.kind
+        if (k != null && Fx.on) { fx.draw(c, width, height, k); postInvalidateOnAnimation() }
     }
 }
 
