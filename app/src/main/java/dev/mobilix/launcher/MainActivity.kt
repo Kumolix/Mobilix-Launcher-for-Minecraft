@@ -3771,12 +3771,16 @@ class MainActivity : Activity() {
         File(root, "installer.json").writeText(j.toString())
         val done = File(getExternalFilesDir(null) ?: filesDir, "installer.done").apply { delete() }
         val ilog = File(getExternalFilesDir(null) ?: filesDir, "installer.log").apply { delete() }
+        val dd = getExternalFilesDir(null) ?: filesDir
+        File(dd, "installer.started").delete(); File(dd, "installer.restarted").delete()
         runOnUiThread { startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "installer")) }
         var shown = 0L; var noise = 0
         val t0 = System.currentTimeMillis()
         while (System.currentTimeMillis() - t0 < 30 * 60 * 1000L) {
             Thread.sleep(1500)
+            if (File(dd, "installer.restarted").exists()) { log("Forge: процесс установщика был остановлен системой, окно открылось заново; перехожу к следующей попытке"); break }
             try {
+                if (ilog.exists() && ilog.length() < shown) shown = 0
                 if (ilog.exists() && ilog.length() > shown) {
                     java.io.RandomAccessFile(ilog, "r").use { raf ->
                         raf.seek(shown)

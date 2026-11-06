@@ -54,6 +54,17 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         mode = intent.getStringExtra("mode") ?: "game"
+        if (mode == "installer") {
+            // окно установщика открывается один раз за попытку. Если систему убила процесс, она может открыть окно заново:
+            // повторно ничего не запускаем, а сообщаем лаунчеру, чтобы он перешёл к следующей попытке (иначе чёрный экран мигает по кругу)
+            val dd = getExternalFilesDir(null) ?: filesDir
+            val started = File(dd, "installer.started")
+            if (started.exists()) {
+                try { File(dd, "installer.restarted").writeText("1") } catch (_: Exception) {}
+                finish(); return
+            }
+            try { started.writeText(System.currentTimeMillis().toString()) } catch (_: Exception) {}
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.BLACK))
         if (fullscreen()) {
