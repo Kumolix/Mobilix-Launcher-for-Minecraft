@@ -2342,6 +2342,7 @@ class MainActivity : Activity() {
                                 if (found != null && miss.isEmpty()) break
                                 if (miss.isNotEmpty()) log("Forge: установка не завершилась, нет файлов: ${miss.joinToString(", ")}")
                                 found = null
+                                Thread.sleep(2500)
                             }
                             id = found ?: throw RuntimeException("Forge не установился до конца (не созданы файлы постобработки). Попробуйте ещё раз, закрыв другие приложения.")
                             if (legacyMc) { log("Профиль $id создан, докачиваю библиотеки…"); prepareAndRun(id, false) }
