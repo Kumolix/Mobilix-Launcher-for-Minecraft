@@ -2330,8 +2330,11 @@ class MainActivity : Activity() {
                             val lp = File(root, "launcher_profiles.json")
                             if (!lp.exists()) lp.writeText("{\"profiles\":{}}")
                             var found: String? = null
-                            for (attempt in 1..3) {
-                                log("Forge: установка, попытка $attempt (это долго, потерпите)…")
+                            for (attempt in 1..6) {
+                                log("Forge: установка, попытка $attempt из 6 (это долго, потерпите)…")
+                                runOnUiThread { Toast.makeText(this, tr(
+                                    "Forge ставится в отдельном окне с чёрным экраном: не закрывайте его, оно может мигать. Если установка прервётся, лаунчер продолжит с того места (попытка $attempt из 6).",
+                                    "Forge installs in a separate black window: do not close it, it may flicker. If the install is interrupted the launcher resumes where it stopped (attempt $attempt of 6)."), Toast.LENGTH_LONG).show() }
                                 runForgeInstaller(rt, installer, root)
                                 found = findProfile("forge", mc)
                                 // профиль появляется раньше, чем постпроцессоры создадут srg/extra/client: проверяем сами файлы
@@ -3768,7 +3771,7 @@ class MainActivity : Activity() {
         val done = File(getExternalFilesDir(null) ?: filesDir, "installer.done").apply { delete() }
         val ilog = File(getExternalFilesDir(null) ?: filesDir, "installer.log").apply { delete() }
         runOnUiThread { startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "installer")) }
-        var shown = 0L
+        var shown = 0L; var noise = 0
         val t0 = System.currentTimeMillis()
         while (System.currentTimeMillis() - t0 < 30 * 60 * 1000L) {
             Thread.sleep(1500)
@@ -3778,7 +3781,12 @@ class MainActivity : Activity() {
                         raf.seek(shown)
                         val buf = ByteArray((raf.length() - shown).toInt()); raf.readFully(buf)
                         shown = raf.length()
-                        String(buf).lines().filter { it.isNotBlank() }.forEach { log(it) }
+                        String(buf).lines().filter { it.isNotBlank() }.forEach {
+                            // установщик печатает по строке на каждый класс клиента: не засоряем лог тысячами «Slim …»
+                            if (it.startsWith("Slim ") || it.startsWith("Extra ")) {
+                                if (++noise % 500 == 0) log("Forge: разбор клиента… обработано классов: $noise")
+                            } else log(it)
+                        }
                     }
                 }
             } catch (_: Exception) {}
@@ -3790,6 +3798,12 @@ class MainActivity : Activity() {
                 if (!alive) break
             }
         }
+        // итог: чем закончился процесс установщика (нужно, чтобы отличить ошибку Forge от того, что систему убила процесс)
+        try {
+            if (done.exists()) log("Forge: установщик завершился: " + done.readText().trim().take(300))
+            else log("Forge: процесс установщика оборвался без результата (вероятно, система остановила его из-за нехватки памяти или нагрева)")
+            if (ilog.exists()) ilog.readLines().filter { it.isNotBlank() && !it.startsWith("Slim ") && !it.startsWith("Extra ") }.takeLast(12).forEach { log("  | $it") }
+        } catch (_: Exception) {}
     }
 
     // ---------- вспомогательное ----------
