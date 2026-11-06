@@ -3773,7 +3773,21 @@ class MainActivity : Activity() {
         val ilog = File(getExternalFilesDir(null) ?: filesDir, "installer.log").apply { delete() }
         val dd = getExternalFilesDir(null) ?: filesDir
         File(dd, "installer.started").delete(); File(dd, "installer.restarted").delete()
-        runOnUiThread { startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "installer")) }
+        // сначала пробуем службу без окна; если она не стартовала за 20 с, запасной путь — окно, как раньше
+        var viaService = true
+        runOnUiThread {
+            try {
+                val si = Intent(this, InstallerService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(si) else startService(si)
+            } catch (_: Throwable) { viaService = false }
+        }
+        val ts = System.currentTimeMillis()
+        while (viaService && !File(dd, "installer.started").exists() && System.currentTimeMillis() - ts < 20000L) Thread.sleep(300)
+        if (!viaService || !File(dd, "installer.started").exists()) {
+            log("Forge: служба установки не запустилась, использую окно установщика")
+            try { stopService(Intent(this, InstallerService::class.java)) } catch (_: Throwable) {}
+            runOnUiThread { startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "installer")) }
+        }
         var shown = 0L; var noise = 0
         val t0 = System.currentTimeMillis()
         while (System.currentTimeMillis() - t0 < 30 * 60 * 1000L) {
