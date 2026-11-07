@@ -133,6 +133,7 @@ class MainActivity : Activity() {
     /** Компактный интерфейс: Версии, Каталог и Сборки объединены в «Загрузки»; раскладка, язык и удаление скачанного ушли в настройки. */
     internal fun compact() = prefs.getBoolean("compact", false)
     private var ghIdx = -1
+    private var settingsTab = 0
     private var updateVer: String? = null
 
     private fun socialPage(): View {
@@ -683,8 +684,14 @@ class MainActivity : Activity() {
 
     private fun settingsPage(): View {
         val sv = ScrollView(this)
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), dp(24)) }
-        col.addView(header(tr("Лаунчер", "Launcher")))
+        val cmp = compact()
+        // в компактном режиме страница делится на вкладки: Оформление, Лаунчер, Игра, Специальное; иначе всё в одной колонке
+        fun newCol() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), dp(24)) }
+        val one = newCol()
+        val colA = if (cmp) newCol() else one; val colL = if (cmp) newCol() else one
+        val colG = if (cmp) newCol() else one; val colS = if (cmp) newCol() else one
+        var col = colA
+        if (!cmp) col.addView(header(tr("Лаунчер", "Launcher")))
         col.addView(TextView(this).apply { text = tr("Оформление", "Appearance"); setTextColor(Th.text); setPadding(0, 0, 0, dp(8)) })
         val cards = listOf(
             Triple(tr("Графит · тёмная", "Graphite · dark"), false, false), Triple(tr("Графит · светлая", "Graphite · light"), true, false),
@@ -715,6 +722,11 @@ class MainActivity : Activity() {
             prefs.edit().putString("nav", if (i == 0) "bottom" else "side").apply()
             recreate()
         })
+        if (cmp) colA.addView(Button(this).apply {
+            text = tr("Язык: ", "Language: ") + (if (lang() == "zh") "中文" else lang().uppercase()); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
+            setOnClickListener { chooseLanguage() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(16) })
+        col = colL
         col.addView(TextView(this).apply { text = tr("Многопоточная загрузка", "Multi-threaded download"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("multiDl", true)) 1 else 0) { i ->
             prefs.edit().putBoolean("multiDl", i == 1).apply()
@@ -726,6 +738,7 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Перед запуском Fabric или Forge лаунчер подбирает скачанным из каталога модам файлы под вашу версию игры и загрузчик, докачивает обязательные зависимости и предупреждает, если чего-то не хватает. Моды другого загрузчика отключаются всегда (папка mods-disabled), это не зависит от переключателя.",
             "Before a Fabric or Forge launch, the launcher picks files for mods downloaded from the catalog that match your game version and loader, downloads required dependencies and warns about anything missing. Mods for another loader are always disabled (mods-disabled folder), regardless of this switch.")))
+        col = colS
         col.addView(TextView(this).apply { text = tr("Резервные копии миров", "World backups"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("worldBackup", true)) 1 else 0) { i ->
             prefs.edit().putBoolean("worldBackup", i == 1).apply()
@@ -735,11 +748,13 @@ class MainActivity : Activity() {
             text = tr("Восстановить мир из копии", "Restore a world from backup"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
             setOnClickListener { restoreWorldsDialog() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
+        col = colG
         col.addView(TextView(this).apply { text = tr("Управление движением", "Movement control"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Крестовина (WASD)", "D-pad (WASD)"), tr("Джойстик", "Joystick")), if (prefs.getBoolean("joystick", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("joystick", i == 1).apply(); writeGameSettings()
         })
         col.addView(note(tr("Джойстик: тяните в сторону, чтобы идти; за край круга — бег.", "Joystick: drag to walk; beyond the ring to sprint.")))
+        col = colS
         col.addView(Button(this).apply {
             text = tr("Открыть папку игры", "Open game folder"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
             setOnClickListener { openGameFolder() }
@@ -756,10 +771,10 @@ class MainActivity : Activity() {
                 setOnClickListener { onClick() }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
             btn(tr("Раскладка управления", "Controls layout")) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
-            btn(tr("Язык: ", "Language: ") + (if (lang() == "zh") "中文" else lang().uppercase())) { chooseLanguage() }
             btn(tr("Удалить скачанное", "Delete downloads"), red = true) { confirmWipe() }
         }
-        col.addView(header(tr("Игра", "Game")))
+        col = colG
+        if (!cmp) col.addView(header(tr("Игра", "Game")))
         // быстрые настройки графики: между двумя линиями
         col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(6); bottomMargin = dp(10) })
         col.addView(TextView(this).apply { text = tr("Быстрые настройки графики", "Quick graphics settings"); setTextColor(Th.text); textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(6)) })
@@ -854,7 +869,8 @@ class MainActivity : Activity() {
             })
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
-        col.addView(header(tr("Специальное", "Special")))
+        col = colS
+        if (!cmp) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Источник каталога", "Catalog source"); setTextColor(Th.text); setPadding(0, 0, 0, dp(6)) })
         col.addView(chipRow(listOf("Modrinth", "Modrinth Black"), prefs.getInt("modSource", 2) - 1) { i -> prefs.edit().putInt("modSource", i + 1).apply() })
         col.addView(TextView(this).apply { text = tr("Адрес API зеркала", "Mirror API address"); setTextColor(Th.text); setPadding(0, dp(14), 0, 0) })
@@ -873,8 +889,21 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(180), dp(40)).apply { topMargin = dp(6) })
         col.addView(note(tr("Если Modrinth недоступен, выберите Modrinth Black. Если зеркало не отвечает, поправьте адрес API здесь.",
             "If Modrinth is unreachable, choose Modrinth Black. If the mirror does not respond, fix the API address here.")))
-        sv.addView(col)
-        return sv
+        if (!cmp) { sv.addView(one); return sv }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val holder = FrameLayout(this)
+        val cols = listOf(colA, colL, colG, colS)
+        val cache = arrayOfNulls<View>(4)
+        fun show(i: Int) {
+            settingsTab = i
+            val v = cache[i] ?: ScrollView(this).apply { addView(cols[i]) }.also { cache[i] = it }
+            holder.removeAllViews()
+            holder.addView(v, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        box.addView(topTabs(listOf(tr("Оформление", "Look"), tr("Лаунчер", "Launcher"), tr("Игра", "Game"), tr("Специальное", "Special")), settingsTab) { show(it) })
+        box.addView(holder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        show(settingsTab)
+        return box
     }
 
     // ---------- каталог (Modrinth) ----------
@@ -955,7 +984,7 @@ class MainActivity : Activity() {
         }
         labels.forEachIndexed { i, l ->
             val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; isClickable = true; background = selT(Th.bar) }
-            val t = TextView(this).apply { text = l; textSize = 16f; gravity = Gravity.CENTER; maxLines = 1; setPadding(0, dp(14), 0, dp(12)) }
+            val t = TextView(this).apply { text = l; textSize = if (labels.size > 3) 13f else 16f; gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(2), dp(14), dp(2), dp(12)) }
             val ln = View(this)
             texts.add(t); lines.add(ln)
             cell.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
