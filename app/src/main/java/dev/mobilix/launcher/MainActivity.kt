@@ -3170,7 +3170,7 @@ class MainActivity : Activity() {
         val oldForge = legacy && child != null
         // 1.0–1.5.2 и Classic стартуют через Frame/Canvas: запускаем их через dev.mobilix.OldMain (без окна AWT)
         val realMain = v.getString("mainClass")
-        val preAwt = legacy && child == null && !realMain.startsWith("net.minecraft.client.main.") && !realMain.contains("launchwrapper")
+        val preAwt = legacy && child == null && !realMain.startsWith("net.minecraft.client.main.")   // у 1.0–1.5.2 и Classic главный класс — launchwrapper, он на Java 9+ не работает
         val oldGl = legacy || javaMajor < 16
         applyMipmap(gameDir, oldGl)
         applyPreset(gameDir, baseVer)

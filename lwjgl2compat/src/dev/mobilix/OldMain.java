@@ -17,14 +17,41 @@ import java.lang.reflect.Modifier;
 public final class OldMain {
 	private OldMain() {}
 
+	/** Запасной вариант: перебираем классы из jar игры в пакетах клиента и ищем конкретный класс с конструктором (..Canvas..). */
+	private static Constructor<?> scanForClient(ClassLoader cl) {
+		String[] prefixes = { "net/minecraft/client/", "com/mojang/minecraft/", "com/mojang/rubydung/" };
+		for (String path : System.getProperty("java.class.path", "").split(java.io.File.pathSeparator)) {
+			if (!path.endsWith(".jar")) continue;
+			try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(path)) {
+				for (java.util.Enumeration<? extends java.util.zip.ZipEntry> en = z.entries(); en.hasMoreElements(); ) {
+					String n = en.nextElement().getName();
+					if (!n.endsWith(".class") || n.indexOf('$') >= 0) continue;
+					boolean ok = false;
+					for (String pf : prefixes) if (n.startsWith(pf) && n.indexOf('/', pf.length()) < 0) ok = true;
+					if (!ok) continue;
+					try {
+						Class<?> c = Class.forName(n.substring(0, n.length() - 6).replace('/', '.'), false, cl);
+						if (Modifier.isAbstract(c.getModifiers()) || !Runnable.class.isAssignableFrom(c)) continue;
+						for (Constructor<?> k : c.getDeclaredConstructors())
+							for (Class<?> p : k.getParameterTypes()) if (p == Canvas.class) return k;
+					} catch (Throwable ignored) {}
+				}
+			} catch (Throwable ignored) {}
+		}
+		return null;
+	}
+
 	public static void main(String[] a) throws Throwable {
 		String mainName = a[0];
+		// аргументы бывают позиционными («ник сессия») или с флагами («--username ник --session сессия»)
 		String user = a.length > 1 ? a[1] : "Player";
 		String session = a.length > 2 ? a[2] : "-";
 		int w = 854, h = 480;
-		for (int i = 3; i + 1 < a.length; i++) {
+		for (int i = 1; i + 1 < a.length; i++) {
 			try {
-				if (a[i].equals("--width")) w = Integer.parseInt(a[i + 1]);
+				if (a[i].equals("--username")) user = a[i + 1];
+				else if (a[i].equals("--session")) session = a[i + 1];
+				else if (a[i].equals("--width")) w = Integer.parseInt(a[i + 1]);
 				else if (a[i].equals("--height")) h = Integer.parseInt(a[i + 1]);
 			} catch (NumberFormatException ignored) {}
 		}
@@ -43,6 +70,7 @@ public final class OldMain {
 			}
 			if (ctor != null) break;
 		}
+		if (ctor == null) ctor = scanForClient(cl);
 		if (ctor == null) throw new RuntimeException("Не найден конструктор клиента (с Canvas) для " + mainName);
 		System.out.println("[Mobilix] Старая версия без AWT: " + ctor.getDeclaringClass().getName());
 
