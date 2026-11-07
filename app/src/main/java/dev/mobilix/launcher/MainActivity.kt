@@ -130,6 +130,9 @@ class MainActivity : Activity() {
         }
     }
     internal fun navBottom() = prefs.getString("nav", "side") == "bottom"
+    /** Компактный интерфейс: Версии, Каталог и Сборки объединены в «Загрузки»; раскладка, язык и удаление скачанного ушли в настройки. */
+    internal fun compact() = prefs.getBoolean("compact", false)
+    private var ghIdx = -1
     private var updateVer: String? = null
 
     private fun socialPage(): View {
@@ -386,12 +389,17 @@ class MainActivity : Activity() {
         }
         item("Аккаунт", "Account", PixelIcon.I_USER to PixelIcon.MENU_PAL) { openPage(tr("Аккаунт", "Account"), accountPage()) }
         item("Настройки", "Settings", PixelIcon.I_GEAR to PixelIcon.MENU_PAL) { openPage(tr("Настройки", "Settings"), settingsPage()) }
-        item("Загрузчик версий", "Version loader", PixelIcon.I_VERS to PixelIcon.MENU_PAL) { openPage(tr("Загрузчик версий", "Version loader"), versionsPage()) }
-        item("Каталог", "Catalog", PixelIcon.I_CAT to PixelIcon.MENU_PAL) { openPage(tr("Каталог", "Catalog"), catalogPage()) }
-        item("Раскладка управления", "Controls layout", PixelIcon.I_PAD to PixelIcon.MENU_PAL) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
-        menuWipe = item("Удалить скачанное", "Delete downloads", PixelIcon.TRASH to PixelIcon.TRASH_PAL) { confirmWipe() }
+        if (compact()) {
+            item("Загрузки", "Downloads", PixelIcon.I_VERS to PixelIcon.MENU_PAL) { openPage(tr("Загрузки", "Downloads"), downloadsPage(0)) }
+        } else {
+            item("Загрузчик версий", "Version loader", PixelIcon.I_VERS to PixelIcon.MENU_PAL) { openPage(tr("Загрузчик версий", "Version loader"), versionsPage()) }
+            item("Каталог", "Catalog", PixelIcon.I_CAT to PixelIcon.MENU_PAL) { openPage(tr("Каталог", "Catalog"), catalogPage()) }
+            item("Раскладка управления", "Controls layout", PixelIcon.I_PAD to PixelIcon.MENU_PAL) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
+            menuWipe = item("Удалить скачанное", "Delete downloads", PixelIcon.TRASH to PixelIcon.TRASH_PAL) { confirmWipe() }
+        }
+        ghIdx = menuEntries.size
         ghItem = item("Соцсети", "Social", PixelIcon.I_CHAT to PixelIcon.MENU_PAL) { openPage(tr("Соцсети", "Social"), socialPage()) }
-        item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
+        if (!compact()) item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
         drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         drawer.addView(TextView(this).apply {
             text = tr("Пользовательское соглашение", "User agreement"); textSize = 13f; setTextColor(Th.dim)
@@ -413,7 +421,7 @@ class MainActivity : Activity() {
                 val cell = FrameLayout(this).apply { isClickable = true; background = selT(Th.bar); setOnClickListener { e.third() } }
                 cell.contentDescription = e.first
                 cell.addView(PixelIcon(this, e.second.first, e.second.second), FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
-                if (i == 6) ghTab = cell
+                if (i == ghIdx) ghTab = cell
                 nav.addView(cell, LinearLayout.LayoutParams(0, dp(56), 1f))
             }
             val navBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -696,6 +704,12 @@ class MainActivity : Activity() {
             }
             col.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) })
         }
+        col.addView(TextView(this).apply { text = tr("Компактный интерфейс", "Compact interface"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (compact()) 1 else 0) { i ->
+            prefs.edit().putBoolean("compact", i == 1).apply()
+            recreate()
+        })
+        col.addView(note(tr("Версии, Каталог и Сборки объединяются в один раздел «Загрузки» с вкладками. Раскладка управления, язык и удаление скачанного переезжают в Настройки.", "Versions, Catalog and Builds are merged into one “Downloads” section with tabs. Controls layout, language and delete downloads move to Settings.")))
         col.addView(TextView(this).apply { text = tr("Меню", "Menu"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Нижняя панель", "Bottom bar"), tr("Боковое", "Side")), if (navBottom()) 0 else 1) { i ->
             prefs.edit().putString("nav", if (i == 0) "bottom" else "side").apply()
@@ -736,6 +750,15 @@ class MainActivity : Activity() {
             setOnClickListener { importFiles() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
         col.addView(note(tr("Выберите тип и файлы в системном окне: моды, шейдеры, ресурспаки, датапаки или карты (zip). Файлы копируются в папку текущей версии или сборки, Shizuku не нужен.", "Pick a type and files in the system picker: mods, shaders, resource packs, datapacks or maps (zip). Files are copied into the current version or build folder; no Shizuku needed.")))
+        if (compact()) {
+            fun btn(label: String, red: Boolean = false, onClick: () -> Unit) = col.addView(Button(this).apply {
+                text = label; isAllCaps = false; setTextColor(if (red) 0xFFE05555.toInt() else Th.chipText); background = sel(Th.chip)
+                setOnClickListener { onClick() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
+            btn(tr("Раскладка управления", "Controls layout")) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
+            btn(tr("Язык: ", "Language: ") + (if (lang() == "zh") "中文" else lang().uppercase())) { chooseLanguage() }
+            btn(tr("Удалить скачанное", "Delete downloads"), red = true) { confirmWipe() }
+        }
         col.addView(header(tr("Игра", "Game")))
         // быстрые настройки графики: между двумя линиями
         col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(6); bottomMargin = dp(10) })
@@ -918,6 +941,47 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(8) })
         box.addView(holder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         show(0)
+        return box
+    }
+
+    /** Вкладки сверху с подчёркиванием, как в соцсетях. */
+    private fun topTabs(labels: List<String>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Th.bar) }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val texts = ArrayList<TextView>(); val lines = ArrayList<View>()
+        fun paint(sel: Int) {
+            texts.forEachIndexed { i, t -> t.setTextColor(if (i == sel) Th.accent else Th.dim); t.typeface = if (i == sel) Typeface.DEFAULT_BOLD else Typeface.DEFAULT }
+            lines.forEachIndexed { i, v -> v.setBackgroundColor(if (i == sel) 0xFF2EA84F.toInt() else 0) }
+        }
+        labels.forEachIndexed { i, l ->
+            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; isClickable = true; background = selT(Th.bar) }
+            val t = TextView(this).apply { text = l; textSize = 16f; gravity = Gravity.CENTER; maxLines = 1; setPadding(0, dp(14), 0, dp(12)) }
+            val ln = View(this)
+            texts.add(t); lines.add(ln)
+            cell.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            cell.addView(ln, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(3)))
+            cell.setOnClickListener { paint(i); onPick(i) }
+            row.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        box.addView(row)
+        box.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+        paint(selected)
+        return box
+    }
+
+    /** Раздел «Загрузки» (компактный интерфейс): вкладки Версии, Каталог, Сборки. Вкладки создаются один раз и хранят своё состояние. */
+    private fun downloadsPage(start: Int): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val holder = FrameLayout(this)
+        val cache = arrayOfNulls<View>(3)
+        fun show(i: Int) {
+            val v = cache[i] ?: when (i) { 0 -> versionsPage(); 1 -> modsCatalogPage(); else -> buildsPage() }.also { cache[i] = it }
+            holder.removeAllViews()
+            holder.addView(v, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        box.addView(topTabs(listOf(tr("Версии", "Versions"), tr("Каталог", "Catalog"), tr("Сборки", "Builds")), start) { show(it) })
+        box.addView(holder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        show(start)
         return box
     }
 
@@ -2697,7 +2761,7 @@ class MainActivity : Activity() {
         }
         val buildStart = installed.size + 2   // после версий, «Загрузить другую» и заголовка раздела
         MobDialog(this).setTitle(tr("Версия для игры", "Game version")).setItems(names.toTypedArray()) { _, i ->
-            if (i == installed.size) openPage(tr("Загрузчик версий", "Version loader"), versionsPage())
+            if (i == installed.size) { if (compact()) openPage(tr("Загрузки", "Downloads"), downloadsPage(0)) else openPage(tr("Загрузчик версий", "Version loader"), versionsPage()) }
             else if (i >= buildStart) {
                 val b = buildList[i - buildStart]
                 prefs.edit().putString("profile", b.optString("profile")).putString("build", b.optString("id")).apply()
