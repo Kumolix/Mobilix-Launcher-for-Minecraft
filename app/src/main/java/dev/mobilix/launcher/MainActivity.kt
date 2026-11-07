@@ -508,6 +508,38 @@ class MainActivity : Activity() {
             .withEndAction { pageLayer.removeAllViews(); pageLayer.visibility = View.GONE }.start()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (prefs.getBoolean("worldBackup", true)) {
+            WorldBackup.checkAfterGame(this, dataRoot()) { n ->
+                if (n != null) runOnUiThread { Toast.makeText(this, tr("Резервная копия миров сохранена (миров: $n)", "World backup saved (worlds: $n)"), Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
+
+    /** Список копий миров текущей папки игры: по нажатию восстанавливает миры рядом с существующими. */
+    private fun restoreWorldsDialog() {
+        val gd = curGameDir()
+        val copies = WorldBackup.list(dataRoot(), gd)
+        if (copies.isEmpty()) {
+            Toast.makeText(this, tr("Копий пока нет: они появятся после закрытия игры", "No backups yet: they appear after you close the game"), Toast.LENGTH_LONG).show()
+            return
+        }
+        val labels = copies.map { f -> WorldBackup.label(f) + " · " + WorldBackup.worldNames(f).joinToString(", ") }.toTypedArray()
+        MobDialog(this).setTitle(tr("Восстановить миры", "Restore worlds"))
+            .setItems(labels) { _, i ->
+                Toast.makeText(this, tr("Восстановление…", "Restoring…"), Toast.LENGTH_SHORT).show()
+                Thread {
+                    val n = try { WorldBackup.restore(copies[i], gd) } catch (_: Throwable) { -1 }
+                    runOnUiThread {
+                        Toast.makeText(this, if (n >= 0) tr("Восстановлено миров: $n. Они лежат в saves с пометкой «копия»", "Restored worlds: $n. They are in saves marked “copy”")
+                            else tr("Не удалось восстановить", "Could not restore"), Toast.LENGTH_LONG).show()
+                    }
+                }.start()
+            }
+            .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+    }
+
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         when {
@@ -680,6 +712,15 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Перед запуском Fabric или Forge лаунчер подбирает скачанным из каталога модам файлы под вашу версию игры и загрузчик, докачивает обязательные зависимости и предупреждает, если чего-то не хватает. Моды другого загрузчика отключаются всегда (папка mods-disabled), это не зависит от переключателя.",
             "Before a Fabric or Forge launch, the launcher picks files for mods downloaded from the catalog that match your game version and loader, downloads required dependencies and warns about anything missing. Mods for another loader are always disabled (mods-disabled folder), regardless of this switch.")))
+        col.addView(TextView(this).apply { text = tr("Резервные копии миров", "World backups"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("worldBackup", true)) 1 else 0) { i ->
+            prefs.edit().putBoolean("worldBackup", i == 1).apply()
+        })
+        col.addView(note(tr("После закрытия игры лаунчер сохраняет zip с изменёнными мирами. Хранятся последние ${WorldBackup.KEEP} копии для каждой версии или сборки.", "After you close the game the launcher saves a zip with the worlds that changed. The last ${WorldBackup.KEEP} backups are kept per version or build.")))
+        col.addView(Button(this).apply {
+            text = tr("Восстановить мир из копии", "Restore a world from backup"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
+            setOnClickListener { restoreWorldsDialog() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
         col.addView(TextView(this).apply { text = tr("Управление движением", "Movement control"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Крестовина (WASD)", "D-pad (WASD)"), tr("Джойстик", "Joystick")), if (prefs.getBoolean("joystick", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("joystick", i == 1).apply(); writeGameSettings()
@@ -1971,8 +2012,8 @@ class MainActivity : Activity() {
     private fun importFiles(after: (() -> Unit)? = null) {
         importAfter = after
         MobDialog(this).setTitle(tr("Импорт файлов", "Import files"))
-            .setMessage(tr("Выберите один или несколько файлов. Тип определяется автоматически: моды (.jar), шейдеры, ресурспаки, датапаки, карты (zip) и сборки Mobilix (zip). Файлы копируются в папку текущей версии или сборки.",
-                "Pick one or more files. The type is detected automatically: mods (.jar), shaders, resource packs, datapacks, maps (zip) and Mobilix builds (zip). Files are copied into the current version or build folder."))
+            .setMessage(tr("Выберите один или несколько файлов. Тип определяется автоматически: моды (.jar), шейдеры, ресурспаки, датапаки, карты (zip) и сборки Mobilix (zip) и сборки Modrinth (.mrpack). Файлы копируются в папку текущей версии или сборки.",
+                "Pick one or more files. The type is detected automatically: mods (.jar), shaders, resource packs, datapacks, maps (zip) Mobilix builds (zip) and Modrinth packs (.mrpack). Files are copied into the current version or build folder."))
             .setNegativeButton(tr("Отмена", "Cancel"), null)
             .setPositiveButton(tr("Выбрать файлы", "Choose files")) { _, _ ->
                 try {
@@ -2057,6 +2098,7 @@ class MainActivity : Activity() {
             val counts = LinkedHashMap<String, Int>(); var fail = 0
             val builds = ArrayList<Pair<android.net.Uri, JSONObject>>()
             val dps = ArrayList<File>()
+            val mrpacks = ArrayList<Pair<android.net.Uri, JSONObject>>()
             for (u in uris) {
                 try {
                     val name = uriName(u)
@@ -2082,6 +2124,9 @@ class MainActivity : Activity() {
                                 if (kind == "datapacks") dps.add(File(d, name))
                             }
                         }
+                        low.endsWith(".mrpack") -> {
+                            mrpacks.add(u to (readMrpackIndex(u) ?: throw Exception("unknown")))
+                        }
                         else -> throw Exception("unknown")
                     }
                 } catch (_: Throwable) { fail++ }
@@ -2091,10 +2136,12 @@ class MainActivity : Activity() {
                     "datapacks" to tr("датапаки", "datapacks"), "saves" to tr("карты", "maps"))
                 val parts = counts.map { (k, v) -> "${label[k]}: $v" }.toMutableList()
                 if (builds.isNotEmpty()) parts.add(tr("сборки: ${builds.size}", "builds: ${builds.size}"))
+                if (mrpacks.isNotEmpty()) parts.add(tr("сборки Modrinth: ${mrpacks.size}", "Modrinth packs: ${mrpacks.size}"))
                 if (fail > 0) parts.add(tr("не распознано: $fail", "unrecognized: $fail"))
                 Toast.makeText(this, (if (parts.isEmpty()) tr("Ничего не импортировано", "Nothing imported") else tr("Импорт: ", "Imported: ") + parts.joinToString(", ")), Toast.LENGTH_LONG).show()
                 importAfter?.invoke()
                 builds.forEach { (u, m) -> importBuild(u, m) }
+                mrpacks.forEach { (u, m) -> importMrpack(u, m) }
                 // датапаки: по очереди спрашиваем, в какой мир положить
                 fun offer(i: Int) { if (i < dps.size) offerDatapackWorld(dps[i]) { offer(i + 1) } }
                 offer(0)
@@ -2147,6 +2194,106 @@ class MainActivity : Activity() {
                     } catch (e: Throwable) {
                         dir.deleteRecursively()
                         runOnUiThread { Toast.makeText(this, tr("Не удалось импортировать сборку: ", "Could not import the build: ") + e.message, Toast.LENGTH_LONG).show() }
+                    }
+                }.start()
+            }.show()
+    }
+
+    /** Читает modrinth.index.json из .mrpack; null, если это не сборка Modrinth. */
+    private fun readMrpackIndex(u: android.net.Uri): JSONObject? {
+        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+            var e = z.nextEntry
+            while (e != null) {
+                if (zipClean(e.name) == "modrinth.index.json") {
+                    val j = JSONObject(String(z.readBytes(), Charsets.UTF_8))
+                    return if (j.optJSONObject("dependencies")?.optString("minecraft", "").isNullOrEmpty()) null else j
+                }
+                e = z.nextEntry
+            }
+        }
+        return null
+    }
+
+    /** Сборка Modrinth (.mrpack): новая сборка, файлы скачиваются по хэшам, затем копируются overrides. Версия загрузчика берётся рекомендуемая лаунчером. */
+    private fun importMrpack(u: android.net.Uri, idx: JSONObject) {
+        val nm = idx.optString("name", tr("Сборка", "Build")).ifBlank { tr("Сборка", "Build") }
+        val deps = idx.getJSONObject("dependencies"); val mc = deps.getString("minecraft")
+        val kind = when {
+            deps.has("fabric-loader") -> "fabric"
+            deps.has("forge") -> "forge"
+            deps.has("neoforge") || deps.has("quilt-loader") -> {
+                Toast.makeText(this, tr("Сборки для NeoForge и Quilt пока не поддерживаются", "NeoForge and Quilt packs are not supported yet"), Toast.LENGTH_LONG).show(); return
+            }
+            else -> "vanilla"
+        }
+        val files = idx.optJSONArray("files") ?: JSONArray()
+        val ver = when (kind) { "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; else -> mc }
+        MobDialog(this).setTitle(tr("Импорт сборки Modrinth", "Import Modrinth pack"))
+            .setMessage("«$nm»\n" + tr("Версия: $ver. Файлов для скачивания: ${files.length()}. Версию игры, если её нет, лаунчер скачает сам.", "Version: $ver. Files to download: ${files.length()}. The launcher downloads the game version if it is missing."))
+            .setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Импортировать", "Import")) { _, _ ->
+                val id = "b" + System.currentTimeMillis()
+                val dir = buildDir(id)
+                Toast.makeText(this, tr("Скачивание сборки…", "Downloading the pack…"), Toast.LENGTH_LONG).show()
+                Thread {
+                    try {
+                        dir.mkdirs()
+                        val tasks = ArrayList<Triple<List<String>, File, String?>>(); val optional = HashSet<File>()
+                        for (i in 0 until files.length()) {
+                            val f = files.getJSONObject(i)
+                            val rel = zipClean(f.getString("path"))
+                            val env = f.optJSONObject("env")
+                            if (env?.optString("client", "required") == "unsupported") continue
+                            val dest = File(dir, rel)
+                            if (!dest.canonicalPath.startsWith(dir.canonicalPath + File.separator)) continue
+                            val urls = f.getJSONArray("downloads").let { a -> (0 until a.length()).map { a.getString(it).replace("http://", "https://") } }
+                            tasks.add(Triple(urls, dest, f.optJSONObject("hashes")?.optString("sha1", "")?.ifEmpty { null }))
+                            if (env?.optString("client", "required") == "optional") optional.add(dest)
+                        }
+                        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+                        val done = java.util.concurrent.atomic.AtomicInteger(0)
+                        val futures = tasks.map { (urls, dest, sha) ->
+                            pool.submit<Boolean> {
+                                var ok = false
+                                for (url in urls) { if (download(url, dest, sha)) { ok = true; break } }
+                                val n = done.incrementAndGet()
+                                if (n % 10 == 0 || n == tasks.size) log("Сборка Modrinth: скачано $n из ${tasks.size}")
+                                ok || optional.contains(dest)
+                            }
+                        }
+                        val failed = futures.count { !it.get() }
+                        pool.shutdown()
+                        if (failed > 0) throw RuntimeException(tr("не скачалось файлов: $failed. Проверьте интернет и повторите", "files failed to download: $failed. Check your connection and retry"))
+                        // overrides: сначала общие, затем клиентские
+                        for (prefix in listOf("overrides/", "client-overrides/")) {
+                            java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+                                var e = z.nextEntry
+                                while (e != null) {
+                                    val n = zipClean(e.name)
+                                    if (!e.isDirectory && n.startsWith(prefix)) {
+                                        val out = File(dir, n.removePrefix(prefix))
+                                        if (out.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { out.parentFile?.mkdirs(); out.outputStream().use { z.copyTo(it) } }
+                                    }
+                                    e = z.nextEntry
+                                }
+                            }
+                        }
+                        runOnUiThread {
+                            fun finish(profile: String) {
+                                val all = builds()
+                                all.put(JSONObject().put("id", id).put("name", nm).put("profile", profile))
+                                buildsSave(all)
+                                prefs.edit().putString("profile", profile).putString("build", id).apply()
+                                versionText.text = verTitle()
+                                Toast.makeText(this, tr("Сборка «$nm» добавлена и выбрана", "Build “$nm” added and selected"), Toast.LENGTH_LONG).show()
+                            }
+                            val have = findProfile(kind, mc)
+                            if (have != null) finish(have)
+                            else installProfile(kind, mc) { runOnUiThread { finish(findProfile(kind, mc) ?: selectedProfile()) } }
+                        }
+                    } catch (e: Throwable) {
+                        dir.deleteRecursively()
+                        runOnUiThread { Toast.makeText(this, tr("Не удалось импортировать сборку: ", "Could not import the pack: ") + e.message, Toast.LENGTH_LONG).show() }
                     }
                 }.start()
             }.show()
@@ -3192,6 +3339,7 @@ class MainActivity : Activity() {
 
         log("Открываю окно игры...")
         runOnUiThread {
+            if (prefs.getBoolean("worldBackup", true)) WorldBackup.begin(dataRoot(), curGameDir())
             startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "game"))
         }
     }

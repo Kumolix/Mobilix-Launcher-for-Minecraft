@@ -278,6 +278,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             say("Запуск Minecraft в процессе...")
             val r = Native.runMain(j.getString("javaHome"), opts.toTypedArray(), j.getString("main"), args)
             say(r)
+            if (mode == "game") { try { WorldBackup.endedMarker(getExternalFilesDir(null) ?: filesDir).writeText("1") } catch (_: Exception) {} }
             if (mode == "installer") {
                 try { File(dataDir, "installer.done").writeText(r) } catch (_: Exception) {}
                 runOnUiThread { finish() }
