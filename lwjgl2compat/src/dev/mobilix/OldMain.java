@@ -17,27 +17,33 @@ import java.lang.reflect.Modifier;
 public final class OldMain {
 	private OldMain() {}
 
-	/** Запасной вариант: перебираем классы из jar игры в пакетах клиента и ищем конкретный класс с конструктором (..Canvas..). */
+	/** Запасной вариант: клиент 1.0-1.5.2 (MinecraftImpl) обфусцирован и лежит в пакете по умолчанию, поэтому перебираем все классы jar игры. */
 	private static Constructor<?> scanForClient(ClassLoader cl) {
-		String[] prefixes = { "net/minecraft/client/", "com/mojang/minecraft/", "com/mojang/rubydung/" };
+		Class<?> base = null;
+		for (String bn : new String[] { "net.minecraft.client.Minecraft", "com.mojang.minecraft.Minecraft" }) {
+			try { base = Class.forName(bn, false, cl); break; } catch (Throwable ignored) {}
+		}
+		int seen = 0, failed = 0;
 		for (String path : System.getProperty("java.class.path", "").split(java.io.File.pathSeparator)) {
-			if (!path.endsWith(".jar")) continue;
+			if (!path.endsWith(".jar") || path.contains("lwjgl2compat") || path.contains("/libraries/")) continue;
 			try (java.util.zip.ZipFile z = new java.util.zip.ZipFile(path)) {
 				for (java.util.Enumeration<? extends java.util.zip.ZipEntry> en = z.entries(); en.hasMoreElements(); ) {
 					String n = en.nextElement().getName();
-					if (!n.endsWith(".class") || n.indexOf('$') >= 0) continue;
-					boolean ok = false;
-					for (String pf : prefixes) if (n.startsWith(pf) && n.indexOf('/', pf.length()) < 0) ok = true;
-					if (!ok) continue;
+					if (!n.endsWith(".class") || n.indexOf('$') >= 0 || n.startsWith("META-INF/")) continue;
+					seen++;
 					try {
 						Class<?> c = Class.forName(n.substring(0, n.length() - 6).replace('/', '.'), false, cl);
 						if (Modifier.isAbstract(c.getModifiers()) || !Runnable.class.isAssignableFrom(c)) continue;
+						if (base != null && !base.isAssignableFrom(c)) continue;
 						for (Constructor<?> k : c.getDeclaredConstructors())
 							for (Class<?> p : k.getParameterTypes()) if (p == Canvas.class) return k;
-					} catch (Throwable ignored) {}
+					} catch (Throwable e) {
+						if (failed++ < 3) System.out.println("[Mobilix] Не удалось прочитать " + n + ": " + e);
+					}
 				}
-			} catch (Throwable ignored) {}
+			} catch (Throwable e) { System.out.println("[Mobilix] Не удалось открыть " + path + ": " + e); }
 		}
+		System.out.println("[Mobilix] Поиск клиента: просмотрено классов " + seen + ", ошибок чтения " + failed + ", база " + (base == null ? "не найдена" : base.getName()));
 		return null;
 	}
 
@@ -62,12 +68,14 @@ public final class OldMain {
 		Constructor<?> ctor = null;
 		for (String n : names) {
 			Class<?> c;
-			try { c = Class.forName(n, true, cl); } catch (Throwable t) { continue; }
+			try { c = Class.forName(n, false, cl); } catch (Throwable t) { if (!(t instanceof ClassNotFoundException)) System.out.println("[Mobilix] " + n + ": " + t); continue; }
 			if (Modifier.isAbstract(c.getModifiers())) continue;
-			for (Constructor<?> k : c.getDeclaredConstructors()) {
-				for (Class<?> p : k.getParameterTypes()) if (p == Canvas.class) { ctor = k; break; }
-				if (ctor != null) break;
-			}
+			try {
+				for (Constructor<?> k : c.getDeclaredConstructors()) {
+					for (Class<?> p : k.getParameterTypes()) if (p == Canvas.class) { ctor = k; break; }
+					if (ctor != null) break;
+				}
+			} catch (Throwable t) { System.out.println("[Mobilix] " + n + ": конструкторы недоступны: " + t); }
 			if (ctor != null) break;
 		}
 		if (ctor == null) ctor = scanForClient(cl);
