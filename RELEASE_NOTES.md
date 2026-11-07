@@ -1,4 +1,4 @@
-version: 1.9.3
+draft: 1.9.3 (чтобы выпустить релиз, замените первую строку на: version: 1.9.3)
 
 **EN: What's new**
 - World backups: when you close the game the launcher saves a zip with the worlds that changed (last 3 copies per version or build). Switch and "Restore a world from backup" are in Settings; restored worlds appear next to the originals marked "copy"
