@@ -2743,7 +2743,8 @@ class MainActivity : Activity() {
                     val o = man.getJSONObject(i); val id = o.getString("id")
                     order[id] = i
                     if (!cut && o.getString("type") == "release") vanilla.add(id)
-                    if (id == "1.6.1") cut = true   // 1.6.1 — первая версия без апплета на AWT; более старые пока не запускаются
+                    else if (o.getString("type") == "old_alpha" && id.startsWith("c0.")) vanilla.add(id)   // Minecraft Classic
+                    if (id == "1.0") cut = true   // 1.0–1.5.2 запускаются через слой без окна AWT (OldMain)
                 }
                 try {
                     val fa = JSONArray(fetchText("https://meta.fabricmc.net/v2/versions/game"))
@@ -3167,13 +3168,17 @@ class MainActivity : Activity() {
             ?: if (legacy) File(root, "game-$baseVer") else File(root, "game")).apply { mkdirs() }
         if (legacy && child != null && !profile.contains("forge")) throw RuntimeException("Fabric и другие загрузчики для версий 1.12.2 и ниже не поддерживаются, только Forge")
         val oldForge = legacy && child != null
+        // 1.0–1.5.2 и Classic стартуют через Frame/Canvas: запускаем их через dev.mobilix.OldMain (без окна AWT)
+        val realMain = v.getString("mainClass")
+        val preAwt = legacy && child == null && !realMain.startsWith("net.minecraft.client.main.") && !realMain.contains("launchwrapper")
         val oldGl = legacy || javaMajor < 16
         applyMipmap(gameDir, oldGl)
         applyPreset(gameDir, baseVer)
         val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.contains("forge", true) -> "forge"; else -> null }
         syncMods(gameDir, modLoader)
         autoUpdateMods(gameDir, modLoader, baseVer)
-        if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
+        if (preAwt) log("Очень старая версия (до 1.6): слой LWJGL 2 + запуск без окна AWT")
+        else if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
         else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
         val newLwjgl = "3.3.3"
 
@@ -3278,7 +3283,7 @@ class MainActivity : Activity() {
         val virtualAssets = idxJson.optBoolean("virtual", false) || idxJson.optBoolean("map_to_resources", false)
         val mapToResources = idxJson.optBoolean("map_to_resources", false)
         val assetsForGame: File = when {
-            mapToResources -> File(gameDir, "resources")
+            mapToResources -> File(gameDir, if (preAwt) ".minecraft/resources" else "resources")
             virtualAssets -> File(assetsDir, "virtual/$indexId")
             else -> assetsDir
         }
@@ -3408,10 +3413,11 @@ class MainActivity : Activity() {
             else log("ВНИМАНИЕ: в Java-рантайме нет рабочего java.instrument, поэтому authlib-injector не подключён. Игра запустится с ником и UUID из Ely.by, скин взят из Ely.by, но вход на серверы с проверкой Ely.by работать не будет.")
         }
         cmd.addAll(jvmArgs)
-        cmd.add(v.getString("mainClass"))
+        val mainName = if (preAwt) "dev.mobilix.OldMain" else realMain
+        cmd.add(mainName)
+        if (preAwt) cmd.add(realMain)
         cmd.addAll(gameArgs)
         File(root, "launch_command.txt").writeText(cmd.joinToString("\n"))
-        val mainName = v.getString("mainClass")
         val mainIdx = cmd.indexOf(mainName)
         val launch = JSONObject()
         launch.put("javaHome", rt.path)
