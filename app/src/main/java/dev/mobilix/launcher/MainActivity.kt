@@ -2330,18 +2330,28 @@ class MainActivity : Activity() {
                             val lp = File(root, "launcher_profiles.json")
                             if (!lp.exists()) lp.writeText("{\"profiles\":{}}")
                             var found: String? = null
+                            var inst = installer
+                            val ilogF = File(getExternalFilesDir(null) ?: filesDir, "installer.log")
                             for (attempt in 1..6) {
                                 log("Forge: установка, попытка $attempt из 6 (это долго, потерпите)…")
                                 runOnUiThread { Toast.makeText(this, tr(
                                     "Forge ставится в отдельном окне с чёрным экраном: не закрывайте его, оно может мигать. Если установка прервётся, лаунчер продолжит с того места (попытка $attempt из 6).",
                                     "Forge installs in a separate black window: do not close it, it may flicker. If the install is interrupted the launcher resumes where it stopped (attempt $attempt of 6)."), Toast.LENGTH_LONG).show() }
-                                runForgeInstaller(rt, installer, root)
+                                runForgeInstaller(rt, inst, root)
                                 found = findProfile("forge", mc)
                                 // профиль появляется раньше, чем постпроцессоры создадут srg/extra/client: проверяем сами файлы
                                 val miss = if (found != null) forgeMissingOutputs(installer, root, found) else emptyList()
                                 if (found != null && miss.isEmpty()) break
                                 if (miss.isNotEmpty()) log("Forge: установка не завершилась, нет файлов: ${miss.joinToString(", ")}")
                                 found = null
+                                // контрольные суммы постобработки не совпали (на некоторых телефонах zip сжимается иначе, содержимое то же):
+                                // дальше ставим без проверки этих сумм — Forge при запуске их не сверяет
+                                if (inst == installer && try { ilogF.readText().let { it.contains("Expected:") && it.contains("Actual:") } } catch (_: Exception) { false }) {
+                                    try {
+                                        inst = installerWithoutHashes(installer)
+                                        log("Forge: контрольные суммы постобработки не совпали (на этом телефоне иначе сжимается zip); продолжаю без их проверки")
+                                    } catch (e: Exception) { log("Forge: не удалось подготовить установщик без проверки сумм: $e") }
+                                }
                                 Thread.sleep(2500)
                             }
                             id = found ?: throw RuntimeException("Forge не установился до конца (не созданы файлы постобработки). Попробуйте ещё раз, закрыв другие приложения.")
@@ -3749,6 +3759,27 @@ class MainActivity : Activity() {
                 missing
             }
         } catch (_: Exception) { emptyList() }
+    }
+
+    /** Копия установщика Forge без контрольных сумм результатов постобработки (и без подписей, иначе правка файла сломает загрузку). */
+    private fun installerWithoutHashes(src: File): File {
+        val dst = File(src.parentFile, src.nameWithoutExtension + "-nohash.jar")
+        java.util.zip.ZipFile(src).use { z ->
+            java.util.zip.ZipOutputStream(dst.outputStream().buffered()).use { out ->
+                for (e in z.entries()) {
+                    val n = e.name
+                    if (n.startsWith("META-INF/") && (n.endsWith(".SF") || n.endsWith(".RSA") || n.endsWith(".DSA") || n.endsWith(".EC"))) continue
+                    out.putNextEntry(java.util.zip.ZipEntry(n))
+                    if (n == "install_profile.json") {
+                        val j = JSONObject(z.getInputStream(e).readBytes().toString(Charsets.UTF_8))
+                        j.optJSONArray("processors")?.let { arr -> for (i in 0 until arr.length()) arr.getJSONObject(i).remove("outputs") }
+                        out.write(j.toString().toByteArray(Charsets.UTF_8))
+                    } else if (!e.isDirectory) z.getInputStream(e).use { it.copyTo(out) }
+                    out.closeEntry()
+                }
+            }
+        }
+        return dst
     }
 
     private fun installerHeapMb(): Int {
