@@ -2743,7 +2743,7 @@ class MainActivity : Activity() {
                     val o = man.getJSONObject(i); val id = o.getString("id")
                     order[id] = i
                     if (!cut && o.getString("type") == "release") vanilla.add(id)
-                    if (id == "1.8") cut = true
+                    if (id == "1.6.1") cut = true   // 1.6.1 — первая версия без апплета на AWT; более старые пока не запускаются
                 }
                 try {
                     val fa = JSONArray(fetchText("https://meta.fabricmc.net/v2/versions/game"))
@@ -2763,7 +2763,8 @@ class MainActivity : Activity() {
                         val xml = fetchText("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
                         Regex("<version>([\\d.]+)-[^<]+</version>").findAll(xml).forEach { set.add(it.groupValues[1]) }
                     }
-                    forge.addAll(set.filter { vanilla.contains(it) }.sortedBy { order[it] })
+                    val idx18 = order["1.8"] ?: Int.MAX_VALUE   // индекс в манифесте растёт к старым версиям
+                    forge.addAll(set.filter { vanilla.contains(it) && (order[it] ?: 0) <= idx18 }.sortedBy { order[it] })
                 } catch (_: Throwable) {}
             } catch (e: Throwable) {
                 log("Список версий: $e")
@@ -3317,6 +3318,7 @@ class MainActivity : Activity() {
         val repl = mapOf(
             "auth_player_name" to nickName(),
             "version_name" to profile,
+            "version_id" to profile,
             "library_directory" to librariesDir.path,
             "classpath_separator" to ":",
             "game_directory" to gameDir.path,
