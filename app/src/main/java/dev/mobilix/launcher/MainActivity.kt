@@ -2294,18 +2294,26 @@ class MainActivity : Activity() {
                     }
                     "forge" -> {
                         prepareAndRun(mc, false)
-                        val promos = JSONObject(fetchText("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")).getJSONObject("promos")
-                        val fv = promos.optString("$mc-recommended", "").ifEmpty { promos.optString("$mc-latest", "") }
-                        if (fv.isEmpty()) throw RuntimeException("Forge для $mc не найден")
+                        val cands = forgeCandidates(mc)
+                        if (cands.isEmpty()) throw RuntimeException("Forge для $mc не найден")
                         val installer = File(root, "forge-installer.jar")
                         installer.delete()
-                        log("Forge $mc-$fv: скачивание установщика…")
                         var got = false; var lastErr: Exception? = null
-                        for (suf in listOf("", "-$mc", "-$mc.0")) {
-                            try {
-                                downloadBig("https://maven.minecraftforge.net/net/minecraftforge/forge/$mc-$fv$suf/forge-$mc-$fv$suf-installer.jar", installer)
-                                if (installer.length() > 100000) { got = true; break }
-                            } catch (e: Exception) { lastErr = e; installer.delete() }
+                        // Рекомендуемая сборка может не иметь установщика на сервере (HTTP 404): пробуем следующие и зеркала
+                        for (fv in cands) {
+                            log("Forge $mc-$fv: скачивание установщика…")
+                            for (suf in listOf("", "-$mc", "-$mc.0")) {
+                                val u0 = "https://maven.minecraftforge.net/net/minecraftforge/forge/$mc-$fv$suf/forge-$mc-$fv$suf-installer.jar"
+                                for (u in listOf(u0) + mirrorsFor(u0)) {
+                                    try {
+                                        downloadBig(u, installer)
+                                        if (installer.length() > 100000) { got = true; break }
+                                        installer.delete()
+                                    } catch (e: Exception) { lastErr = e; installer.delete() }
+                                }
+                                if (got) break
+                            }
+                            if (got) break
                         }
                         if (!got) throw RuntimeException("не удалось скачать установщик Forge: $lastErr")
                         val legacyMc = try { JSONObject(File(root, "versions/$mc/$mc.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
@@ -2505,10 +2513,16 @@ class MainActivity : Activity() {
                     }
                 } catch (_: Throwable) {}
                 try {
-                    val pr = JSONObject(fetchText("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")).getJSONObject("promos")
                     val set = HashSet<String>()
-                    val it = pr.keys()
-                    while (it.hasNext()) set.add(it.next().substringBefore("-"))
+                    try {
+                        val pr = JSONObject(fetchText("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")).getJSONObject("promos")
+                        val it = pr.keys()
+                        while (it.hasNext()) set.add(it.next().substringBefore("-"))
+                    } catch (_: Throwable) {
+                        // запасной источник списка: maven-metadata (с зеркалом BMCLAPI)
+                        val xml = fetchText("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
+                        Regex("<version>([\\d.]+)-[^<]+</version>").findAll(xml).forEach { set.add(it.groupValues[1]) }
+                    }
                     forge.addAll(set.filter { vanilla.contains(it) }.sortedBy { order[it] })
                 } catch (_: Throwable) {}
             } catch (e: Throwable) {
@@ -3932,7 +3946,35 @@ class MainActivity : Activity() {
     @Volatile
     private var lastDownloadError = ""
 
-    /** Зеркало BMCLAPI: подстановка для хостов Mojang. Файлы всё равно проверяются по sha1. */
+    /** Версии Forge для игры $mc, от лучшей к худшей: рекомендуемая, последняя, затем свежие из maven-metadata и BMCLAPI. */
+    private fun forgeCandidates(mc: String): List<String> {
+        val out = LinkedHashSet<String>()
+        try {
+            val promos = JSONObject(fetchText("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")).getJSONObject("promos")
+            promos.optString("$mc-recommended", "").takeIf { it.isNotEmpty() }?.let { out.add(it) }
+            promos.optString("$mc-latest", "").takeIf { it.isNotEmpty() }?.let { out.add(it) }
+        } catch (_: Throwable) {}
+        fun key(v: String) = v.split(".", "-").map { it.toIntOrNull() ?: 0 }
+        val cmp = Comparator<String> { a, b ->
+            val x = key(a); val y = key(b)
+            var r = 0
+            for (i in 0 until maxOf(x.size, y.size)) { r = (x.getOrElse(i) { 0 }).compareTo(y.getOrElse(i) { 0 }); if (r != 0) break }
+            r
+        }
+        try {
+            val xml = fetchText("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
+            val vs = Regex("<version>" + Regex.escape(mc) + "-([^<]+)</version>").findAll(xml).map { it.groupValues[1] }.toList()
+            out.addAll(vs.sortedWith(cmp).reversed().take(6))
+        } catch (_: Throwable) {}
+        try {
+            val arr = JSONArray(fetchText("https://bmclapi2.bangbang93.com/forge/minecraft/$mc"))
+            val vs = (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("version", "")?.takeIf { v -> v.isNotEmpty() } }
+            out.addAll(vs.sortedWith(cmp).reversed().take(6))
+        } catch (_: Throwable) {}
+        return out.toList().take(8)
+    }
+
+    /** Зеркало BMCLAPI: подстановка для хостов Mojang, Forge и Fabric. Файлы всё равно проверяются по sha1. */
     private fun mirrorsFor(url: String): List<String> {
         val m = "https://bmclapi2.bangbang93.com"
         return when {
@@ -3946,6 +3988,12 @@ class MainActivity : Activity() {
                 listOf(m + "/" + url.removePrefix("https://piston-meta.mojang.com/"))
             url.startsWith("https://launcher.mojang.com/") ->
                 listOf(m + "/" + url.removePrefix("https://launcher.mojang.com/"))
+            url.startsWith("https://maven.minecraftforge.net/") ->
+                listOf(m + "/maven/" + url.removePrefix("https://maven.minecraftforge.net/"))
+            url.startsWith("https://maven.fabricmc.net/") ->
+                listOf(m + "/maven/" + url.removePrefix("https://maven.fabricmc.net/"))
+            url.startsWith("https://meta.fabricmc.net/") ->
+                listOf(m + "/fabric-meta/" + url.removePrefix("https://meta.fabricmc.net/"))
             else -> emptyList()
         }
     }
