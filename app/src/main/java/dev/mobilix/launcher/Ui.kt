@@ -296,7 +296,7 @@ class CaretView(ctx: Context) : View(ctx) {
         set(v) { field = v; invalidate() }
     private val back = Paint().apply { color = Th.chip }
     private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Th.act }
-    private val fill = Paint().apply { color = 0xFF43E06A.toInt() }
+    private val fill = Paint().apply { color = Th.act }
     init { isClickable = true }
     override fun onDraw(c: Canvas) {
         val d = resources.displayMetrics.density

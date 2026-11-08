@@ -2375,7 +2375,15 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     skinView.slim = slim; skinView.setSkin(bmp)
                     accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
-                    if (!quiet) Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (name == "Minotar" || name == "MC-Heads") tr(" — копия сайта, может быть устаревшей. Mojang не ответил: ", " — site copy, may be outdated. Mojang failed: ") + errs.joinToString("; ").take(260) else "") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
+                    if (!quiet) {
+                        if (name == "Minotar" || name == "MC-Heads") {
+                            val why = errs.joinToString("\n")
+                            log("Скин: Mojang не ответил: " + why.replace("\n", "; "))
+                            MobDialog(this).setTitle(tr("Скин взят с копии сайта", "Skin taken from a site copy"))
+                                .setMessage(tr("Скин загружен с $name, это копия, она может быть старой. Mojang не ответил:\n\n$why", "Skin loaded from $name, a copy that may be outdated. Mojang did not answer:\n\n$why"))
+                                .setPositiveButton("OK", null).show()
+                        } else Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
+                    }
                 }
                 return
             } catch (e: Exception) {
