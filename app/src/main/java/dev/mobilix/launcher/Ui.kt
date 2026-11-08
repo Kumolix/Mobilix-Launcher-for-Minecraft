@@ -234,9 +234,14 @@ class MobDialog(private val ctx: Context) {
 
 
 /** Пиксельная иконка из строк-символов: масштаб целый, без сглаживания. */
-class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: Map<Char, Int>) : View(ctx) {
+class PixelIcon(ctx: Context, private val rows: List<String>, var pal: Map<Char, Int>) : View(ctx) {
     private val p = Paint()
+    /** Палитра для нажатого состояния (иконки меню: нажатая темнее) и признак нажатия. */
+    var palDown: Map<Char, Int>? = null
+    var down = false
+        set(v) { if (field != v) { field = v; invalidate() } }
     override fun onDraw(c: Canvas) {
+        val pal = if (down) (palDown ?: pal) else pal
         val h = rows.size; val w = rows.maxOf { it.length }
         val s = minOf(width / w, height / h).coerceAtLeast(1)
         val ox = (width - w * s) / 2; val oy = (height - h * s) / 2
@@ -253,6 +258,12 @@ class PixelIcon(ctx: Context, private val rows: List<String>, private val pal: M
         val TRASH = listOf("...rrr...", "rrrrrrrrr", ".RRRRRRR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RrRrRrR.", ".RRRRRRR.")
         val SHIELD = listOf(".sssssss.", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", "sSSSSSSSs", ".sSSSSSs.", "..sSSSs..", "...sSs...", "....s....")
         val SHIELD_PAL = mapOf('s' to 0xFF2EA84F.toInt(), 'S' to 0xFF5BD67B.toInt())
+        /** Палитра иконок меню: у встроенных тем прежняя; у своих считается от цветов темы (не нажатая светлая, нажатая тёмная). */
+        fun menuPal(pressed: Boolean): Map<Char, Int> {
+            if (Th.custom == null) return MENU_PAL
+            return if (!pressed) mapOf('g' to Th.accent, 'G' to ThemeMath.mix(Th.accent, 0xFFFFFFFF.toInt(), 0.4f), 'W' to Th.text)
+            else mapOf('g' to Th.act, 'G' to ThemeMath.mix(Th.act, Th.bg, 0.25f), 'W' to ThemeMath.mix(Th.text, Th.bg, 0.4f))
+        }
         val MENU_PAL = mapOf('g' to 0xFF2EA84F.toInt(), 'G' to 0xFF5BD67B.toInt(), 'W' to 0xFFE8F5EC.toInt())
         val I_USER = listOf("....gggg....", "...gGGGGg...", "...gGGGGg...", "...gGGGGg...", "....gggg....", "............", "..gggggggg..", ".gGGGGGGGGg.", ".gGGGGGGGGg.", ".gGGGGGGGGg.", ".gggggggggg.")
         val I_GEAR = listOf(".....ggg.....", "..gg.gGg.gg..", ".gGGgGGGgGGg.", "..gGGgggGGg..", "..gGg...gGg..", "ggGg.....gGgg", "gGGg.....gGGg", "ggGg.....gGgg", "..gGg...gGg..", "..gGGgggGGg..", ".gGGgGGGgGGg.", "..gg.gGg.gg..", ".....ggg.....")
@@ -412,7 +423,7 @@ class StyleCard(ctx: Context, var c: IntArray, private val chosen: Boolean) : Vi
         p.color = c[4]; cv.drawRect(w / 2 - 9f * d, h * 0.30f + 10f * d, w / 2 + 9f * d, h * 0.30f + 24f * d, p)
         p.color = c[2]; cv.drawRect(0f, h * 0.58f, w, h * 0.74f, p)
         p.color = c[4]; cv.drawRect(w * 0.10f, h * 0.64f, w * 0.40f, h * 0.68f, p)
-        p.color = 0xFF2EA84F.toInt(); cv.drawRect(0f, h * 0.76f, w, h * 0.92f, p)
+        p.color = c.getOrElse(6) { 0xFF2EA84F.toInt() }; cv.drawRect(0f, h * 0.76f, w, h * 0.92f, p)
         p.color = c[1]; cv.drawRect(0f, h * 0.92f, w, h, p)
         for (i in 0 until 4) { p.color = if (i == 1) c[3] else c[4]; p.alpha = if (i == 1) 255 else 120; cv.drawRect(w * (0.12f + i * 0.22f), h * 0.945f, w * (0.12f + i * 0.22f) + 8f * d, h * 0.945f + 8f * d, p); p.alpha = 255 }
         cv.restore()

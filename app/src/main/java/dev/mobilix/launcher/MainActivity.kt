@@ -100,9 +100,24 @@ class MainActivity : Activity() {
     /** Цвета гаммы для превью: фон, панель, кнопка, акцент, текст, область скина. */
     private fun stylePalette(light: Boolean, classic: Boolean): IntArray {
         val m = Th.builtin(light, classic)
-        return paletteOf(m)
+        return paletteOf(m).copyOf(6)   // у встроенных тем кнопка «Играть» прежняя зелёная
     }
-    private fun paletteOf(m: Map<String, Int>) = intArrayOf(m["bg"]!!, m["bar"]!!, m["chip"]!!, m["accent"]!!, m["text"]!!, m["skinBg"]!!)
+    /** Иконка меню: у стандартной палитры цвета зависят от темы и от нажатия на кнопку. */
+    private fun menuIcon(ico: Pair<List<String>, Map<Char, Int>>, host: View): PixelIcon {
+        val icon = PixelIcon(this, ico.first, ico.second)
+        if (ico.second === PixelIcon.MENU_PAL) {
+            icon.pal = PixelIcon.menuPal(false); icon.palDown = PixelIcon.menuPal(true)
+            host.setOnTouchListener { _, e ->
+                when (e.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> icon.down = true
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> icon.down = false
+                }
+                false
+            }
+        }
+        return icon
+    }
+    private fun paletteOf(m: Map<String, Int>) = intArrayOf(m["bg"]!!, m["bar"]!!, m["chip"]!!, m["accent"]!!, m["text"]!!, m["skinBg"]!!, m["accentDk"]!!)
 
     // ---------- свои темы (до 4): 6 основных цветов, остальное считается автоматически ----------
     private class CTheme(var name: String, val base: LinkedHashMap<String, Int>, val ov: HashMap<String, Int> = HashMap()) {
@@ -543,7 +558,7 @@ class MainActivity : Activity() {
                 setOnClickListener { onClick() }
             }
             drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-            val icon = PixelIcon(this, ico.first, ico.second)
+            val icon = menuIcon(ico, t)
             val fl = FrameLayout(this)
             fl.addView(t, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             fl.addView(icon, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = dp(28) })
@@ -592,7 +607,7 @@ class MainActivity : Activity() {
             menuEntries.forEachIndexed { i, e ->
                 val cell = FrameLayout(this).apply { isClickable = true; background = selT(Th.bar); setOnClickListener { e.third() } }
                 cell.contentDescription = e.first
-                cell.addView(PixelIcon(this, e.second.first, e.second.second), FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
+                cell.addView(menuIcon(e.second, cell), FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
                 if (i == ghIdx) ghTab = cell
                 nav.addView(cell, LinearLayout.LayoutParams(0, dp(56), 1f))
             }
@@ -690,6 +705,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        handleAuthIntent(intent)
         if (prefs.getBoolean("worldBackup", true)) {
             WorldBackup.checkAfterGame(this, dataRoot()) { n ->
                 if (n != null) runOnUiThread { Toast.makeText(this, tr("Резервная копия миров сохранена (миров: $n)", "World backup saved (worlds: $n)"), Toast.LENGTH_LONG).show() }
@@ -1938,7 +1954,7 @@ class MainActivity : Activity() {
             isClickable = true
             alpha = if (MS_APPROVED) 1f else 0.55f
             setOnClickListener {
-                if (MS_APPROVED) msDeviceLogin()
+                if (MS_APPROVED) msBrowserLogin()
                 else MobDialog(this@MainActivity).setTitle(tr("Вход через Microsoft", "Sign in with Microsoft"))
                     .setMessage(tr("Пока недоступен: Mojang не одобрил приложение Mobilix для официального входа. Мы подадим заявку ещё раз позже. Играть можно с ником или через Ely.by.",
                         "Not available yet: Mojang has not approved Mobilix for official sign-in. We will apply again later. You can play with a nickname or via Ely.by."))
@@ -2049,6 +2065,58 @@ class MainActivity : Activity() {
         } catch (_: java.io.IOException) { true }   // нет сети: пробуем запуститься с текущим токеном
         catch (_: Exception) { false }
     }
+
+    // ---------- Вход через Microsoft в браузере (Authorization Code + PKCE, без пароля в лаунчере) ----------
+    private val MS_REDIRECT = "mobilix-launcher://auth"
+    private fun b64u(b: ByteArray) = android.util.Base64.encodeToString(b, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP)
+    private fun msBrowserLogin() {
+        val rnd = java.security.SecureRandom()
+        val vb = ByteArray(48).also { rnd.nextBytes(it) }; val verifier = b64u(vb)
+        val challenge = b64u(java.security.MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)))
+        val state = b64u(ByteArray(16).also { rnd.nextBytes(it) })
+        prefs.edit().putString("ms_pkce_v", verifier).putString("ms_pkce_s", state).apply()
+        fun e(x: String) = java.net.URLEncoder.encode(x, "UTF-8")
+        val url = "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=${e(MS_CLIENT)}&response_type=code" +
+            "&redirect_uri=${e(MS_REDIRECT)}&scope=${e(MS_SCOPE)}&code_challenge=$challenge&code_challenge_method=S256&state=$state&prompt=select_account"
+        try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+        catch (_: Exception) { msDeviceLogin() }   // нет браузера: вход по коду
+    }
+    /** Возврат из браузера: mobilix-launcher://auth?code=...&state=... */
+    private fun handleAuthIntent(i: Intent?) {
+        val d = i?.data ?: return
+        if (d.scheme != "mobilix-launcher" || d.host != "auth") return
+        intent = Intent()
+        val err = d.getQueryParameter("error")
+        val code = d.getQueryParameter("code")
+        val verifier = prefs.getString("ms_pkce_v", "") ?: ""
+        val okState = !d.getQueryParameter("state").isNullOrEmpty() && d.getQueryParameter("state") == prefs.getString("ms_pkce_s", null)
+        prefs.edit().remove("ms_pkce_v").remove("ms_pkce_s").apply()
+        if (err != null || code == null || !okState || verifier.isEmpty()) {
+            Toast.makeText(this, tr("Вход не удался: ", "Sign-in failed: ") + (d.getQueryParameter("error_description") ?: err ?: tr("неверный ответ", "bad response")), Toast.LENGTH_LONG).show()
+            return
+        }
+        Toast.makeText(this, tr("Проверяем вход…", "Checking sign-in…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val (c, t) = postForm(MS_TOKEN_URL, mapOf("client_id" to MS_CLIENT, "grant_type" to "authorization_code", "code" to code,
+                    "redirect_uri" to MS_REDIRECT, "code_verifier" to verifier, "scope" to MS_SCOPE))
+                if (c !in 200..299) throw RuntimeException("Microsoft: HTTP $c " + (try { JSONObject(t).optString("error_description").take(150) } catch (_: Exception) { "" }))
+                val j = JSONObject(t)
+                val (mc, id, name) = msMinecraftLogin(j.getString("access_token"))
+                elyLogout(false)
+                msSave(mc, id, name, j.optString("refresh_token", ""))
+                try { importSkinNow("mojang", name, quiet = true) } catch (_: Exception) {}
+                runOnUiThread {
+                    nickText.text = nickName()
+                    Toast.makeText(this, tr("Вы вошли как $name", "Signed in as $name"), Toast.LENGTH_LONG).show()
+                    openPage(tr("Аккаунт", "Account"), accountPage())
+                }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this, tr("Вход не удался: ", "Sign-in failed: ") + (e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show() }
+            }
+        }.start()
+    }
+    override fun onNewIntent(i: Intent) { super.onNewIntent(i); setIntent(i) }
 
     /** Вход через Microsoft по коду устройства: пользователь открывает страницу и вводит код. */
     private fun msDeviceLogin() {
@@ -2259,7 +2327,7 @@ class MainActivity : Activity() {
         }
         val mojang = "Mojang" to {
             val id = mojangId()
-            val props = JSONObject(String(httpBytes("https://sessionserver.mojang.com/session/minecraft/profile/$id"))).getJSONArray("properties")
+            val props = JSONObject(String(httpBytes("https://sessionserver.mojang.com/session/minecraft/profile/$id?t=${System.currentTimeMillis()}"))).getJSONArray("properties")
             val value = String(android.util.Base64.decode(props.getJSONObject(0).getString("value"), android.util.Base64.DEFAULT))
             fromTextureJson(JSONObject(value).getJSONObject("textures"))
         }
@@ -2274,10 +2342,19 @@ class MainActivity : Activity() {
             if (pick == null) throw RuntimeException("скин не задан")
             Triple(httpBytes(pick.getString("url")), pick.optString("variant").equals("SLIM", true), true)
         }
+        // профиль по UUID на сервисах Minecraft: не такой кэшируемый и не такой ограниченный по частоте, как sessionserver
+        val mojangNew = "Mojang" to {
+            val id = mojangId()
+            val skins = JSONObject(String(httpBytes("https://api.minecraftservices.com/minecraft/profile/lookup/$id?t=${System.currentTimeMillis()}"))).getJSONArray("skins")
+            var pick: JSONObject? = null
+            for (i in 0 until skins.length()) { val s = skins.getJSONObject(i); if (pick == null || s.optString("state") == "ACTIVE") pick = s }
+            if (pick == null) throw RuntimeException("скин не задан")
+            Triple(httpBytes(pick.getString("url")), pick.optString("variant").equals("SLIM", true), true)
+        }
         val minotar = "Minotar" to { Triple(httpBytes("https://minotar.net/skin/$nickIn"), false, false) }
         val mcheads = "MC-Heads" to { Triple(httpBytes("https://mc-heads.net/skin/$nickIn"), false, false) }
         if (strict) tries.add(ely)
-        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { if (msOn() && source == "mojang" && nickIn == nickName()) tries.add(mojangAuth); tries.add(mojang); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
+        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { if (msOn() && source == "mojang" && nickIn == nickName()) tries.add(mojangAuth); tries.add(mojangNew); tries.add(mojang); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
         var lastErr = ""
         for ((name, act) in tries) {
             try {
@@ -2291,7 +2368,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     skinView.slim = slim; skinView.setSkin(bmp)
                     accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
-                    if (!quiet) Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
+                    if (!quiet) Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (name == "Minotar" || name == "MC-Heads") tr(" — копия сайта, может быть устаревшей", " — site copy, may be outdated") else "") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
                 }
                 return
             } catch (e: Exception) {
