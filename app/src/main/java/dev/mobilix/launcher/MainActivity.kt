@@ -2297,7 +2297,9 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private fun httpBytes(url: String): ByteArray {
+    private fun httpBytes(url0: String): ByteArray {
+        // Mojang отдаёт ссылки на скины по http://, а Android не пускает незашифрованный трафик: переходим на https
+        val url = if (url0.startsWith("http://") && URL(url0).host.endsWith("minecraft.net")) "https://" + url0.removePrefix("http://") else url0
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 15000; c.readTimeout = 30000; c.instanceFollowRedirects = true
         c.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) Mobilix/1.8")
@@ -2342,15 +2344,6 @@ class MainActivity : Activity() {
             val pk = pick ?: throw RuntimeException("скин не задан")
             Triple(httpBytes(pk.getString("url")), pk.optString("variant").equals("SLIM", true), true)
         }
-        // профиль по UUID на сервисах Minecraft: не такой кэшируемый и не такой ограниченный по частоте, как sessionserver
-        val mojangNew = "Mojang" to {
-            val id = mojangId()
-            val skins = JSONObject(String(httpBytes("https://api.minecraftservices.com/minecraft/profile/lookup/$id?t=${System.currentTimeMillis()}"))).getJSONArray("skins")
-            var pick: JSONObject? = null
-            for (i in 0 until skins.length()) { val s = skins.getJSONObject(i); if (pick == null || s.optString("state") == "ACTIVE") pick = s }
-            val pk = pick ?: throw RuntimeException("скин не задан")
-            Triple(httpBytes(pk.getString("url")), pk.optString("variant").equals("SLIM", true), true)
-        }
         val ashcon = "Ashcon" to {
             val sk = JSONObject(String(httpBytes("https://api.ashcon.app/mojang/v2/user/$nickIn"))).getJSONObject("textures").getJSONObject("skin")
             Triple(httpBytes(sk.getString("url")), sk.optBoolean("slim"), true)
@@ -2358,7 +2351,7 @@ class MainActivity : Activity() {
         val minotar = "Minotar" to { Triple(httpBytes("https://minotar.net/skin/$nickIn"), false, false) }
         val mcheads = "MC-Heads" to { Triple(httpBytes("https://mc-heads.net/skin/$nickIn"), false, false) }
         if (strict) tries.add(ely)
-        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { if (msOn() && source == "mojang" && nickIn == nickName()) tries.add(mojangAuth); tries.add(mojangNew); tries.add(mojang); tries.add(ashcon); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
+        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { if (msOn() && source == "mojang" && nickIn == nickName()) tries.add(mojangAuth); tries.add(mojang); tries.add(ashcon); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
         var lastErr = ""
         val errs = ArrayList<String>()
         for ((name, act) in tries) {
