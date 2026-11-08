@@ -61,6 +61,15 @@ public final class OldMain {
 				else if (a[i].equals("--height")) h = Integer.parseInt(a[i + 1]);
 			} catch (NumberFormatException ignored) {}
 		}
+		// У этих версий нет холста, и размер игра сама не подстраивает. Берём размер настоящей поверхности отрисовки
+		// (слой LWJGL 2 знает его точно), иначе при несовпадении с размером из аргументов на экране остаётся пустая полоса.
+		try {
+			org.lwjgl.opengl.DisplayMode dm = org.lwjgl.opengl.Display.getDesktopDisplayMode();
+			if (dm != null && dm.getWidth() > 0 && dm.getHeight() > 0) {
+				System.out.println("[Mobilix] Размер экрана: " + dm.getWidth() + "x" + dm.getHeight() + " (в аргументах было " + w + "x" + h + ")");
+				w = dm.getWidth(); h = dm.getHeight();
+			}
+		} catch (Throwable e) { System.out.println("[Mobilix] Размер экрана не определён, остаётся " + w + "x" + h + ": " + e); }
 		ClassLoader cl = OldMain.class.getClassLoader();
 		String pkg = mainName.contains(".") ? mainName.substring(0, mainName.lastIndexOf('.') + 1) : "";
 		String[] names = { mainName, pkg + "MinecraftImpl", pkg + "Minecraft", "net.minecraft.client.MinecraftImpl", "net.minecraft.client.Minecraft", "com.mojang.minecraft.Minecraft" };
