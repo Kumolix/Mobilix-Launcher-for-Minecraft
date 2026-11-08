@@ -102,20 +102,34 @@ public final class OldMain {
 		ctor.setAccessible(true);
 		Object mc = ctor.newInstance(args);
 
-		// сессия: поле, чей тип создаётся из двух строк (ник, идентификатор сессии)
+		// сессия: пустое поле, чей тип создаётся из двух строк (ник, идентификатор сессии).
+		// Сначала берём тип, у которого все поля строковые (так устроен Session), иначе первый подходящий.
 		boolean set = false;
-		for (Class<?> c = mc.getClass(); c != null && !set; c = c.getSuperclass()) {
-			for (Field f : c.getDeclaredFields()) {
-				Class<?> t = f.getType();
-				if (Modifier.isStatic(f.getModifiers()) || t.isPrimitive() || t == String.class || t.isArray()) continue;
-				Constructor<?> sc;
-				try { sc = t.getDeclaredConstructor(String.class, String.class); } catch (Throwable e) { continue; }
-				try {
-					sc.setAccessible(true); f.setAccessible(true);
-					f.set(mc, sc.newInstance(user, session));
-					set = true;
-					break;
-				} catch (Throwable e) { /* пробуем следующее поле */ }
+		for (int pass = 0; pass < 2 && !set; pass++) {
+			for (Class<?> c = mc.getClass(); c != null && !set; c = c.getSuperclass()) {
+				for (Field f : c.getDeclaredFields()) {
+					Class<?> t = f.getType();
+					if (Modifier.isStatic(f.getModifiers()) || t.isPrimitive() || t == String.class || t.isArray()) continue;
+					Constructor<?> sc;
+					try { sc = t.getDeclaredConstructor(String.class, String.class); } catch (Throwable e) { continue; }
+					if (pass == 0) {
+						int strs = 0; boolean other = false;
+						for (Field tf : t.getDeclaredFields()) {
+							if (Modifier.isStatic(tf.getModifiers())) continue;
+							if (tf.getType() == String.class) strs++; else other = true;
+						}
+						if (other || strs < 2) continue;
+					}
+					try {
+						f.setAccessible(true);
+						if (f.get(mc) != null) continue;
+						sc.setAccessible(true);
+						f.set(mc, sc.newInstance(user, session));
+						System.out.println("[Mobilix] Сессия записана в поле " + c.getName() + "." + f.getName() + " (" + t.getName() + ")");
+						set = true;
+						break;
+					} catch (Throwable e) { /* пробуем следующее поле */ }
+				}
 			}
 		}
 		if (!set) System.out.println("[Mobilix] Не нашёл поле сессии: игра запустится с ником по умолчанию");
