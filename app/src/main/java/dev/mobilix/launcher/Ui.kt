@@ -420,3 +420,73 @@ class StyleCard(ctx: Context, var c: IntArray, private val chosen: Boolean) : Vi
         cv.drawRoundRect(RectF(p.strokeWidth / 2, p.strokeWidth / 2, w - p.strokeWidth / 2, h - p.strokeWidth / 2), r, r, p)
     }
 }
+
+/** Пользовательские темы: из шести основных цветов автоматически получаются оттенки. */
+object ThemeMath {
+    /** Основные цвета и производные от них оттенки. */
+    val BASE = listOf("bg", "bar", "text", "chip", "line", "accent")
+    val SHADES = mapOf(
+        "bg" to listOf("drawer", "skinBg"), "bar" to emptyList(), "text" to listOf("text2", "dim", "hint", "chipText"),
+        "chip" to listOf("chip2"), "line" to listOf("line2"), "accent" to listOf("accentDk", "altBg", "altText"))
+
+    fun mix(a: Int, b: Int, t: Float): Int {
+        fun ch(x: Int, y: Int) = (x + (y - x) * t).toInt().coerceIn(0, 255)
+        return Color.rgb(ch(Color.red(a), Color.red(b)), ch(Color.green(a), Color.green(b)), ch(Color.blue(a), Color.blue(b)))
+    }
+    fun lum(c: Int) = (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) / 255.0
+    fun isLight(base: Map<String, Int>) = lum(base["bg"]!!) > 0.5
+
+    /** Все 17 цветов лаунчера: основные как есть, остальное считается, если не переопределено вручную. */
+    fun colors(base: Map<String, Int>, ov: Map<String, Int>): LinkedHashMap<String, Int> {
+        val bg = base["bg"]!!; val bar = base["bar"]!!; val text = base["text"]!!
+        val chip = base["chip"]!!; val line = base["line"]!!; val acc = base["accent"]!!
+        val hsv = FloatArray(3); Color.colorToHSV(acc, hsv); hsv[2] = hsv[2] * 0.7f
+        val d = mapOf(
+            "drawer" to mix(bg, bar, 0.5f), "skinBg" to mix(bg, acc, 0.07f),
+            "text2" to mix(text, bg, 0.20f), "dim" to mix(text, bg, 0.45f), "hint" to mix(text, bg, 0.62f), "chipText" to text,
+            "chip2" to mix(chip, bg, 0.45f), "line2" to mix(line, bg, 0.5f),
+            "accentDk" to Color.HSVToColor(hsv), "altBg" to acc, "altText" to (if (lum(acc) > 0.55) 0xFF101010.toInt() else 0xFFFFFFFF.toInt()))
+        val m = LinkedHashMap<String, Int>()
+        for (k in Th.KEYS) m[k] = ov[k] ?: base[k] ?: d[k]!!
+        return m
+    }
+}
+
+/** Цветовой круг: оттенок по углу, насыщенность по расстоянию от центра (яркость задаёт отдельный ползунок). */
+class ColorWheel(ctx: Context) : View(ctx) {
+    val hsv = floatArrayOf(0f, 0f, 1f)
+    var onChange: (() -> Unit)? = null
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var sweep: android.graphics.SweepGradient? = null
+    private var radial: android.graphics.RadialGradient? = null
+    private fun geom(): Triple<Float, Float, Float> = Triple(width / 2f, height / 2f, minOf(width, height) / 2f - 6f * resources.displayMetrics.density)
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        val (cx, cy, r) = geom()
+        sweep = android.graphics.SweepGradient(cx, cy, IntArray(361) { Color.HSVToColor(floatArrayOf((it % 360).toFloat(), 1f, 1f)) }, null)
+        radial = android.graphics.RadialGradient(cx, cy, r, 0xFFFFFFFF.toInt(), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+    }
+    override fun onDraw(c: Canvas) {
+        val (cx, cy, r) = geom()
+        p.style = Paint.Style.FILL
+        p.shader = sweep; c.drawCircle(cx, cy, r, p)
+        p.shader = radial; c.drawCircle(cx, cy, r, p)
+        p.shader = null; p.color = Color.argb(((1f - hsv[2]) * 255).toInt(), 0, 0, 0); c.drawCircle(cx, cy, r, p)
+        val a = Math.toRadians(hsv[0].toDouble())
+        val mx = cx + (Math.cos(a) * hsv[1] * r).toFloat(); val my = cy + (Math.sin(a) * hsv[1] * r).toFloat()
+        val d = resources.displayMetrics.density
+        p.style = Paint.Style.STROKE; p.strokeWidth = 3f * d; p.color = Color.BLACK; c.drawCircle(mx, my, 9f * d, p)
+        p.strokeWidth = 2f * d; p.color = Color.WHITE; c.drawCircle(mx, my, 9f * d, p)
+    }
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (e.action == android.view.MotionEvent.ACTION_DOWN || e.action == android.view.MotionEvent.ACTION_MOVE) {
+            parent?.requestDisallowInterceptTouchEvent(true)
+            val (cx, cy, r) = geom()
+            val dx = e.x - cx; val dy = e.y - cy
+            hsv[1] = (Math.hypot(dx.toDouble(), dy.toDouble()) / r).toFloat().coerceIn(0f, 1f)
+            hsv[0] = ((Math.toDegrees(Math.atan2(dy.toDouble(), dx.toDouble())) + 360.0) % 360.0).toFloat()
+            invalidate(); onChange?.invoke()
+            return true
+        }
+        return e.action == android.view.MotionEvent.ACTION_UP
+    }
+}
