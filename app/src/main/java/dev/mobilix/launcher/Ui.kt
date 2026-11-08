@@ -24,7 +24,7 @@ import android.widget.TextView
 class HamburgerView(ctx: Context) : View(ctx) {
     var progress = 0f
         set(v) { field = v; invalidate() }
-    private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF43E06A.toInt() }
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Th.act }   // цвет как у ненажатой кнопки «Играть»
     override fun onDraw(c: Canvas) {
         val d = resources.displayMetrics.density
         val cx = width / 2f; val cy = height / 2f

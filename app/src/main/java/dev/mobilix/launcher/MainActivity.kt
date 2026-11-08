@@ -2351,13 +2351,20 @@ class MainActivity : Activity() {
             val pk = pick ?: throw RuntimeException("скин не задан")
             Triple(httpBytes(pk.getString("url")), pk.optString("variant").equals("SLIM", true), true)
         }
+        val ashcon = "Ashcon" to {
+            val sk = JSONObject(String(httpBytes("https://api.ashcon.app/mojang/v2/user/$nickIn"))).getJSONObject("textures").getJSONObject("skin")
+            Triple(httpBytes(sk.getString("url")), sk.optBoolean("slim"), true)
+        }
         val minotar = "Minotar" to { Triple(httpBytes("https://minotar.net/skin/$nickIn"), false, false) }
         val mcheads = "MC-Heads" to { Triple(httpBytes("https://mc-heads.net/skin/$nickIn"), false, false) }
         if (strict) tries.add(ely)
-        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { if (msOn() && source == "mojang" && nickIn == nickName()) tries.add(mojangAuth); tries.add(mojangNew); tries.add(mojang); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
+        else if (source == "ely") { tries.add(ely); tries.add(mojang); tries.add(minotar) } else { if (msOn() && source == "mojang" && nickIn == nickName()) tries.add(mojangAuth); tries.add(mojangNew); tries.add(mojang); tries.add(ashcon); tries.add(minotar); tries.add(mcheads); tries.add(ely) }
         var lastErr = ""
+        val errs = ArrayList<String>()
         for ((name, act) in tries) {
             try {
+                // копии сайтов (Minotar, MC-Heads) бывают устаревшими: при автообновлении ими не заменяем текущий скин
+                if (quiet && (name == "Minotar" || name == "MC-Heads")) { log("Скин: Mojang недоступен (" + errs.joinToString("; ") + "), копии сайтов не используются"); throw RuntimeException("только копия сайта") }
                 val (bytes, slimIn, known) = act()
                 val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 if (bmp == null || bmp.width != 64 || (bmp.height != 64 && bmp.height != 32)) { lastErr = "$name: not a 64x64 skin"; continue }
@@ -2368,11 +2375,12 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     skinView.slim = slim; skinView.setSkin(bmp)
                     accountSkin?.slim = slim; accountSkin?.setSkin(bmp)
-                    if (!quiet) Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (name == "Minotar" || name == "MC-Heads") tr(" — копия сайта, может быть устаревшей", " — site copy, may be outdated") else "") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
+                    if (!quiet) Toast.makeText(this, tr("Скин загружен ($name)", "Skin loaded ($name)") + (if (name == "Minotar" || name == "MC-Heads") tr(" — копия сайта, может быть устаревшей. Mojang не ответил: ", " — site copy, may be outdated. Mojang failed: ") + errs.joinToString("; ").take(260) else "") + (if (slim) tr(", стройный", ", slim") else ""), Toast.LENGTH_SHORT).show()
                 }
                 return
             } catch (e: Exception) {
                 lastErr = "$name: ${e.message ?: e.javaClass.simpleName}"
+                errs.add(lastErr)
             }
         }
         throw RuntimeException(lastErr)
