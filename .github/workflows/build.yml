@@ -75,6 +75,26 @@ jobs:
             echo "::warning::openal build failed rc=$RC: $(tail -c 1500 /tmp/oal-build.log | tr '\n' '|')"
           fi
 
+      - name: Build FreeType (arm64, needed by the JRE font manager for old Minecraft text)
+        continue-on-error: true
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
+          git clone --depth 1 --branch VER-2-13-2 https://github.com/freetype/freetype.git /tmp/ft > /tmp/ft-build.log 2>&1
+          cmake -S /tmp/ft -B /tmp/ft/build -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=26 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DFT_DISABLE_ZLIB=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_PNG=ON \
+            -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON >> /tmp/ft-build.log 2>&1 &&
+          cmake --build /tmp/ft/build -j4 >> /tmp/ft-build.log 2>&1
+          RC=$?
+          F=$(ls /tmp/ft/build/libfreetype.so* 2>/dev/null | head -1)
+          if [ $RC -eq 0 ] && [ -n "$F" ]; then
+            cp -L "$F" "$OUT/libfreetype.so"
+            echo "::notice::freetype built: $(ls -la $OUT/libfreetype.so)"
+          else
+            echo "::warning::freetype build failed rc=$RC: $(tail -c 1500 /tmp/ft-build.log | tr '\n' '|')"
+          fi
+
       - name: Build gl4es (renderer for old Minecraft versions)
         continue-on-error: true
         run: |
