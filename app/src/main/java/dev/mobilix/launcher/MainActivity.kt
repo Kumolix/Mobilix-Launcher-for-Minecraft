@@ -2339,8 +2339,8 @@ class MainActivity : Activity() {
             val skins = JSONObject(t).getJSONArray("skins")
             var pick: JSONObject? = null
             for (i in 0 until skins.length()) { val s = skins.getJSONObject(i); if (s.optString("state") == "ACTIVE") pick = s }
-            if (pick == null) throw RuntimeException("скин не задан")
-            Triple(httpBytes(pick.getString("url")), pick.optString("variant").equals("SLIM", true), true)
+            val pk = pick ?: throw RuntimeException("скин не задан")
+            Triple(httpBytes(pk.getString("url")), pk.optString("variant").equals("SLIM", true), true)
         }
         // профиль по UUID на сервисах Minecraft: не такой кэшируемый и не такой ограниченный по частоте, как sessionserver
         val mojangNew = "Mojang" to {
@@ -2348,8 +2348,8 @@ class MainActivity : Activity() {
             val skins = JSONObject(String(httpBytes("https://api.minecraftservices.com/minecraft/profile/lookup/$id?t=${System.currentTimeMillis()}"))).getJSONArray("skins")
             var pick: JSONObject? = null
             for (i in 0 until skins.length()) { val s = skins.getJSONObject(i); if (pick == null || s.optString("state") == "ACTIVE") pick = s }
-            if (pick == null) throw RuntimeException("скин не задан")
-            Triple(httpBytes(pick.getString("url")), pick.optString("variant").equals("SLIM", true), true)
+            val pk = pick ?: throw RuntimeException("скин не задан")
+            Triple(httpBytes(pk.getString("url")), pk.optString("variant").equals("SLIM", true), true)
         }
         val minotar = "Minotar" to { Triple(httpBytes("https://minotar.net/skin/$nickIn"), false, false) }
         val mcheads = "MC-Heads" to { Triple(httpBytes("https://mc-heads.net/skin/$nickIn"), false, false) }
