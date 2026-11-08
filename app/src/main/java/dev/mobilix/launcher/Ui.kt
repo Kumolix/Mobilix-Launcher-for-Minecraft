@@ -74,6 +74,8 @@ object Th {
     val accentDk get() = custom?.get("accentDk") ?: n(0xFF1B6E34, 0xFF1B6E34, 0xFF1F7A45, 0xFF1F7A45)
     val altBg get() = custom?.get("altBg") ?: (if (light) (if (classic) 0xFF0B0F0C else 0xFF0C0D0F) else (if (classic) 0xFFF1F6F2 else 0xFFF4F5F7)).toInt()
     val altText get() = custom?.get("altText") ?: (if (light) 0xFF4ADE80 else 0xFF14171B).toInt()
+    /** Зелёный цвет кнопок «Играть», выбранных вкладок и рамок: у встроенных тем прежний, у своих это «Акцент тёмный». */
+    val act get() = custom?.get("accentDk") ?: 0xFF2EA84F.toInt()
     val hint get() = custom?.get("hint") ?: n(0xFF58705F, 0xFF8AA391, 0xFF5C636E, 0xFF8E96A1)
 
     val KEYS = listOf("bg", "bar", "drawer", "skinBg", "accent", "accentDk", "text", "text2", "dim", "hint", "line", "line2", "chip", "chip2", "chipText", "altBg", "altText")
@@ -97,9 +99,9 @@ class FilterView(ctx: Context) : View(ctx) {
     var count = 0
         set(v) { field = v; invalidate() }
     private val back = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Th.chip }
-    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF2EA84F.toInt() }
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.SQUARE; color = 0xFF43E06A.toInt() }
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF43E06A.toInt() }
+    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Th.act }
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.SQUARE; color = Th.accent }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Th.accent }
     private val num = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
     init { isClickable = true }
     override fun onDraw(c: Canvas) {
@@ -166,7 +168,7 @@ class MobDialog(private val ctx: Context) {
         val card = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(14))
-            background = GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), 0xFF2EA84F.toInt()); cornerRadius = dp(6).toFloat() }
+            background = GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.act); cornerRadius = dp(6).toFloat() }
         }
         title?.let { t ->
             card.addView(TextView(ctx).apply { text = t; textSize = 19f; setTextColor(Th.accent); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(10)) })
@@ -182,7 +184,7 @@ class MobDialog(private val ctx: Context) {
             arr.forEachIndexed { i, label ->
                 // строка, начинающаяся с \u0001, — заголовок раздела: зелёный отчерк и подпись, не нажимается
                 if (label.startsWith("\u0001")) {
-                    col.addView(View(ctx).apply { setBackgroundColor(0xFF2EA84F.toInt()) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(8) })
+                    col.addView(View(ctx).apply { setBackgroundColor(Th.act) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(8) })
                     col.addView(TextView(ctx).apply { text = label.substring(1); textSize = 13f; setTextColor(0xFF8FD6A3.toInt()); setPadding(dp(10), dp(8), dp(10), dp(2)) })
                     return@forEachIndexed
                 }
@@ -205,7 +207,7 @@ class MobDialog(private val ctx: Context) {
                 text = b.text; textSize = 14f; gravity = Gravity.CENTER; isClickable = true
                 setTextColor(if (primary) Color.WHITE else Th.text2)
                 setPadding(dp(16), dp(10), dp(16), dp(10))
-                setBackgroundColor(if (primary) 0xFF2EA84F.toInt() else Th.chip)
+                setBackgroundColor(if (primary) Th.act else Th.chip)
                 setOnClickListener { d.dismiss(); b.l?.onClick(d, which) }
             }
             neu?.let { row.addView(button(it, DialogInterface.BUTTON_NEUTRAL, false)) }
@@ -282,7 +284,7 @@ class CaretView(ctx: Context) : View(ctx) {
     var up = true
         set(v) { field = v; invalidate() }
     private val back = Paint().apply { color = Th.chip }
-    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF2EA84F.toInt() }
+    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Th.act }
     private val fill = Paint().apply { color = 0xFF43E06A.toInt() }
     init { isClickable = true }
     override fun onDraw(c: Canvas) {
