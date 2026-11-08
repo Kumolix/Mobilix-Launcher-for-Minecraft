@@ -14,6 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.SeekBar
+import android.widget.EditText
 import android.widget.ImageView
 import android.graphics.drawable.GradientDrawable
 import android.widget.FrameLayout
@@ -98,11 +99,151 @@ class MainActivity : Activity() {
     private var ghTab: View? = null
     /** Цвета гаммы для превью: фон, панель, кнопка, акцент, текст, область скина. */
     private fun stylePalette(light: Boolean, classic: Boolean): IntArray {
-        val ol = Th.light; val oc = Th.classic
-        Th.light = light; Th.classic = classic
-        val r = intArrayOf(Th.bg, Th.bar, Th.chip, Th.accent, Th.text, Th.skinBg)
-        Th.light = ol; Th.classic = oc
-        return r
+        val m = Th.builtin(light, classic)
+        return paletteOf(m)
+    }
+    private fun paletteOf(m: Map<String, Int>) = intArrayOf(m["bg"]!!, m["bar"]!!, m["chip"]!!, m["accent"]!!, m["text"]!!, m["skinBg"]!!)
+
+    // ---------- свои темы (до 4) ----------
+    private class CTheme(var name: String, var light: Boolean, val colors: LinkedHashMap<String, Int>)
+    private val maxCustom = 4
+    private fun loadCustoms(): MutableList<CTheme> {
+        val out = ArrayList<CTheme>()
+        try {
+            val a = JSONArray(prefs.getString("customThemes", "[]"))
+            for (i in 0 until minOf(a.length(), maxCustom)) {
+                val o = a.getJSONObject(i); val lt = o.optBoolean("light", false)
+                val base = Th.builtin(lt, false); val co = o.optJSONObject("c")
+                val m = LinkedHashMap<String, Int>()
+                for (k in Th.KEYS) m[k] = if (co != null && co.has(k)) co.getLong(k).toInt() else base[k]!!
+                out.add(CTheme(o.optString("name", "Тема ${i + 1}"), lt, m))
+            }
+        } catch (_: Exception) {}
+        return out
+    }
+    private fun saveCustoms(l: List<CTheme>) {
+        val a = JSONArray()
+        for (t in l) {
+            val c = JSONObject(); for ((k, v) in t.colors) c.put(k, v.toLong() and 0xFFFFFFFFL)
+            a.put(JSONObject().put("name", t.name).put("light", t.light).put("c", c))
+        }
+        prefs.edit().putString("customThemes", a.toString()).apply()
+    }
+    private fun applySavedCustom() {
+        Th.custom = null
+        val i = prefs.getInt("customSel", -1)
+        if (i >= 0) loadCustoms().getOrNull(i)?.let { Th.custom = it.colors; Th.light = it.light; Th.classic = false }
+    }
+    private fun colorName(k: String) = when (k) {
+        "bg" -> tr("Фон", "Background"); "bar" -> tr("Верхняя и нижняя панели", "Top and bottom bars"); "drawer" -> tr("Боковое меню", "Side menu")
+        "skinBg" -> tr("Область скина", "Skin area"); "accent" -> tr("Акцент", "Accent"); "accentDk" -> tr("Акцент (тёмный)", "Accent (dark)")
+        "text" -> tr("Текст", "Text"); "text2" -> tr("Текст 2", "Text 2"); "dim" -> tr("Приглушённый текст", "Dim text"); "hint" -> tr("Подсказки", "Hints")
+        "line" -> tr("Линии", "Lines"); "line2" -> tr("Линии 2", "Lines 2"); "chip" -> tr("Кнопки", "Buttons"); "chip2" -> tr("Кнопки 2", "Buttons 2")
+        "chipText" -> tr("Текст кнопок", "Button text"); "altBg" -> tr("Выделение: фон", "Highlight: background"); else -> tr("Выделение: текст", "Highlight: text")
+    }
+    /** Выбор цвета: ползунки оттенка, насыщенности, яркости и поле HEX. */
+    private fun pickColor(title: String, initial: Int, onPick: (Int) -> Unit) {
+        val hsv = FloatArray(3); android.graphics.Color.colorToHSV(initial, hsv)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        val prev = View(this)
+        box.addView(prev, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        val hex = EditText(this).apply {
+            setSingleLine(); setTextColor(Th.text); setHintTextColor(Th.hint); filters = arrayOf(android.text.InputFilter.LengthFilter(7))
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        box.addView(hex, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        var busy = false
+        val bars = ArrayList<SeekBar>()
+        fun cur() = android.graphics.Color.HSVToColor(hsv)
+        fun show(fromHex: Boolean) {
+            prev.setBackgroundColor(cur())
+            busy = true
+            if (!fromHex) hex.setText(String.format("#%06X", cur() and 0xFFFFFF))
+            bars[0].progress = hsv[0].toInt(); bars[1].progress = (hsv[1] * 100).toInt(); bars[2].progress = (hsv[2] * 100).toInt()
+            busy = false
+        }
+        for ((i, lab) in listOf(tr("Оттенок", "Hue"), tr("Насыщенность", "Saturation"), tr("Яркость", "Brightness")).withIndex()) {
+            box.addView(TextView(this).apply { text = lab; textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(8), 0, 0) })
+            val sb = SeekBar(this).apply {
+                max = if (i == 0) 360 else 100
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(b: SeekBar?, v: Int, user: Boolean) {
+                        if (busy || !user) return
+                        hsv[i] = if (i == 0) v.toFloat().coerceAtMost(359.9f) else v / 100f
+                        prev.setBackgroundColor(cur()); busy = true; hex.setText(String.format("#%06X", cur() and 0xFFFFFF)); busy = false
+                    }
+                    override fun onStartTrackingTouch(b: SeekBar?) {}
+                    override fun onStopTrackingTouch(b: SeekBar?) {}
+                })
+            }
+            bars.add(sb); box.addView(sb)
+        }
+        hex.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(e: android.text.Editable?) {
+                if (busy) return
+                val t = e.toString().trim().removePrefix("#")
+                if (t.length == 6 && t.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
+                    android.graphics.Color.colorToHSV(0xFF000000.toInt() or t.toInt(16), hsv); show(true)
+                }
+            }
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        })
+        show(false)
+        MobDialog(this).setTitle(title).setView(box)
+            .setPositiveButton("OK") { _, _ -> onPick(cur()) }
+            .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+    }
+    /** Редактор темы: idx = -1 создаёт новую (копия текущих цветов). */
+    private fun editCustomTheme(idx: Int) {
+        val list = loadCustoms()
+        val t = if (idx >= 0 && idx < list.size) list[idx]
+        else CTheme(tr("Тема ${list.size + 1}", "Theme ${list.size + 1}"), Th.light, LinkedHashMap<String, Int>().also { m -> for (k in Th.KEYS) m[k] = Th.get(k) })
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        val name = EditText(this).apply {
+            setText(t.name); setSingleLine(); setTextColor(Th.text); filters = arrayOf(android.text.InputFilter.LengthFilter(12))
+        }
+        col.addView(name)
+        val card = StyleCard(this, paletteOf(t.colors), false)
+        col.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(120)).apply { topMargin = dp(8); bottomMargin = dp(8) })
+        col.addView(note(tr("Нажмите на цвет, чтобы изменить. «Светлая» влияет на значки и системные панели.", "Tap a colour to change it. “Light” affects icons and system bars.")))
+        col.addView(chipRow(listOf(tr("Тёмная", "Dark"), tr("Светлая", "Light")), if (t.light) 1 else 0) { i -> t.light = i == 1 })
+        for (k in Th.KEYS) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, dp(6)); isClickable = true }
+            val sw = View(this)
+            fun paint() { sw.background = android.graphics.drawable.GradientDrawable().apply { setColor(t.colors[k]!!); setStroke(dp(1), 0x88888888.toInt()); cornerRadius = dp(6).toFloat() } }
+            paint()
+            val hexT = TextView(this).apply { textSize = 12f; setTextColor(Th.dim) }
+            fun hexShow() { hexT.text = String.format("#%06X", t.colors[k]!! and 0xFFFFFF) }
+            hexShow()
+            row.addView(sw, LinearLayout.LayoutParams(dp(36), dp(28)).apply { marginEnd = dp(12) })
+            row.addView(TextView(this).apply { text = colorName(k); setTextColor(Th.text) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(hexT)
+            row.setOnClickListener {
+                pickColor(colorName(k), t.colors[k]!!) { c ->
+                    t.colors[k] = c; paint(); hexShow(); card.c = paletteOf(t.colors); card.invalidate()
+                }
+            }
+            col.addView(row)
+        }
+        val dlg = MobDialog(this).setTitle(tr("Редактор темы", "Theme editor")).setView(col)
+            .setPositiveButton(tr("Сохранить", "Save")) { _, _ ->
+                t.name = name.text.toString().trim().ifEmpty { t.name }
+                val l = loadCustoms()
+                val at = if (idx >= 0 && idx < l.size) { l[idx] = t; idx } else { l.add(t); l.size - 1 }
+                saveCustoms(l)
+                prefs.edit().putInt("customSel", at).apply()
+                recreate()
+            }
+            .setNegativeButton(tr("Отмена", "Cancel"), null)
+        if (idx >= 0) dlg.setNeutralButton(tr("Удалить", "Delete")) { _, _ ->
+            val l = loadCustoms(); if (idx < l.size) l.removeAt(idx)
+            saveCustoms(l)
+            val sel = prefs.getInt("customSel", -1)
+            prefs.edit().putInt("customSel", if (sel == idx) -1 else if (sel > idx) sel - 1 else sel).apply()
+            recreate()
+        }
+        dlg.show()
     }
     /** Праздничная неделя до и после: Хеллоуин 24 окт – 7 ноя, Новый год 25 дек – 8 янв, день рождения Minecraft 10–24 мая, 1 апреля 25 мар – 8 апр. */
     internal fun season(): String? {
@@ -255,6 +396,7 @@ class MainActivity : Activity() {
         }
         Th.light = prefs.getString("theme", "dark") == "light"
         Th.classic = prefs.getString("style", "new") == "old"
+        applySavedCustom()
         Fx.kind = season(); Fx.on = prefs.getBoolean("fxOn", true)
         drawerW = resources.displayMetrics.widthPixels - dp(64)
 
@@ -701,15 +843,42 @@ class MainActivity : Activity() {
             for (k in 0..1) {
                 val (label, lt, cl) = cards[rowI * 2 + k]
                 val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; isClickable = true }
-                cell.addView(StyleCard(this, stylePalette(lt, cl), Th.light == lt && Th.classic == cl), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)))
+                cell.addView(StyleCard(this, stylePalette(lt, cl), Th.custom == null && Th.light == lt && Th.classic == cl), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150)))
                 cell.addView(TextView(this).apply { text = label; textSize = 13f; setTextColor(Th.text2); gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(6)) })
                 cell.setOnClickListener {
-                    prefs.edit().putString("theme", if (lt) "light" else "dark").putString("style", if (cl) "old" else "new").apply()
+                    prefs.edit().putString("theme", if (lt) "light" else "dark").putString("style", if (cl) "old" else "new").putInt("customSel", -1).apply()
                     recreate()
                 }
                 line.addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { if (k == 0) marginEnd = dp(6) else marginStart = dp(6) })
             }
             col.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(6) })
+        }
+        col.addView(TextView(this).apply { text = tr("Свои темы (до $maxCustom)", "Custom themes (up to $maxCustom)"); setTextColor(Th.text); setPadding(0, dp(10), 0, dp(8)) })
+        run {
+            val customs = loadCustoms(); val selC = prefs.getInt("customSel", -1)
+            val rowC = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            for (i in 0 until maxCustom) {
+                val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(3); marginEnd = dp(3) }
+                if (i < customs.size) {
+                    val ct = customs[i]
+                    val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; isClickable = true }
+                    cell.addView(StyleCard(this, paletteOf(ct.colors), Th.custom != null && selC == i), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)))
+                    cell.addView(TextView(this).apply { text = ct.name; textSize = 10f; setTextColor(Th.text2); gravity = Gravity.CENTER; setSingleLine(); ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(4), 0, dp(4)) })
+                    cell.setOnClickListener { prefs.edit().putInt("customSel", i).apply(); recreate() }
+                    cell.setOnLongClickListener { editCustomTheme(i); true }
+                    rowC.addView(cell, lp)
+                } else if (i == customs.size) {
+                    val plus = TextView(this).apply { text = "+"; textSize = 26f; gravity = Gravity.CENTER; setTextColor(Th.accent); background = sel(Th.chip); isClickable = true }
+                    plus.setOnClickListener { editCustomTheme(-1) }
+                    rowC.addView(plus, LinearLayout.LayoutParams(0, dp(76), 1f).apply { marginStart = dp(3); marginEnd = dp(3) })
+                } else rowC.addView(View(this), lp)
+            }
+            col.addView(rowC)
+            col.addView(note(tr("Нажмите, чтобы применить; удерживайте, чтобы изменить. «+» создаёт тему из текущих цветов.", "Tap to apply, long-press to edit. “+” creates a theme from the current colours.")))
+            if (Th.custom != null && selC in customs.indices) col.addView(Button(this).apply {
+                text = tr("Изменить выбранную тему", "Edit selected theme"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
+                setOnClickListener { editCustomTheme(selC) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(8) })
         }
         col.addView(TextView(this).apply { text = tr("Компактный интерфейс", "Compact interface"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (compact()) 1 else 0) { i ->

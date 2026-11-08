@@ -52,27 +52,44 @@ class MsLogoView(ctx: Context) : View(ctx) {
 /** Цвета светлой/тёмной темы лаунчера (зелёный акцент в обеих). */
 object Th {
     var light = false
+    /** Пользовательская тема: ключ цвета -> ARGB; null = встроенные темы. */
+    var custom: Map<String, Int>? = null
     /** true = старое зелёное оформление; false = новое графитовое. */
     var classic = false
     private fun c(d: Long, l: Long) = (if (light) l else d).toInt()
     private fun n(cd: Long, cl: Long, nd: Long, nl: Long) = c(if (classic) cd else nd, if (classic) cl else nl)
-    val bg get() = n(0xFF0B0F0C, 0xFFF1F6F2, 0xFF0C0D0F, 0xFFF4F5F7)
-    val bar get() = n(0xFF121A15, 0xFFE2EDE5, 0xFF141518, 0xFFE9EBEE)
-    val drawer get() = n(0xFF0F1712, 0xFFFFFFFF, 0xFF111214, 0xFFFFFFFF)
-    val skinBg get() = n(0xFF0E1F14, 0xFFDCEBDF, 0xFF131519, 0xFFE3E6EA)
-    val accent get() = n(0xFF43E06A, 0xFF1B7F3A, 0xFF4ADE80, 0xFF1B7F3A)
-    val text get() = n(0xFFFFFFFF, 0xFF10200F, 0xFFF2F4F7, 0xFF14171B)
-    val text2 get() = n(0xFFB8E6C4, 0xFF2B4B33, 0xFFC9CED6, 0xFF2F353D)
-    val dim get() = n(0xFF7FA08A, 0xFF5A7A62, 0xFF8A919C, 0xFF626A75)
-    val line get() = n(0xFF22332A, 0xFFCADBCE, 0xFF25282D, 0xFFD6DAE0)
-    val line2 get() = n(0xFF1B2A20, 0xFFDCE8DF, 0xFF1B1D21, 0xFFE3E6EB)
-    val chip get() = n(0xFF14301D, 0xFFCFE3D4, 0xFF24282E, 0xFFDADDE3)
-    val chip2 get() = n(0xFF0F2416, 0xFFBFD6C5, 0xFF1B1E23, 0xFFCBCFD6)
-    val chipText get() = if (light) 0xFF10200F.toInt() else 0xFFFFFFFF.toInt()
-    val accentDk get() = n(0xFF1B6E34, 0xFF1B6E34, 0xFF1F7A45, 0xFF1F7A45)
-    val altBg get() = (if (light) (if (classic) 0xFF0B0F0C else 0xFF0C0D0F) else (if (classic) 0xFFF1F6F2 else 0xFFF4F5F7)).toInt()
-    val altText get() = (if (light) 0xFF4ADE80 else 0xFF14171B).toInt()
-    val hint get() = n(0xFF58705F, 0xFF8AA391, 0xFF5C636E, 0xFF8E96A1)
+    val bg get() = custom?.get("bg") ?: n(0xFF0B0F0C, 0xFFF1F6F2, 0xFF0C0D0F, 0xFFF4F5F7)
+    val bar get() = custom?.get("bar") ?: n(0xFF121A15, 0xFFE2EDE5, 0xFF141518, 0xFFE9EBEE)
+    val drawer get() = custom?.get("drawer") ?: n(0xFF0F1712, 0xFFFFFFFF, 0xFF111214, 0xFFFFFFFF)
+    val skinBg get() = custom?.get("skinBg") ?: n(0xFF0E1F14, 0xFFDCEBDF, 0xFF131519, 0xFFE3E6EA)
+    val accent get() = custom?.get("accent") ?: n(0xFF43E06A, 0xFF1B7F3A, 0xFF4ADE80, 0xFF1B7F3A)
+    val text get() = custom?.get("text") ?: n(0xFFFFFFFF, 0xFF10200F, 0xFFF2F4F7, 0xFF14171B)
+    val text2 get() = custom?.get("text2") ?: n(0xFFB8E6C4, 0xFF2B4B33, 0xFFC9CED6, 0xFF2F353D)
+    val dim get() = custom?.get("dim") ?: n(0xFF7FA08A, 0xFF5A7A62, 0xFF8A919C, 0xFF626A75)
+    val line get() = custom?.get("line") ?: n(0xFF22332A, 0xFFCADBCE, 0xFF25282D, 0xFFD6DAE0)
+    val line2 get() = custom?.get("line2") ?: n(0xFF1B2A20, 0xFFDCE8DF, 0xFF1B1D21, 0xFFE3E6EB)
+    val chip get() = custom?.get("chip") ?: n(0xFF14301D, 0xFFCFE3D4, 0xFF24282E, 0xFFDADDE3)
+    val chip2 get() = custom?.get("chip2") ?: n(0xFF0F2416, 0xFFBFD6C5, 0xFF1B1E23, 0xFFCBCFD6)
+    val chipText get() = custom?.get("chipText") ?: if (light) 0xFF10200F.toInt() else 0xFFFFFFFF.toInt()
+    val accentDk get() = custom?.get("accentDk") ?: n(0xFF1B6E34, 0xFF1B6E34, 0xFF1F7A45, 0xFF1F7A45)
+    val altBg get() = custom?.get("altBg") ?: (if (light) (if (classic) 0xFF0B0F0C else 0xFF0C0D0F) else (if (classic) 0xFFF1F6F2 else 0xFFF4F5F7)).toInt()
+    val altText get() = custom?.get("altText") ?: (if (light) 0xFF4ADE80 else 0xFF14171B).toInt()
+    val hint get() = custom?.get("hint") ?: n(0xFF58705F, 0xFF8AA391, 0xFF5C636E, 0xFF8E96A1)
+
+    val KEYS = listOf("bg", "bar", "drawer", "skinBg", "accent", "accentDk", "text", "text2", "dim", "hint", "line", "line2", "chip", "chip2", "chipText", "altBg", "altText")
+    fun get(k: String): Int = when (k) {
+        "bg" -> bg; "bar" -> bar; "drawer" -> drawer; "skinBg" -> skinBg; "accent" -> accent; "accentDk" -> accentDk
+        "text" -> text; "text2" -> text2; "dim" -> dim; "hint" -> hint; "line" -> line; "line2" -> line2
+        "chip" -> chip; "chip2" -> chip2; "chipText" -> chipText; "altBg" -> altBg; else -> altText
+    }
+    /** Цвета встроенной темы (без пользовательской). */
+    fun builtin(lt: Boolean, cl: Boolean): LinkedHashMap<String, Int> {
+        val ol = light; val oc = classic; val cu = custom
+        custom = null; light = lt; classic = cl
+        val m = LinkedHashMap<String, Int>(); for (k in KEYS) m[k] = get(k)
+        light = ol; classic = oc; custom = cu
+        return m
+    }
 }
 
 /** Квадратная кнопка фильтров: три ползунка (вверх, вниз, вверх) с квадратными ручками и число включённых фильтров. */
@@ -376,7 +393,7 @@ class FxLinear(ctx: Context) : LinearLayout(ctx) {
 }
 
 /** Мини-превью оформления: фон, верхняя полоса, область скина, строка версии и кнопка «Играть» в цветах выбранной гаммы. */
-class StyleCard(ctx: Context, private val c: IntArray, private val chosen: Boolean) : View(ctx) {
+class StyleCard(ctx: Context, var c: IntArray, private val chosen: Boolean) : View(ctx) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     override fun onDraw(cv: Canvas) {
         val d = resources.displayMetrics.density
