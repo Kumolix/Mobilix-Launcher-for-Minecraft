@@ -1568,7 +1568,7 @@ class MainActivity : Activity() {
             })
             box.addView(hdr)
         }
-        var type = "mod"; var loader = if ((build?.optString("profile") ?: selectedProfile()).contains("forge")) "forge" else "fabric"
+        var type = "mod"; var loader = loaderOfProfile(build?.optString("profile") ?: selectedProfile())
         var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
         var hideDl = prefs.getBoolean("catHideDl", false)    // фильтр «Не показывать скачанное»
         var searchSeq = 0                                    // номер запроса: устаревший ответ не должен перекрывать список
@@ -1644,7 +1644,7 @@ class MainActivity : Activity() {
                     val facets = JSONArray()
                     if (strict) facets.put(JSONArray().put("versions:${curBase()}"))
                     facets.put(JSONArray().put("project_type:$type"))
-                    if (strict && type == "mod") facets.put(JSONArray().put("categories:$loader"))
+                    if (strict && type == "mod") facets.put(JSONArray().apply { loaderCats(loader).forEach { put("categories:$it") } })
                     val path = "/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
                         "&facets=" + java.net.URLEncoder.encode(facets.toString(), "UTF-8") + "&limit=25&index=" + (if (query.isEmpty()) "downloads" else "relevance")
                     fun searchPath(q: String, f: JSONArray, limit: Int) = "/search?query=" + java.net.URLEncoder.encode(q, "UTF-8") +
@@ -1755,8 +1755,8 @@ class MainActivity : Activity() {
         // порядок вкладок: ряд 1 — моды, шейдеры, скачанные; ряд 2 — ресурспаки, датапаки
         val types = listOf("mod" to tr("Моды", "Mods"), "shader" to tr("Шейдеры", "Shaders"), "downloaded" to tr("Скачанные", "Downloaded"),
             "resourcepack" to tr("Ресурспаки", "Resource packs"), "datapack" to tr("Датапаки", "Datapacks"))
-        val loaders = listOf("fabric", "forge")
-        fun loaderLabel() = loader.replaceFirstChar { c -> c.uppercase() } + " ▾"
+        val loaders = listOf("fabric", "forge", "neoforge", "quilt")
+        fun loaderLabel() = (if (loader == "neoforge") "NeoForge" else loader.replaceFirstChar { c -> c.uppercase() }) + " ▾"
         fun smallBtn(txt: String, onClick: () -> Unit) = TextView(this).apply {
             text = txt; textSize = 13f; setTextColor(Th.chipText); gravity = Gravity.CENTER; maxLines = 1
             setPadding(dp(10), dp(8), dp(10), dp(8)); isClickable = true; background = sel(Th.chip); setOnClickListener { onClick() }
@@ -1767,13 +1767,13 @@ class MainActivity : Activity() {
             if (build != null) Toast.makeText(this, tr("Версия сборки меняется в её настройках («Изменить»)", "A build's version is changed in its settings (“Edit”)"), Toast.LENGTH_SHORT).show()
             else showVersions {
                 verBtn.text = curBase() + " ▾"
-                loader = if (selectedProfile().contains("forge")) "forge" else "fabric"; loadBtn.text = loaderLabel()
+                loader = loaderOfProfile(selectedProfile()); loadBtn.text = loaderLabel()
                 search()
             }
         }
         loadBtn.setOnClickListener {
             MobDialog(this).setTitle(tr("Загрузчик для поиска", "Loader for search"))
-                .setItems(loaders.map { it.replaceFirstChar { c -> c.uppercase() } + (if (it == loader) "  ✓" else "") }.toTypedArray()) { _, i ->
+                .setItems(loaders.map { (if (it == "neoforge") "NeoForge" else it.replaceFirstChar { c -> c.uppercase() }) + (if (it == loader) "  ✓" else "") }.toTypedArray()) { _, i ->
                     loader = loaders[i]; loadBtn.text = loaderLabel(); if (type == "mod") search()
                 }.setNegativeButton(tr("Закрыть", "Close"), null).show()
         }
@@ -1882,7 +1882,7 @@ class MainActivity : Activity() {
             var destFile: File? = null
             try {
                 val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") +
-                    (if (type == "mod") "&loaders=" + java.net.URLEncoder.encode("[\"$loader\"]", "UTF-8") else "")
+                    (if (type == "mod") "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(loader)).toString(), "UTF-8") else "")
                 val vers = JSONArray(apiGet("/project/$id/version$g"))
                 if (vers.length() == 0) throw RuntimeException("__manual")
                 val files = vers.getJSONObject(0).getJSONArray("files")
@@ -2653,7 +2653,7 @@ class MainActivity : Activity() {
         val nm = m.optString("name", tr("Сборка", "Build")).ifBlank { tr("Сборка", "Build") }
         val kind = m.optString("kind", "vanilla"); val mc = m.optString("mc")
         if (mc.isEmpty()) { Toast.makeText(this, tr("Файл сборки повреждён", "Build file is damaged"), Toast.LENGTH_LONG).show(); return }
-        val ver = when (kind) { "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; else -> mc }
+        val ver = kindLabel(kind, mc)
         MobDialog(this).setTitle(tr("Импорт сборки", "Import build"))
             .setMessage("«$nm»\n" + tr("Версия: $ver. Если её нет, лаунчер скачает её сам.", "Version: $ver. If it is missing, the launcher will download it."))
             .setNegativeButton(tr("Отмена", "Cancel"), null)
@@ -2719,14 +2719,13 @@ class MainActivity : Activity() {
         val deps = idx.getJSONObject("dependencies"); val mc = deps.getString("minecraft")
         val kind = when {
             deps.has("fabric-loader") -> "fabric"
+            deps.has("quilt-loader") -> "quilt"
+            deps.has("neoforge") -> "neoforge"
             deps.has("forge") -> "forge"
-            deps.has("neoforge") || deps.has("quilt-loader") -> {
-                Toast.makeText(this, tr("Сборки для NeoForge и Quilt пока не поддерживаются", "NeoForge and Quilt packs are not supported yet"), Toast.LENGTH_LONG).show(); return
-            }
             else -> "vanilla"
         }
         val files = idx.optJSONArray("files") ?: JSONArray()
-        val ver = when (kind) { "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; else -> mc }
+        val ver = kindLabel(kind, mc)
         MobDialog(this).setTitle(tr("Импорт сборки Modrinth", "Import Modrinth pack"))
             .setMessage("«$nm»\n" + tr("Версия: $ver. Файлов для скачивания: ${files.length()}. Версию игры, если её нет, лаунчер скачает сам.", "Version: $ver. Files to download: ${files.length()}. The launcher downloads the game version if it is missing."))
             .setNegativeButton(tr("Отмена", "Cancel"), null)
@@ -2800,6 +2799,8 @@ class MainActivity : Activity() {
 
     private fun profileKindMc(p: String): Pair<String, String> = when {
         p.startsWith("fabric-loader-") -> "fabric" to p.substringAfterLast("-")
+        p.startsWith("quilt-loader-") -> "quilt" to p.substringAfterLast("-")
+        p.startsWith("neoforge-") -> "neoforge" to (neoMc(p.removePrefix("neoforge-")) ?: p)
         p.contains("-forge-") -> "forge" to p.substringBefore("-forge-")
         Regex("^[\\d.]+-forge[\\d.]+-.+").matches(p) -> "forge" to p.substringBefore("-forge")
         else -> "vanilla" to p
@@ -2904,12 +2905,47 @@ class MainActivity : Activity() {
     }
 
     // ---------- установка версий ----------
+    /** Версия NeoForge «21.1.172» -> версия игры «1.21.1»; для нумерации 26+ версия игры совпадает с первыми двумя числами. */
+    private fun neoMc(v: String): String? {
+        val p = v.substringBefore("-").split("."); val a = p.getOrNull(0)?.toIntOrNull() ?: return null; val b = p.getOrNull(1)?.toIntOrNull() ?: return null
+        return if (a < 26) "1.$a" + (if (b > 0) ".$b" else "") else "$a.$b"
+    }
+    private fun verKey(v: String) = v.split(".", "-").map { it.toIntOrNull() ?: -1 }
+    private val verCmp = Comparator<String> { a, b ->
+        val x = verKey(a); val y = verKey(b); var r = 0
+        for (i in 0 until maxOf(x.size, y.size)) { r = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 }); if (r != 0) break }
+        r
+    }
+    /** Версии NeoForge для игры mc: сначала стабильные, затем бета; новые первыми. */
+    private fun neoforgeCandidates(mc: String): List<String> {
+        val all = LinkedHashSet<String>()
+        try {
+            val xml = fetchText("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
+            Regex("<version>([^<]+)</version>").findAll(xml).forEach { all.add(it.groupValues[1]) }
+        } catch (_: Throwable) {}
+        var vs = all.filter { neoMc(it) == mc }
+        if (vs.isEmpty()) try {
+            val arr = JSONArray(fetchText("https://bmclapi2.bangbang93.com/neoforge/list/$mc"))
+            vs = (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let { o -> o.optString("version", "").ifEmpty { o.optString("rawVersion", "").removePrefix("neoforge-") }.takeIf { s -> s.isNotEmpty() } } }
+        } catch (_: Throwable) {}
+        val (beta, stable) = vs.partition { it.contains("-") }
+        return (stable.sortedWith(verCmp).reversed() + beta.sortedWith(verCmp).reversed()).take(6)
+    }
+    private fun loaderOfProfile(p: String) = when {
+        p.startsWith("neoforge-") -> "neoforge"; p.startsWith("quilt-loader-") -> "quilt"; p.contains("forge", true) -> "forge"; else -> "fabric"
+    }
+    /** Категории Modrinth для загрузчика: Quilt запускает и моды Fabric. */
+    private fun loaderCats(l: String) = if (l == "quilt") listOf("quilt", "fabric") else listOf(l)
+    private fun kindLabel(kind: String, mc: String) = when (kind) { "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; "quilt" -> "Quilt $mc"; "neoforge" -> "NeoForge $mc"; else -> mc }
+
     /** Установленный профиль нужного типа для версии игры, либо null. */
     private fun findProfile(kind: String, mc: String): String? {
         val ids = installedProfiles()
         return when (kind) {
             "vanilla" -> ids.firstOrNull { it == mc && File(dataRoot(), "versions/$it/$it.jar").exists() }
             "fabric" -> ids.firstOrNull { it.startsWith("fabric-loader-") && it.endsWith("-$mc") }
+            "quilt" -> ids.firstOrNull { it.startsWith("quilt-loader-") && it.endsWith("-$mc") }
+            "neoforge" -> ids.firstOrNull { it.startsWith("neoforge-") && (neoMc(it.removePrefix("neoforge-")) == mc) }
             else -> ids.firstOrNull { it.startsWith("$mc-forge-") || it.startsWith("$mc-forge$mc-") }
         }
     }
@@ -2991,6 +3027,68 @@ class MainActivity : Activity() {
                         id = JSONObject(prof).getString("id")
                         val f = File(root, "versions/$id/$id.json"); f.parentFile?.mkdirs(); f.writeText(prof)
                         prepareAndRun(id, false)
+                    }
+                    "quilt" -> {
+                        log("Quilt $mc: поиск загрузчика…")
+                        val ls = JSONArray(fetchText("https://meta.quiltmc.org/v3/versions/loader/$mc"))
+                        var pick: String? = null
+                        for (i in 0 until ls.length()) {
+                            val v = ls.getJSONObject(i).getJSONObject("loader").getString("version")
+                            if (!v.contains("beta", true) && !v.contains("rc", true) && !v.contains("alpha", true)) { pick = v; break }
+                        }
+                        if (pick == null && ls.length() > 0) pick = ls.getJSONObject(0).getJSONObject("loader").getString("version")
+                        if (pick == null) throw RuntimeException("Quilt не поддерживает $mc")
+                        val prof = fetchText("https://meta.quiltmc.org/v3/versions/loader/$mc/$pick/profile/json")
+                        id = JSONObject(prof).getString("id")
+                        val f = File(root, "versions/$id/$id.json"); f.parentFile?.mkdirs(); f.writeText(prof)
+                        prepareAndRun(id, false)
+                    }
+                    "neoforge" -> {
+                        prepareAndRun(mc, false)
+                        val cands = neoforgeCandidates(mc)
+                        if (cands.isEmpty()) throw RuntimeException("NeoForge для $mc не найден")
+                        val installer = File(root, "forge-installer.jar")
+                        installer.delete()
+                        var got = false; var lastErr: Exception? = null
+                        for (nv in cands) {
+                            log("NeoForge $nv: скачивание установщика…")
+                            val u0 = "https://maven.neoforged.net/releases/net/neoforged/neoforge/$nv/neoforge-$nv-installer.jar"
+                            for (u in listOf(u0) + mirrorsFor(u0) + listOf("https://bmclapi2.bangbang93.com/neoforge/version/$nv/download/installer")) {
+                                try {
+                                    downloadBig(u, installer)
+                                    if (installer.length() > 100000) { got = true; break }
+                                    installer.delete()
+                                } catch (e: Exception) { lastErr = e; installer.delete() }
+                            }
+                            if (got) break
+                        }
+                        if (!got) throw RuntimeException("не удалось скачать установщик NeoForge: $lastErr")
+                        val java = ensureRuntime(root, 21)
+                        val rt = java.parentFile!!.parentFile!!
+                        val lp = File(root, "launcher_profiles.json")
+                        if (!lp.exists()) lp.writeText("{\"profiles\":{}}")
+                        var found: String? = null
+                        var inst = installer
+                        val ilogF = File(getExternalFilesDir(null) ?: filesDir, "installer.log")
+                        for (attempt in 1..6) {
+                            log("NeoForge: установка, попытка $attempt из 6 (это долго, потерпите)…")
+                            runOnUiThread { Toast.makeText(this, tr(
+                                "NeoForge ставится в фоне: не закрывайте лаунчер, это может занять несколько минут (попытка $attempt из 6).",
+                                "NeoForge is installing in the background: do not close the launcher, it may take a few minutes (attempt $attempt of 6)."), Toast.LENGTH_LONG).show() }
+                            // у разных версий установщика ключ называется по-разному: чередуем «--installClient» и «--install-client»
+                            runForgeInstaller(rt, inst, root, if (attempt % 2 == 1) "--installClient" else "--install-client")
+                            found = findProfile("neoforge", mc)
+                            val miss = if (found != null) forgeMissingOutputs(installer, root, found) else emptyList()
+                            if (found != null && miss.isEmpty()) break
+                            if (miss.isNotEmpty()) log("NeoForge: установка не завершилась, нет файлов: ${miss.joinToString(", ")}")
+                            found = null
+                            if (inst == installer && try { ilogF.readText().let { it.contains("Expected:") && it.contains("Actual:") } } catch (_: Exception) { false }) {
+                                try { inst = installerWithoutHashes(installer); log("NeoForge: контрольные суммы постобработки не совпали; продолжаю без их проверки") }
+                                catch (e: Exception) { log("NeoForge: не удалось подготовить установщик без проверки сумм: $e") }
+                            }
+                            Thread.sleep(2500)
+                        }
+                        id = found ?: throw RuntimeException("NeoForge не установился до конца. Попробуйте ещё раз или пришлите лог (кнопка «Лог» и файл installer.log).")
                     }
                     "forge" -> {
                         prepareAndRun(mc, false)
@@ -3098,6 +3196,7 @@ class MainActivity : Activity() {
         box.addView(sv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val vanilla = ArrayList<String>(); val fabric = ArrayList<String>(); val forge = ArrayList<String>()
+        val quilt = ArrayList<String>(); val neoforge = ArrayList<String>()
         var loader = "all"
         val root = getExternalFilesDir(null) ?: filesDir
         var loaded = false
@@ -3146,7 +3245,7 @@ class MainActivity : Activity() {
                     list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
                 }
             }
-            section("Vanilla", vanilla, "vanilla"); section("Fabric", fabric, "fabric"); section("Forge", forge, "forge")
+            section("Vanilla", vanilla, "vanilla"); section("Fabric", fabric, "fabric"); section("Quilt", quilt, "quilt"); section("Forge", forge, "forge"); section("NeoForge", neoforge, "neoforge")
             if (loader == "all" || loader == "downloaded") {
                 val mine = installedProfiles().filter { q.isEmpty() || it.contains(q) || prettyProfile(it).contains(q) }
                 if (mine.isNotEmpty()) {
@@ -3183,7 +3282,7 @@ class MainActivity : Activity() {
         fun refreshChips() = chipViews.forEach { (k, t) ->
             t.setBackgroundColor(if (k == loader) Th.act else Th.chip)
         }
-        for ((k, label) in listOf("all" to tr("Все", "All"), "vanilla" to "Vanilla", "fabric" to "Fabric", "forge" to "Forge", "downloaded" to tr("Скачанные", "Downloaded"))) {
+        for ((k, label) in listOf("all" to tr("Все", "All"), "vanilla" to "Vanilla", "fabric" to "Fabric", "quilt" to "Quilt", "forge" to "Forge", "neoforge" to "NeoForge", "downloaded" to tr("Скачанные", "Downloaded"))) {
             val t = TextView(this).apply {
                 text = label; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8))
                 setOnClickListener { loader = k; refreshChips(); render() }
@@ -3217,6 +3316,19 @@ class MainActivity : Activity() {
                         val o = fa.getJSONObject(i)
                         if (o.optBoolean("stable") && order.containsKey(o.getString("version"))) fabric.add(o.getString("version"))
                     }
+                } catch (_: Throwable) {}
+                try {
+                    val qa = JSONArray(fetchText("https://meta.quiltmc.org/v3/versions/game"))
+                    for (i in 0 until qa.length()) {
+                        val o = qa.getJSONObject(i)
+                        if (o.optBoolean("stable") && order.containsKey(o.getString("version"))) quilt.add(o.getString("version"))
+                    }
+                } catch (_: Throwable) {}
+                try {
+                    val xml = fetchText("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
+                    val set = LinkedHashSet<String>()
+                    Regex("<version>([^<]+)</version>").findAll(xml).forEach { r -> neoMc(r.groupValues[1])?.let { mc -> if (order.containsKey(mc)) set.add(mc) } }
+                    neoforge.addAll(set.sortedBy { order[it] })
                 } catch (_: Throwable) {}
                 try {
                     val set = HashSet<String>()
@@ -3517,6 +3629,8 @@ class MainActivity : Activity() {
     }
 
     internal fun prettyProfile(id: String): String = when {
+        id.startsWith("quilt-loader-") -> "Quilt " + id.substringAfterLast("-") + " (" + id.removePrefix("quilt-loader-").substringBeforeLast("-") + ")"
+        id.startsWith("neoforge-") -> "NeoForge " + (neoMc(id.removePrefix("neoforge-")) ?: "") + " (" + id.removePrefix("neoforge-") + ")"
         id.startsWith("fabric-loader-") -> "Fabric " + id.substringAfterLast("-") + " (" + id.removePrefix("fabric-loader-").substringBeforeLast("-") + ")"
         id.contains("-forge-") -> "Forge " + id.substringBefore("-forge-") + " (" + id.substringAfter("-forge-") + ")"
         Regex("^[\\d.]+-forge[\\d.]+-.+").matches(id) -> "Forge " + id.substringBefore("-forge") + " (" + id.substringAfter("-forge").removePrefix(id.substringBefore("-forge")).removePrefix("-") + ")"
@@ -3639,7 +3753,7 @@ class MainActivity : Activity() {
         val oldGl = legacy || javaMajor < 16
         applyMipmap(gameDir, oldGl)
         applyPreset(gameDir, baseVer)
-        val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.contains("forge", true) -> "forge"; else -> null }
+        val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.startsWith("quilt-loader-") -> "quilt"; profile.startsWith("neoforge-") -> "neoforge"; profile.contains("forge", true) -> "forge"; else -> null }
         syncMods(gameDir, modLoader)
         autoUpdateMods(gameDir, modLoader, baseVer)
         if (preAwt) log("Очень старая версия (до 1.6): слой LWJGL 2 + запуск без окна AWT")
@@ -3959,10 +4073,11 @@ class MainActivity : Activity() {
             val moved = ArrayList<String>()
             mods.listFiles { f -> f.isFile && f.name.endsWith(".jar") }?.forEach { f ->
                 val ls = modLoaders(f)
-                if (ls.isNotEmpty() && !ls.contains(loader)) { off.mkdirs(); if (f.renameTo(File(off, f.name))) moved.add(f.name) }
+                if (ls.isNotEmpty() && !ls.contains(loader) && !(loader == "quilt" && ls.contains("fabric"))) { off.mkdirs(); if (f.renameTo(File(off, f.name))) moved.add(f.name) }
             }
             off.listFiles { f -> f.isFile && f.name.endsWith(".jar") }?.forEach { f ->
-                if (modLoaders(f).contains(loader)) { mods.mkdirs(); f.renameTo(File(mods, f.name)) }
+                val lz = modLoaders(f)
+                if (lz.contains(loader) || (loader == "quilt" && lz.contains("fabric"))) { mods.mkdirs(); f.renameTo(File(mods, f.name)) }
             }
             if (moved.isNotEmpty()) {
                 log("Моды не под $loader отключены (папка mods-disabled): " + moved.joinToString(", "))
@@ -3979,14 +4094,14 @@ class MainActivity : Activity() {
             val index = idx()
             val ids = ArrayList<String>(); val keys = index.keys(); while (keys.hasNext()) ids.add(keys.next())
             fun enc(x: String) = java.net.URLEncoder.encode(x, "UTF-8")
-            fun versionsFor(id: String) = JSONArray(apiGet("/project/$id/version?game_versions=" + enc("[\"$baseVer\"]") + "&loaders=" + enc("[\"$loader\"]")))
+            fun versionsFor(id: String) = JSONArray(apiGet("/project/$id/version?game_versions=" + enc("[\"$baseVer\"]") + "&loaders=" + enc(JSONArray(loaderCats(loader)).toString())))
             fun fetch(id: String, v: JSONObject, title: String): String? {
                 val files = v.getJSONArray("files"); var f = files.getJSONObject(0)
                 for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
                 val name = f.getString("filename")
                 val dest = File(gameDir, "mods/$name")
                 if (!dest.exists() && !download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) return null
-                index.put(id, JSONObject().put("t", "mod").put("f", name).put("n", title))
+                index.put(id, JSONObject().put("t", "mod").put("f", name).put("n", title).put("l", loader).put("v", baseVer))
                 return name
             }
             var updated = 0; var added = 0
@@ -4516,7 +4631,7 @@ class MainActivity : Activity() {
         return if (mi.totalMem / 1024 / 1024 >= 6000) 1280 else 768
     }
 
-    private fun runForgeInstaller(rt: File, installer: File, root: File) {
+    private fun runForgeInstaller(rt: File, installer: File, root: File, installFlag: String = "--installClient") {
         val mainClass = try {
             java.util.jar.JarFile(installer).use { it.manifest?.mainAttributes?.getValue("Main-Class") }
         } catch (_: Exception) { null } ?: "net.minecraftforge.installer.SimpleInstaller"
@@ -4525,7 +4640,7 @@ class MainActivity : Activity() {
         j.put("main", mainClass)
         j.put("jvm", JSONArray(listOf("-cp", installer.path, "-Xmx${installerHeapMb()}M", "-XX:+UseSerialGC", "-Djava.awt.headless=true",
             "-Duser.home=${root.path}", "-Djava.io.tmpdir=${cacheDir.path}", "-Duser.dir=${root.path}")))
-        j.put("game", JSONArray(listOf("--installClient", root.path)))
+        j.put("game", JSONArray(listOf(installFlag, root.path)))
         j.put("glLib", "")
         File(root, "installer.json").writeText(j.toString())
         val done = File(getExternalFilesDir(null) ?: filesDir, "installer.done").apply { delete() }
@@ -4692,6 +4807,9 @@ class MainActivity : Activity() {
     private fun mirrorsFor(url: String): List<String> {
         val m = "https://bmclapi2.bangbang93.com"
         return when {
+            url.startsWith("https://maven.neoforged.net/releases/") -> listOf(m + "/maven/" + url.removePrefix("https://maven.neoforged.net/releases/"))
+            url.startsWith("https://meta.quiltmc.org/") -> listOf(m + "/quilt-meta/" + url.removePrefix("https://meta.quiltmc.org/"))
+            url.startsWith("https://maven.quiltmc.org/repository/release/") -> listOf(m + "/quilt-maven/" + url.removePrefix("https://maven.quiltmc.org/repository/release/"))
             url.startsWith("https://resources.download.minecraft.net/") ->
                 listOf(m + "/assets/" + url.removePrefix("https://resources.download.minecraft.net/"))
             url.startsWith("https://libraries.minecraft.net/") ->
