@@ -1145,6 +1145,28 @@ class MainActivity : Activity() {
     private fun idx(): JSONObject = try { JSONObject(prefs.getString("installed", "{}")) } catch (_: Exception) { JSONObject() }
     private fun idxSave(o: JSONObject) { prefs.edit().putString("installed", o.toString()).apply() }
     private fun typeDir(type: String) = when (type) { "resourcepack" -> "resourcepacks"; "shader" -> "shaderpacks"; "datapack" -> "datapacks"; else -> "mods" }
+    /** Загрузчик и версия игры из самого файла мода (файлы, которых нет в списке скачанного). Пустая строка, если не определилось. */
+    private fun modMeta(f: File): Pair<String, String> {
+        try {
+            java.util.zip.ZipFile(f).use { z ->
+                fun text(n: String) = z.getEntry(n)?.let { z.getInputStream(it).bufferedReader().use { r -> r.readText() } }
+                text("fabric.mod.json")?.let { t ->
+                    val mc = try { JSONObject(t).optJSONObject("depends")?.opt("minecraft")?.toString() ?: "" } catch (_: Exception) { "" }
+                    return "fabric" to cleanRange(mc)
+                }
+                text("quilt.mod.json")?.let { return "quilt" to "" }
+                text("META-INF/neoforge.mods.toml")?.let { t -> return "neoforge" to cleanRange(Regex("modId\\s*=\\s*\"minecraft\"[\\s\\S]*?versionRange\\s*=\\s*\"([^\"]+)\"").find(t)?.groupValues?.get(1) ?: "") }
+                text("META-INF/mods.toml")?.let { t -> return "forge" to cleanRange(Regex("modId\\s*=\\s*\"minecraft\"[\\s\\S]*?versionRange\\s*=\\s*\"([^\"]+)\"").find(t)?.groupValues?.get(1) ?: "") }
+                text("mcmod.info")?.let { t ->
+                    val v = Regex("\"mcversion\"\\s*:\\s*\"([^\"]*)\"").find(t)?.groupValues?.get(1) ?: ""
+                    return "forge" to v
+                }
+            }
+        } catch (_: Throwable) {}
+        return "" to ""
+    }
+    private fun cleanRange(s: String) = s.trim().removePrefix("[").removeSuffix(")").removeSuffix("]").replace(",", " – ").replace("~", "").replace(">=", "").replace("^", "").trim().let { if (it.length > 18) it.take(18) else it }
+
     private fun packFile(type: String, name: String) = File(curGameDir(), typeDir(type) + "/" + name)
 
     /** Кнопки строки каталога: «Скачать» или «Загружено» + «Удалить». */
@@ -1517,37 +1539,56 @@ class MainActivity : Activity() {
             list.removeAllViews()
             val index = idx()
             val known = HashSet<String>()
-            var count = 0
-            fun row(title: String, sub: String, type: String, file: File, id: String?) {
-                count++
+            class Ent(val title: String, val type: String, val file: File, val id: String?, val loader: String, val ver: String)
+            val ents = ArrayList<Ent>()
+            val keys = index.keys()
+            while (keys.hasNext()) {
+                val id = keys.next(); val o = index.getJSONObject(id)
+                val f = packFile(o.optString("t"), o.optString("f"))
+                if (f.exists()) {
+                    known.add(f.path)
+                    val md = if (o.optString("l").isEmpty() && o.optString("t") == "mod") modMeta(f) else ("" to "")
+                    ents.add(Ent(o.optString("n", f.name), o.optString("t"), f, id, o.optString("l").ifEmpty { md.first }, o.optString("v").ifEmpty { md.second }))
+                }
+            }
+            for (t in listOf("mod", "resourcepack", "shader", "datapack")) {
+                File(curGameDir(), typeDir(t)).listFiles()?.sortedBy { it.name }?.forEach {
+                    if (it.isFile && !known.contains(it.path) && !it.name.endsWith(".part")) {
+                        val md = if (t == "mod") modMeta(it) else ("" to "")
+                        ents.add(Ent(it.name, t, it, null, md.first, md.second))
+                    }
+                }
+            }
+            fun loaderName(l: String) = when (l) { "fabric" -> "Fabric"; "forge" -> "Forge"; "neoforge" -> "NeoForge"; "quilt" -> "Quilt"; else -> "" }
+            fun typeName(t: String) = when (t) { "mod" -> tr("Мод", "Mod"); "resourcepack" -> tr("Ресурспак", "Resource pack"); "shader" -> tr("Шейдер", "Shader"); else -> tr("Датапак", "Datapack") }
+            fun typeTitle(t: String) = when (t) { "mod" -> tr("Моды", "Mods"); "resourcepack" -> tr("Ресурспаки", "Resource packs"); "shader" -> tr("Шейдеры", "Shaders"); else -> tr("Датапаки", "Datapacks") }
+            val order = listOf("mod", "resourcepack", "shader", "datapack")
+            ents.sortWith(compareBy<Ent>({ order.indexOf(it.type) }, { loaderName(it.loader).ifEmpty { "~" } }, { it.title.lowercase() }))
+            val manyTypes = ents.map { it.type }.toSet().size > 1
+            val manyLoaders = ents.filter { it.type == "mod" }.map { it.loader }.toSet().size > 1
+            fun header(s: String) = list.addView(TextView(this).apply { text = s; textSize = 13f; setTextColor(Th.accent); typeface = Typeface.DEFAULT_BOLD; setPadding(0, dp(14), 0, dp(2)) })
+            var lastType = ""; var lastLoader = "\u0000"
+            for (e in ents) {
+                if (e.type != lastType) { lastType = e.type; lastLoader = "\u0000"; if (manyTypes) header(typeTitle(e.type)) }
+                if (e.type == "mod" && manyLoaders && e.loader != lastLoader) { lastLoader = e.loader; header("  " + (loaderName(e.loader).ifEmpty { tr("Другое", "Other") })) }
+                val sub = (if (e.type == "mod") loaderName(e.loader).ifEmpty { typeName(e.type) } else typeName(e.type)) + (if (e.ver.isNotEmpty()) " • " + e.ver else "")
                 val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, dp(10)) }
                 val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                col.addView(TextView(this).apply { text = title; textSize = 16f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
+                col.addView(TextView(this).apply { text = e.title; textSize = 16f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
                 col.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(Th.dim) })
                 r.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 r.addView(Button(this).apply {
                     text = tr("Удалить", "Delete"); isAllCaps = false; setTextColor(Th.chipText); background = sel(0xFFB3261E.toInt())
                     setOnClickListener {
-                        file.delete()
-                        if (id != null) idxSave(idx().apply { remove(id) })
+                        e.file.delete()
+                        if (e.id != null) idxSave(idx().apply { remove(e.id) })
                         (r.parent as? LinearLayout)?.removeView(r)
                     }
                 }, LinearLayout.LayoutParams(dp(100), dp(40)))
                 list.addView(r)
                 list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
             }
-            val keys = index.keys()
-            while (keys.hasNext()) {
-                val id = keys.next(); val o = index.getJSONObject(id)
-                val f = packFile(o.optString("t"), o.optString("f"))
-                if (f.exists()) { known.add(f.path); row(o.optString("n", f.name), typeDir(o.optString("t")) + " · " + f.name, o.optString("t"), f, id) }
-            }
-            for (t in listOf("mod", "resourcepack", "shader", "datapack")) {
-                File(curGameDir(), typeDir(t)).listFiles()?.sortedBy { it.name }?.forEach {
-                    if (it.isFile && !known.contains(it.path) && !it.name.endsWith(".part")) row(it.name, typeDir(t), t, it, null)
-                }
-            }
-            if (count == 0) list.addView(TextView(this).apply { text = tr("Пока ничего не скачано", "Nothing downloaded yet"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
+            if (ents.isEmpty()) list.addView(TextView(this).apply { text = tr("Пока ничего не скачано", "Nothing downloaded yet"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
         }
         fun search() {
             val my = ++searchSeq
@@ -1672,7 +1713,30 @@ class MainActivity : Activity() {
         val types = listOf("mod" to tr("Моды", "Mods"), "shader" to tr("Шейдеры", "Shaders"), "downloaded" to tr("Скачанные", "Downloaded"),
             "resourcepack" to tr("Ресурспаки", "Resource packs"), "datapack" to tr("Датапаки", "Datapacks"))
         val loaders = listOf("fabric", "forge")
-        val loaderRow = chipRow(loaders.map { it.replaceFirstChar { c -> c.uppercase() } }, loaders.indexOf(loader).coerceAtLeast(0)) { i -> loader = loaders[i]; if (type == "mod") search() }
+        fun loaderLabel() = loader.replaceFirstChar { c -> c.uppercase() } + " ▾"
+        fun smallBtn(txt: String, onClick: () -> Unit) = TextView(this).apply {
+            text = txt; textSize = 13f; setTextColor(Th.chipText); gravity = Gravity.CENTER; maxLines = 1
+            setPadding(dp(10), dp(8), dp(10), dp(8)); isClickable = true; background = sel(Th.chip); setOnClickListener { onClick() }
+        }
+        val verBtn = smallBtn(curBase() + " ▾") {}
+        val loadBtn = smallBtn(loaderLabel()) {}
+        verBtn.setOnClickListener {
+            if (build != null) Toast.makeText(this, tr("Версия сборки меняется в её настройках («Изменить»)", "A build's version is changed in its settings (“Edit”)"), Toast.LENGTH_SHORT).show()
+            else showVersions {
+                verBtn.text = curBase() + " ▾"
+                loader = if (selectedProfile().contains("forge")) "forge" else "fabric"; loadBtn.text = loaderLabel()
+                search()
+            }
+        }
+        loadBtn.setOnClickListener {
+            MobDialog(this).setTitle(tr("Загрузчик для поиска", "Loader for search"))
+                .setItems(loaders.map { it.replaceFirstChar { c -> c.uppercase() } + (if (it == loader) "  ✓" else "") }.toTypedArray()) { _, i ->
+                    loader = loaders[i]; loadBtn.text = loaderLabel(); if (type == "mod") search()
+                }.setNegativeButton(tr("Закрыть", "Close"), null).show()
+        }
+        val loaderRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        loaderRow.addView(verBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        loaderRow.addView(loadBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
         val typeRow = tabRows(listOf(types.subList(0, 3).map { it.second }, types.subList(3, 5).map { it.second }), 0) { i ->
             type = types[i].first
             loaderRow.visibility = if (type == "mod") View.VISIBLE else View.GONE
@@ -1785,7 +1849,7 @@ class MainActivity : Activity() {
                 destFile = dest
                 val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
                 if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
-                idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title)) })
+                idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase())) })
                 res = "ok"
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
@@ -1848,7 +1912,11 @@ class MainActivity : Activity() {
                 dl = dest
                 val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
                 if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
-                idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title)) })
+                val ldv = v.optJSONArray("loaders"); var ld = ""
+                if (type == "mod" && ldv != null) for (k in 0 until ldv.length()) if (ldv.getString(k) in listOf("fabric", "forge", "neoforge", "quilt")) { ld = ldv.getString(k); break }
+                val gvs = v.optJSONArray("game_versions"); var gv = curBase()
+                if (gvs != null && gvs.length() > 0) { var has = false; for (k in 0 until gvs.length()) if (gvs.getString(k) == gv) has = true; if (!has) gv = gvs.getString(gvs.length() - 1) }
+                idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title).put("l", ld).put("v", gv)) })
                 res = "ok"
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
@@ -2804,6 +2872,60 @@ class MainActivity : Activity() {
     }
 
     /** Скачивает версию (ванильную, Fabric или Forge) и выбирает её. Идёт в фоне, пока работает сервис. */
+    // ---------- OptiFine: ставится как мод в профиль Forge (источник - зеркало BMCLAPI) ----------
+    private fun gameDirFor(profile: String): File {
+        val base = try { JSONObject(File(dataRoot(), "versions/$profile/$profile.json").readText()).let { it.optString("inheritsFrom", "").ifEmpty { it.optString("jar", "") }.ifEmpty { profile } } } catch (_: Exception) { profile }
+        val legacy = try { JSONObject(File(dataRoot(), "versions/$base/$base.json").readText()).optJSONObject("arguments") == null } catch (_: Exception) { false }
+        return File(dataRoot(), if (legacy) "game-$base" else "game")
+    }
+    private fun optifineFlow(mc: String, onDone: () -> Unit) {
+        if (busy) { Toast.makeText(this, tr("Подождите: идёт другая загрузка", "Wait: another download is in progress"), Toast.LENGTH_SHORT).show(); return }
+        Toast.makeText(this, tr("Ищем OptiFine для $mc…", "Looking for OptiFine for $mc…"), Toast.LENGTH_SHORT).show()
+        Thread {
+            try {
+                val arr = JSONArray(fetchText("https://bmclapi2.bangbang93.com/optifine/$mc"))
+                val items = (0 until arr.length()).map { arr.getJSONObject(it) }
+                if (items.isEmpty()) { runOnUiThread { Toast.makeText(this, tr("Для $mc нет OptiFine", "No OptiFine for $mc"), Toast.LENGTH_LONG).show() }; return@Thread }
+                // новые сверху: HD_U_I7 новее HD_U_I6 и HD_U_H9 (буква, затем номер)
+                fun rank(o: JSONObject): Int { val p = o.optString("patch"); return (p.firstOrNull()?.code ?: 0) * 100 + (p.drop(1).toIntOrNull() ?: 0) }
+                val sorted = items.sortedByDescending { rank(it) }.take(8)
+                runOnUiThread {
+                    MobDialog(this).setTitle("OptiFine $mc")
+                        .setMessage(tr("OptiFine ставится как мод в профиль Forge для этой версии. Нужен подходящий Forge: если игра не запустится, попробуйте другой Forge или другую сборку OptiFine.", "OptiFine is installed as a mod into the Forge profile for this version. It needs a matching Forge: if the game does not start, try another Forge or another OptiFine build."))
+                        .setItems(sorted.map { it.optString("type") + " " + it.optString("patch") }.toTypedArray()) { _, i -> optifineInstall(mc, sorted[i], onDone) }
+                        .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+                }
+            } catch (e: Throwable) {
+                runOnUiThread { Toast.makeText(this, tr("Не удалось получить список OptiFine: ", "Could not load the OptiFine list: ") + (e.message ?: ""), Toast.LENGTH_LONG).show() }
+            }
+        }.start()
+    }
+    private fun optifineInstall(mc: String, o: JSONObject, onDone: () -> Unit) {
+        fun fetchJar() {
+            val pid = findProfile("forge", mc)
+            if (pid == null) { runOnUiThread { Toast.makeText(this, tr("Forge для $mc не установился", "Forge for $mc was not installed"), Toast.LENGTH_LONG).show() }; return }
+            Thread {
+                try {
+                    val mods = File(gameDirFor(pid), "mods").apply { mkdirs() }
+                    mods.listFiles()?.filter { it.name.startsWith("OptiFine", true) }?.forEach { it.delete() }
+                    val name = o.optString("filename").ifEmpty { "OptiFine_${mc}_${o.optString("type")}_${o.optString("patch")}.jar" }
+                    val dest = File(mods, name)
+                    val ok = download("https://bmclapi2.bangbang93.com/optifine/$mc/${o.optString("type")}/${o.optString("patch")}", dest, null)
+                    if (!ok || dest.length() < 100000) { dest.delete(); throw RuntimeException(tr("ошибка загрузки", "download failed")) }
+                    prefs.edit().putString("profile", pid).putString("build", "").apply()
+                    runOnUiThread {
+                        versionText.text = verTitle()
+                        Toast.makeText(this, tr("OptiFine установлен и выбран профиль Forge $mc", "OptiFine installed and Forge $mc selected"), Toast.LENGTH_LONG).show()
+                        onDone()
+                    }
+                } catch (e: Throwable) {
+                    runOnUiThread { Toast.makeText(this, tr("Не удалось поставить OptiFine: ", "Could not install OptiFine: ") + (e.message ?: ""), Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+        if (findProfile("forge", mc) != null) fetchJar() else installProfile("forge", mc) { fetchJar() }
+    }
+
     private fun installProfile(kind: String, mc: String, done: () -> Unit) {
         setBusy(true)
         Thread {
@@ -2955,6 +3077,11 @@ class MainActivity : Activity() {
                     val sel = pid != null && pid == selectedProfile()
                     val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(4)) }
                     r.addView(TextView(this).apply { text = v; textSize = 17f; setTextColor(Th.text) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    if (key == "forge") r.addView(TextView(this).apply {
+                        text = "OF"; textSize = 13f; setTextColor(Th.chipText); gravity = Gravity.CENTER; typeface = Typeface.DEFAULT_BOLD
+                        background = sel(Th.chip2); isClickable = true; contentDescription = "OptiFine"
+                        setOnClickListener { optifineFlow(v) { runOnUiThread { render() } } }
+                    }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(6) })
                     r.addView(Button(this).apply {
                         text = when { sel -> tr("✓ Выбрана", "✓ Selected"); pid != null -> tr("Выбрать", "Select"); else -> tr("Скачать", "Download") }
                         isAllCaps = false; textSize = 12f; setTextColor(Th.chipText)
@@ -3071,7 +3198,7 @@ class MainActivity : Activity() {
         return box
     }
 
-    private fun showVersions() {
+    private fun showVersions(onPicked: (() -> Unit)? = null) {
         val installed = ArrayList(installedProfiles())
         if (installed.isEmpty()) installed.add(VERSION)
         val cur = selectedProfile()
@@ -3091,10 +3218,10 @@ class MainActivity : Activity() {
             else if (i >= buildStart) {
                 val b = buildList[i - buildStart]
                 prefs.edit().putString("profile", b.optString("profile")).putString("build", b.optString("id")).apply()
-                versionText.text = verTitle()
+                versionText.text = verTitle(); onPicked?.invoke()
             } else if (i < installed.size) {
                 prefs.edit().putString("profile", installed[i]).putString("build", "").apply()
-                versionText.text = verTitle()
+                versionText.text = verTitle(); onPicked?.invoke()
             }
         }.setNegativeButton(tr("Закрыть", "Close"), null).show()
     }
