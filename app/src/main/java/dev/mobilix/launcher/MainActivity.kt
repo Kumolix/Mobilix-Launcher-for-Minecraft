@@ -600,6 +600,7 @@ class MainActivity : Activity() {
 
         hamb = HamburgerView(this).apply { setOnClickListener { setDrawer(!drawerOpen) } }
         rootFrame.addView(hamb, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.START or Gravity.TOP))
+        var navBoxRef: View? = null
         if (navBottom()) {
             // нижняя панель только с иконками (как в мессенджерах); боковое меню не используется
             hamb.visibility = View.GONE; drawer.visibility = View.GONE; scrim.visibility = View.GONE
@@ -615,7 +616,10 @@ class MainActivity : Activity() {
             navBox.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
             navBox.addView(nav)
             root.addView(navBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(57)))
+            navBoxRef = navBox
         }
+        val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        lastOrientation = resources.configuration.orientation
 
         val logBtn = TextView(this).apply {
             text = tr("Лог", "Log"); textSize = 12f; setTextColor(Th.accent); gravity = Gravity.CENTER
@@ -625,7 +629,7 @@ class MainActivity : Activity() {
         rootFrame.addView(logBtn, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END or Gravity.TOP).apply { topMargin = dp(8); marginEnd = dp(10) })
 
         pageLayer = FrameLayout(this).apply { visibility = View.GONE }
-        rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom()) bottomMargin = dp(57) })
+        rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom() && !land) bottomMargin = dp(57) })
 
         season()?.let { sn ->
             // временная кнопка эффектов у скина: есть только в праздничную неделю
@@ -643,10 +647,49 @@ class MainActivity : Activity() {
             skinBox.addView(btn, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END or Gravity.BOTTOM).apply { marginEnd = dp(10); bottomMargin = dp(10) })
         }
 
+        // горизонтальный вид: слева скин, справа меню (нижнее) и кнопки; при боковом меню оно стоит слева, а скин и кнопки справа
+        if (land) {
+            fun lp(w: Int, h: Int, wt: Float = 0f) = LinearLayout.LayoutParams(w, h, wt)
+            val MP = ViewGroup.LayoutParams.MATCH_PARENT; val WC = ViewGroup.LayoutParams.WRAP_CONTENT
+            root.removeView(skinBox); root.removeView(logPanel); root.removeView(progress); root.removeView(vrow); root.removeView(playBtn)
+            navBoxRef?.let { root.removeView(it) }
+            val main = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            if (navBoxRef != null) {
+                main.addView(skinBox, lp(0, MP, 1f))
+                right.addView(navBoxRef, lp(MP, dp(57)))
+                val mid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), 0, dp(14), 0) }
+                mid.addView(vrow, lp(MP, dp(52)))
+                mid.addView(playBtn, lp(MP, dp(68)).apply { topMargin = dp(10) })
+                right.addView(mid, lp(MP, 0, 1f))
+                right.addView(progress, lp(MP, dp(6)))
+                right.addView(logPanel, lp(MP, WC))
+                main.addView(right, lp(0, MP, 1f))
+            } else {
+                rootFrame.removeView(drawer); rootFrame.removeView(scrim)
+                hamb.visibility = View.GONE
+                drawer.translationX = 0f
+                main.addView(ScrollView(this).apply { addView(drawer, ViewGroup.LayoutParams(MP, WC)) }, lp(dp(250), MP))
+                right.addView(skinBox, lp(MP, 0, 1f))
+                right.addView(logPanel, lp(MP, WC))
+                right.addView(progress, lp(MP, dp(6)))
+                right.addView(vrow, lp(MP, dp(52)))
+                right.addView(playBtn, lp(MP, dp(64)))
+                main.addView(right, lp(0, MP, 1f))
+            }
+            root.addView(main, lp(MP, 0, 1f))
+        }
+
         setContentView(rootFrame)
         Thread { loadSkin() }.start()
         Thread { ensureGpu(); writeGameSettings() }.start()
         Thread { checkUpdate() }.start()
+    }
+
+    private var lastOrientation = 0
+    override fun onConfigurationChanged(c: android.content.res.Configuration) {
+        super.onConfigurationChanged(c)
+        if (lastOrientation != 0 && c.orientation != lastOrientation) { lastOrientation = c.orientation; recreate() }
     }
 
     // ---------- меню и страницы ----------
