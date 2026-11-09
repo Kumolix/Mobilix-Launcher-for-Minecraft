@@ -1,6 +1,6 @@
 {
- "downloads": 26,
- "updated": "2026-11-08T10:14:45Z",
+ "downloads": 27,
+ "updated": "2026-11-09T11:25:56Z",
  "releases": [
   {
    "tag_name": "APK-1.9.2",
@@ -12,7 +12,7 @@
     {
      "name": "Mobilix-launcher-v-1.9.2.apk",
      "size": 10610495,
-     "download_count": 4,
+     "download_count": 5,
      "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.9.2/Mobilix-launcher-v-1.9.2.apk"
     }
    ]
