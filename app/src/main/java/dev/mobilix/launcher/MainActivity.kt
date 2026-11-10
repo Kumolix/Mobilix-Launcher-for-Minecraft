@@ -1736,14 +1736,19 @@ class MainActivity : Activity() {
                             row.addView(TextView(this).apply { text = h.getString("title"); textSize = 17f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
                             row.addView(TextView(this).apply { text = h.optString("author") + "  ·  ⬇ " + h.optInt("downloads"); textSize = 12f; setTextColor(Th.accent) })
                             row.addView(TextView(this).apply { text = h.optString("description"); textSize = 13f; setTextColor(Th.text2); maxLines = 3 })
-                            if (!strict) {
+                            run {
                                 var okv = false
                                 h.optJSONArray("versions")?.let { vs2 -> for (k in 0 until vs2.length()) if (vs2.getString(k) == curBase()) okv = true }
                                 var okl = type != "mod"
                                 h.optJSONArray("categories")?.let { c2 -> for (k in 0 until c2.length()) if (c2.getString(k) in loaderCats(loader)) okl = true }
+                                val ldName = if (loader == "neoforge") "NeoForge" else loader.replaceFirstChar { c -> c.uppercase() }
                                 if (!okv || !okl) row.addView(TextView(this).apply {
-                                    text = "⚠ " + tr("не заявлен для ${curBase()} / $loader", "not listed for ${curBase()} / $loader")
+                                    text = "⚠ " + tr("не заявлен для ${curBase()} / $ldName", "not listed for ${curBase()} / $ldName")
                                     textSize = 12f; setTextColor(0xFFFFB74D.toInt())
+                                }) else row.addView(TextView(this).apply {
+                                    val viaFabric = loader == "quilt" && type == "mod" && !(h.optJSONArray("categories")?.let { c3 -> (0 until c3.length()).any { c3.getString(it) == "quilt" } } ?: false)
+                                    text = "✓ " + tr("заявлен для ${curBase()} / $ldName", "listed for ${curBase()} / $ldName") + (if (viaFabric) tr(" (через Fabric)", " (via Fabric)") else "")
+                                    textSize = 12f; setTextColor(0xFF66BB6A.toInt())
                                 })
                             }
                             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -4103,11 +4108,13 @@ class MainActivity : Activity() {
         val mi = android.app.ActivityManager.MemoryInfo()
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
         val totalMb = mi.totalMem / 1024 / 1024
-        val manualX = prefs.getInt("xmx", 0)
         val modern = !oldGl   // 1.17+ тяжелее: даём больше памяти
-        val xmx = if (manualX > 0) manualX else when { totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }
+        val xmx = gameXmxMb(modern)
         log("ОЗУ устройства: $totalMb МБ, память игры: $xmx МБ")
         cmd.add("-Xmx${xmx}M")
+        // не-кучевая память (метаспейс, кэш кода) тоже ограничена: при загрузке меню с модами она растёт и может убить игру
+        cmd.add("-XX:MaxMetaspaceSize=${if (totalMb < 5000) 384 else 640}m")
+        cmd.add("-XX:ReservedCodeCacheSize=${if (totalMb < 5000) 96 else 160}m")
         cmd.add(when (prefs.getString("gc", "Serial")) { "G1" -> "-XX:+UseG1GC"; "Parallel" -> "-XX:+UseParallelGC"; else -> "-XX:+UseSerialGC" })
         prefs.getString("jvmArgs", "")?.split(Regex("\\s+"))?.filter { it.startsWith("-") }?.forEach { cmd.add(it) }
         cmd.add("-XX:ErrorFile=${File(gameDir, "hs_err.log").path}")
@@ -4781,10 +4788,21 @@ class MainActivity : Activity() {
         return dst
     }
 
+    /** Память игры (МБ): ручная настройка или авто по ОЗУ устройства. */
+    private fun gameXmxMb(modern: Boolean = true): Int {
+        val mi = android.app.ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+        val totalMb = mi.totalMem / 1024 / 1024
+        val manualX = prefs.getInt("xmx", 0)
+        return if (manualX > 0) manualX else when { totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }.toInt()
+    }
+    /** Куча установщика загрузчика: не меньше, чем у игры + 512 МБ, но не больше ~55% ОЗУ (иначе Android убивает процесс/перезагружает телефон). */
     private fun installerHeapMb(): Int {
         val mi = android.app.ActivityManager.MemoryInfo()
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
-        return if (mi.totalMem / 1024 / 1024 >= 6000) 1280 else 768
+        val totalMb = (mi.totalMem / 1024 / 1024).toInt()
+        val base = if (totalMb >= 6000) 1280 else 768
+        return minOf(maxOf(base, gameXmxMb() + 512), totalMb * 55 / 100).coerceAtLeast(512)
     }
 
     private fun runForgeInstaller(rt: File, installer: File, root: File, installFlag: String = "--installClient") {

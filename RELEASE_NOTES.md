@@ -1,6 +1,7 @@
 draft: 1.9.4 (чтобы выпустить релиз, замените первую строку на: version: 1.9.4)
 
 **EN: What's new**
+- Memory: JVM metaspace/code cache are capped; loader installer heap = game heap + 512 MB (limited to 55% of RAM)
 - Catalog: "version" and "loader" buttons next to Import; downloaded items are grouped by loader and show "Loader • Version" (e.g. Fabric • 1.12.2)
 - Catalog: CurseForge as a second source (Source: Modrinth / CurseForge); mods, resource packs, shaders, datapacks; required dependencies are downloaded automatically
 - Quilt and NeoForge: install from Versions (Quilt for 1.14+ via Quilt meta, NeoForge for 1.20.2+), catalog filter by loader, support in Modrinth packs (.mrpack) and builds
@@ -8,6 +9,7 @@ draft: 1.9.4 (чтобы выпустить релиз, замените пер�
 - OF button next to Forge versions: installs OptiFine as a mod into the Forge profile (mirror BMCLAPI)
 
 **RU: Что нового**
+- Память: ограничены метаспейс и кэш кода JVM; куча установщика загрузчика = память игры + 512 МБ (не более 55% ОЗУ)
 - Каталог: кнопки «версия» и «загрузчик» рядом с «Импорт»; скачанное сгруппировано по загрузчикам, под названием «Загрузчик • Версия» (например Fabric • 1.12.2)
 - Каталог: CurseForge как второй источник (Источник: Modrinth / CurseForge); моды, ресурспаки, шейдеры, датапаки; обязательные зависимости скачиваются автоматически
 - Quilt и NeoForge: установка из «Версий» (Quilt, NeoForge от 1.20.2), фильтр каталога по загрузчику, поддержка сборок Modrinth (.mrpack) и сборок Mobilix
