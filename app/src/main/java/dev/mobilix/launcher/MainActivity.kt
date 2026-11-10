@@ -3584,8 +3584,8 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(12), dp(20), dp(12))
         }
         box.addView(filter)
-        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), 0, dp(12), dp(8)) }
-        box.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), dp(8)) }
+        box.addView(chips, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val sv = ScrollView(this)
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), dp(24)) }
         sv.addView(list)
@@ -3674,18 +3674,30 @@ class MainActivity : Activity() {
             if (list.childCount == 0) list.addView(TextView(this).apply { text = tr("Ничего не найдено", "Nothing found"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
         }
 
-        val chipViews = ArrayList<Pair<String, TextView>>()
-        fun refreshChips() = chipViews.forEach { (k, t) ->
-            t.setBackgroundColor(if (k == loader) Th.act else Th.chip)
+        // три кнопки в один ряд, без прокрутки: «Все», «Выбрать загрузчик» (как «Импорт»), «Скачанные»
+        val loaderNames = listOf("vanilla" to "Vanilla", "fabric" to "Fabric", "quilt" to "Quilt", "forge" to "Forge", "neoforge" to "NeoForge")
+        val allBtn = TextView(this).apply { text = tr("Все", "All"); textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true }
+        val dlBtn = TextView(this).apply { text = tr("Скачанные", "Downloaded"); textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true }
+        val pickBtn = TextView(this).apply { textSize = 14f; gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true; maxLines = 1 }
+        fun refreshChips() {
+            allBtn.setBackgroundColor(if (loader == "all") Th.act else Th.chip)
+            dlBtn.setBackgroundColor(if (loader == "downloaded") Th.act else Th.chip)
+            val chosen = loaderNames.firstOrNull { it.first == loader }
+            pickBtn.text = if (chosen != null) chosen.second + " ▾" else tr("Выбрать загрузчик", "Pick loader")
+            pickBtn.setTextColor(if (chosen != null) Th.chipText else Th.accent)
+            pickBtn.background = GradientDrawable().apply { setColor(if (chosen != null) Th.act else Th.chip2); setStroke(dp(2), Th.act) }
         }
-        for ((k, label) in listOf("all" to tr("Все", "All"), "vanilla" to "Vanilla", "fabric" to "Fabric", "quilt" to "Quilt", "forge" to "Forge", "neoforge" to "NeoForge", "downloaded" to tr("Скачанные", "Downloaded"))) {
-            val t = TextView(this).apply {
-                text = label; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8))
-                setOnClickListener { loader = k; refreshChips(); render() }
-            }
-            chipViews.add(k to t)
-            chips.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) })
+        allBtn.setOnClickListener { loader = "all"; refreshChips(); render() }
+        dlBtn.setOnClickListener { loader = "downloaded"; refreshChips(); render() }
+        pickBtn.setOnClickListener {
+            MobDialog(this).setTitle(tr("Загрузчик", "Loader"))
+                .setItems(loaderNames.map { it.second + (if (it.first == loader) "  ✓" else "") }.toTypedArray()) { _, i ->
+                    loader = loaderNames[i].first; refreshChips(); render()
+                }.setNegativeButton(tr("Закрыть", "Close"), null).show()
         }
+        chips.addView(allBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        chips.addView(pickBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8); marginEnd = dp(8) })
+        chips.addView(dlBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         refreshChips()
         filter.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) { render() }
