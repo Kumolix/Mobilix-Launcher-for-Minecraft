@@ -1741,7 +1741,7 @@ class MainActivity : Activity() {
                             val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                             outer.addView(row, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                             row.addView(TextView(this).apply { text = h.getString("title"); textSize = 17f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
-                            row.addView(TextView(this).apply { text = h.optString("author") + "  ·  ⬇ " + h.optInt("downloads"); textSize = 12f; setTextColor(Th.accent) })
+                            row.addView(TextView(this).apply { text = h.optString("author") + "  ·  ⬇ " + h.optInt("downloads") + "  ·  Modrinth"; textSize = 12f; setTextColor(Th.accent) })
                             row.addView(TextView(this).apply { text = h.optString("description"); textSize = 13f; setTextColor(Th.text2); maxLines = 3 })
                             if (type != "modpack") run {
                                 var okv = false
