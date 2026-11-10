@@ -150,6 +150,12 @@ jobs:
           fi
           echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-throwaway}" >> "$GITHUB_ENV"
 
+      - name: Check CurseForge key
+        env:
+          CURSEFORGE_API: ${{ secrets.CURSEFORGE_API }}
+        run: |
+          if [ -n "$CURSEFORGE_API" ]; then echo "CurseForge key: present (${#CURSEFORGE_API} chars)"; else echo "::warning::CURSEFORGE_API secret is EMPTY or missing in this repository"; fi
+
       - name: Build debug APK
         env:
           CURSEFORGE_API: ${{ secrets.CURSEFORGE_API }}
