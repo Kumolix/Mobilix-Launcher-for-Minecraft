@@ -1129,7 +1129,8 @@ class MainActivity : Activity() {
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Источник каталога", "Catalog source"); setTextColor(Th.text); setPadding(0, 0, 0, dp(6)) })
-        col.addView(chipRow(listOf("Modrinth", "Modrinth Black"), prefs.getInt("modSource", 2) - 1) { i -> prefs.edit().putInt("modSource", i + 1).apply() })
+        col.addView(chipRow(listOf("Modrinth", "Modrinth Black", "CurseForge"), prefs.getInt("modSource", 2) - 1) { i -> prefs.edit().putInt("modSource", i + 1).apply() })
+        if (BuildConfig.CF_KEY.isEmpty()) col.addView(note(tr("CurseForge недоступен: в эту сборку лаунчера не вшит ключ (секрет CURSEFORGE_API).", "CurseForge unavailable: this launcher build has no key (CURSEFORGE_API secret).")))
         col.addView(TextView(this).apply { text = tr("Адрес API зеркала", "Mirror API address"); setTextColor(Th.text); setPadding(0, dp(14), 0, 0) })
         val mirror = android.widget.EditText(this).apply {
             setText(prefs.getString("mirrorApi", DEFAULT_MIRROR)); setTextColor(Th.text); setSingleLine(true)
@@ -1167,7 +1168,7 @@ class MainActivity : Activity() {
     private fun apiBases(): List<String> {
         val official = "https://api.modrinth.com/v2"
         val mirror = (prefs.getString("mirrorApi", "https://api.modrinth.black/v2") ?: official).trimEnd('/')
-        return if (prefs.getInt("modSource", 2) == 2) listOf(mirror, official) else listOf(official, mirror)
+        return if (prefs.getInt("modSource", 2) != 1) listOf(mirror, official) else listOf(official, mirror)
     }
 
     private fun apiGet(path: String): String {
@@ -1577,7 +1578,7 @@ class MainActivity : Activity() {
         var type = "mod"; var loader = loaderOfProfile(build?.optString("profile") ?: selectedProfile())
         var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
         var hideDl = prefs.getBoolean("catHideDl", false)    // фильтр «Не показывать скачанное»
-        var source = if (BuildConfig.CF_KEY.isNotEmpty()) prefs.getString("catSource", "modrinth") ?: "modrinth" else "modrinth"   // modrinth | curseforge
+        var source = if (BuildConfig.CF_KEY.isNotEmpty() && prefs.getInt("modSource", 2) == 3) "curseforge" else "modrinth"   // modrinth | curseforge
         var searchSeq = 0                                    // номер запроса: устаревший ответ не должен перекрывать список
         val q = android.widget.EditText(this).apply {
             hint = tr("Поиск", "Search"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true)
@@ -1847,16 +1848,19 @@ class MainActivity : Activity() {
         }
         box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(4); bottomMargin = dp(8) })
         // источник каталога: Modrinth / CurseForge (CurseForge виден, только если в сборку вшит ключ)
-        if (BuildConfig.CF_KEY.isNotEmpty()) {
+        run {
             val srcBtn = smallBtn("") {}
             fun srcLabel() = tr("Источник: ", "Source: ") + (if (source == "curseforge") "CurseForge" else "Modrinth") + " ▾"
             srcBtn.text = srcLabel()
             srcBtn.setOnClickListener {
                 val names = arrayOf("Modrinth" + (if (source == "modrinth") "  ✓" else ""), "CurseForge" + (if (source == "curseforge") "  ✓" else ""))
                 MobDialog(this).setTitle(tr("Источник каталога", "Catalog source")).setItems(names) { _, i ->
-                    source = if (i == 1) "curseforge" else "modrinth"
-                    prefs.edit().putString("catSource", source).apply()
-                    srcBtn.text = srcLabel(); search()
+                    if (i == 1 && BuildConfig.CF_KEY.isEmpty()) Toast.makeText(this, tr("В этой сборке нет ключа CurseForge", "This build has no CurseForge key"), Toast.LENGTH_LONG).show()
+                    else {
+                        source = if (i == 1) "curseforge" else "modrinth"
+                        prefs.edit().putInt("modSource", if (i == 1) 3 else 2).apply()
+                        srcBtn.text = srcLabel(); search()
+                    }
                 }.setNegativeButton(tr("Закрыть", "Close"), null).show()
             }
             box.addView(srcBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
