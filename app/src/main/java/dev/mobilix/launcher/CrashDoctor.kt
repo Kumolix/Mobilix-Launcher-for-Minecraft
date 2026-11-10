@@ -66,7 +66,7 @@ object CrashDoctor {
                 } else if (toml != null) {
                     id = Regex("modId\\s*=\\s*\"([^\"]+)\"").findAll(toml).map { it.groupValues[1] }.firstOrNull { it != "minecraft" && it != "forge" && it != "neoforge" } ?: ""
                     name = Regex("displayName\\s*=\\s*\"([^\"]+)\"").find(toml)?.groupValues?.get(1) ?: ""
-                }
+                } else { }
             }
         } catch (_: Throwable) {}
         val base = f.name.removeSuffix(".disabled").removeSuffix(".jar")
