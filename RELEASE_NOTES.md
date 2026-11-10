@@ -1,6 +1,7 @@
 draft: 1.9.4 (чтобы выпустить релиз, замените первую строку на: version: 1.9.4)
 
 **EN: What's new**
+- Renderlix: renderer profile in Settings (Standard / Sodium + Iris) - the launcher now makes MobileGlues read its config (OpenGL 4.5, compute shaders, shader error ignoring, shader cache)
 - Catalog: page buttons (1 2 3 4 5 ‹ ›) under results; CurseForge results show the listed / not listed marker; source button centered and collapses with the tabs; the catalog source setting moved from Settings into the catalog
 - Modpacks: new "Modpacks" tab in the catalog (CurseForge and Modrinth) and import of CurseForge pack .zip files; mods whose authors disabled launcher downloads are listed for manual download
 - Memory: JVM metaspace/code cache are capped; loader installer heap = game heap + 512 MB (limited to 55% of RAM)
@@ -13,6 +14,7 @@ draft: 1.9.4 (чтобы выпустить релиз, замените пер�
 **RU: Что нового**
 - Память: ограничены метаспейс и кэш кода JVM; куча установщика загрузчика = память игры + 512 МБ (не более 55% ОЗУ)
 - Модпаки: вкладка «Модпаки» в каталоге (CurseForge и Modrinth) и импорт .zip-сборок CurseForge; моды, которые автор запретил качать в лаунчерах, выводятся списком для ручной загрузки
+- Renderlix: профиль рендера в настройках (Стандарт / Sodium + Iris): лаунчер теперь заставляет MobileGlues читать свой конфиг (OpenGL 4.5, compute-шейдеры, игнор ошибок шейдеров, кэш шейдеров)
 - Каталог: кнопки страниц (1 2 3 4 5 ‹ ›) под результатами; у CurseForge тоже есть пометка «заявлен / не заявлен»; кнопка источника по центру и сворачивается со вкладками; выбор источника каталога перенесён из настроек в сам каталог
 - Каталог: кнопки «версия» и «загрузчик» рядом с «Импорт»; скачанное сгруппировано по загрузчикам, под названием «Загрузчик • Версия» (например Fabric • 1.12.2)
 - Каталог: CurseForge как второй источник (Источник: Modrinth / CurseForge); моды, ресурспаки, шейдеры, датапаки; обязательные зависимости скачиваются автоматически

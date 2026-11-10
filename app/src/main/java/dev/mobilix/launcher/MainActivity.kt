@@ -1126,6 +1126,10 @@ class MainActivity : Activity() {
             })
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
+        col.addView(TextView(this).apply { text = tr("Рендер Renderlix", "Renderlix renderer"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Стандарт", "Standard"), "Sodium / Iris"), prefs.getInt("renderPreset", 0)) { i -> prefs.edit().putInt("renderPreset", i).apply() })
+        col.addView(note(tr("Renderlix — профиль настроек MobileGlues (LGPL-2.1, © MobileGL-Dev). «Sodium / Iris»: OpenGL 4.5, compute-шейдеры, игнор ошибок шейдеров и кэш шейдеров. Может быть медленнее на слабых GPU. Применяется при следующем запуске.",
+            "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. May be slower on weak GPUs. Applied on next launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Адрес API зеркала", "Mirror API address"); setTextColor(Th.text); setPadding(0, dp(14), 0, 0) })
@@ -4416,6 +4420,9 @@ class MainActivity : Activity() {
         launch.put("glLib", mgPath ?: "")
         if (oldGl && gl4es != null) {
             launch.put("env", JSONObject().put("LIBGL_ES", "2").put("LIBGL_NOBANNER", "1").put("LIBGL_NOERROR", "1"))
+        } else if (!oldGl) {
+            // Renderlix: профиль настроек MobileGlues. Без MG_DIR_PATH MobileGlues считает лаунчер «неподдерживаемым» и игнорирует конфиг.
+            try { launch.put("env", JSONObject().put("MG_DIR_PATH", writeRenderConfig().path)) } catch (e: Throwable) { log("Профиль рендера не записан: $e") }
         }
         File(root, "launch.json").writeText(launch.toString())
         log("Команда запуска собрана (${cmd.size} аргументов).")
@@ -5033,6 +5040,26 @@ class MainActivity : Activity() {
             }
         }
         return dst
+    }
+
+    /** Профиль рендера Renderlix (настройки MobileGlues): 0 — стандарт, 1 — моды-шейдеры (Sodium/Iris). Пишет config.json и возвращает папку. */
+    private fun writeRenderConfig(): File {
+        val dir = File(filesDir, "mg"); dir.mkdirs()
+        val shaders = prefs.getInt("renderPreset", 0) == 1
+        val c = JSONObject()
+            .put("enableANGLE", 0)
+            .put("enableNoError", if (shaders) 2 else 0)            // 2 = игнорировать ошибки шейдеров (частично)
+            .put("enableExtComputeShader", if (shaders) 1 else 0)
+            .put("enableExtTimerQuery", 1)
+            .put("enableExtDirectStateAccess", 1)
+            .put("angleDepthClearFixMode", 0)
+            .put("customGLVersion", if (shaders) 45 else 0)         // 0 = по умолчанию (4.0)
+            .put("maxGlslCacheSize", if (shaders) 256 else 0)       // МБ
+            .put("fsr1Setting", 0)
+            .put("hideMGEnvLevel", 0)
+        File(dir, "config.json").writeText(c.toString())
+        log("Renderlix: профиль «" + (if (shaders) "Sodium/Iris" else "стандарт") + "», конфиг: " + dir.path)
+        return dir
     }
 
     /** Память игры (МБ): ручная настройка или авто по ОЗУ устройства. */
