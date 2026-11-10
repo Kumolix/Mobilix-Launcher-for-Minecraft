@@ -1740,7 +1740,7 @@ class MainActivity : Activity() {
                                 var okv = false
                                 h.optJSONArray("versions")?.let { vs2 -> for (k in 0 until vs2.length()) if (vs2.getString(k) == curBase()) okv = true }
                                 var okl = type != "mod"
-                                h.optJSONArray("categories")?.let { c2 -> for (k in 0 until c2.length()) if (c2.getString(k) == loader) okl = true }
+                                h.optJSONArray("categories")?.let { c2 -> for (k in 0 until c2.length()) if (c2.getString(k) in loaderCats(loader)) okl = true }
                                 if (!okv || !okl) row.addView(TextView(this).apply {
                                     text = "⚠ " + tr("не заявлен для ${curBase()} / $loader", "not listed for ${curBase()} / $loader")
                                     textSize = 12f; setTextColor(0xFFFFB74D.toInt())
