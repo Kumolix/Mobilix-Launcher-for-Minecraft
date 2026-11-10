@@ -1,7 +1,22 @@
 {
- "downloads": 27,
- "updated": "2026-11-09T11:25:56Z",
+ "downloads": 19,
+ "updated": "2026-11-10T11:06:02Z",
  "releases": [
+  {
+   "tag_name": "APK-1.9.3",
+   "published_at": "2026-11-09T14:27:48Z",
+   "body": "\n**EN: What's new**\n- World backups: when you close the game the launcher saves a zip with the worlds that changed (last 3 copies per version or build). Switch and \"Restore a world from backup\" are in Settings; restored worlds appear next to the originals marked \"copy\"\n- Modrinth packs: import .mrpack files through \"Import files from phone storage\". The launcher creates a build, downloads the files with hash checks and installs the needed game version\n- Compact interface (Settings, off by default): Versions, Catalog and Builds merge into one \"Downloads\" section with tabs; controls layout, language and delete downloads move to Settings, which gets tabs too\n- Older versions: vanilla Minecraft 1.0–1.7.10 and Minecraft Classic (c0.x) can now be downloaded and launched; versions before 1.6 are an early try, report problems\n- Theme editor: up to 4 custom themes (Settings → Appearance), six main colours with a colour wheel, shades are calculated automatically and can be overridden, live preview\n- Skin by nickname: fixed loading from Mojang (the skin is now fresh instead of an old copy)\n- Forge and Fabric: backup mirror (BMCLAPI) for downloads, and if the recommended Forge build has no installer (HTTP 404) the launcher tries newer ones\n\n**RU: Что нового?**\n- Резервные копии миров: после закрытия игры лаунчер сохраняет zip с изменёнными мирами (последние 3 копии для каждой версии или сборки). Переключатель и «Восстановить мир из копии» в Настройках; восстановленные миры появляются рядом с оригиналами с пометкой «копия»\n- Сборки Modrinth: импорт файлов .mrpack через «Импорт файлов из памяти телефона». Лаунчер создаёт сборку, скачивает файлы с проверкой хэшей и ставит нужную версию игры\n- Компактный интерфейс (Настройки, по умолчанию выключен): Версии, Каталог и Сборки объединяются в раздел «Загрузки» с вкладками; раскладка управления, язык и удаление скачанного переезжают в Настройки, где тоже появляются вкладки\n- Старые версии: ванильный Minecraft 1.0–1.7.10 и Minecraft Classic (c0.x) теперь можно скачать и запустить; версии до 1.6 пока в ранней проверке, сообщайте о проблемах\n- Редактор тем: до 4 своих тем (Настройки → Оформление), шесть основных цветов с цветовым кругом, оттенки считаются автоматически и меняются вручную, есть живой предпросмотр\n- Скин по нику: исправлена загрузка с Mojang (скин теперь актуальный, а не старая копия)\n- Forge и Fabric: запасное зеркало (BMCLAPI) для загрузок, а если у рекомендуемой сборки Forge нет установщика (HTTP 404), лаунчер пробует более свежие\n",
+   "prerelease": false,
+   "draft": false,
+   "assets": [
+    {
+     "name": "Mobilix-launcher-v-1.9.3.apk",
+     "size": 12190621,
+     "download_count": 5,
+     "browser_download_url": "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/APK-1.9.3/Mobilix-launcher-v-1.9.3.apk"
+    }
+   ]
+  },
   {
    "tag_name": "APK-1.9.2",
    "published_at": "2026-11-05T13:34:46Z",
