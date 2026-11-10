@@ -1215,6 +1215,12 @@ class MainActivity : Activity() {
     /** Кнопки строки каталога: «Скачать» или «Загружено» + «Удалить». */
     private fun fillActions(box: LinearLayout, id: String, type: String, loader: String, title: String) {
         box.removeAllViews()
+        if (type == "modpack") {
+            val b = Button(this).apply { text = tr("Установить сборку", "Install pack"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.act) }
+            b.setOnClickListener { installModpack(id, title, b) }
+            box.addView(b, LinearLayout.LayoutParams(dp(180), dp(40)))
+            return
+        }
         val rec = idx().optJSONObject(id)
         if (rec != null && packFile(rec.optString("t"), rec.optString("f")).exists()) {
             box.addView(Button(this).apply {
@@ -1690,7 +1696,7 @@ class MainActivity : Activity() {
             Thread {
                 try {
                     val facets = JSONArray()
-                    if (strict) facets.put(JSONArray().put("versions:${curBase()}"))
+                    if (strict && type != "modpack") facets.put(JSONArray().put("versions:${curBase()}"))
                     facets.put(JSONArray().put("project_type:$type"))
                     if (strict && type == "mod") facets.put(JSONArray().apply { loaderCats(loader).forEach { put("categories:$it") } })
                     val path = "/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
@@ -1704,7 +1710,7 @@ class MainActivity : Activity() {
                     // то, что нашлось по названию, но не прошло фильтры (версия, загрузчик, тип): покажем отдельно с причиной
                     val extra = ArrayList<JSONObject>()
                     val qq = if (cleaned.isNotEmpty()) cleaned else query
-                    if (query.isNotEmpty() && strict) {
+                    if (query.isNotEmpty() && strict && type != "modpack") {
                         try {
                             val all = JSONObject(apiGet("/search?query=" + java.net.URLEncoder.encode(qq, "UTF-8") + "&limit=10&index=relevance")).getJSONArray("hits")
                             val shown = HashSet<String>()
@@ -1736,7 +1742,7 @@ class MainActivity : Activity() {
                             row.addView(TextView(this).apply { text = h.getString("title"); textSize = 17f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
                             row.addView(TextView(this).apply { text = h.optString("author") + "  ·  ⬇ " + h.optInt("downloads"); textSize = 12f; setTextColor(Th.accent) })
                             row.addView(TextView(this).apply { text = h.optString("description"); textSize = 13f; setTextColor(Th.text2); maxLines = 3 })
-                            run {
+                            if (type != "modpack") run {
                                 var okv = false
                                 h.optJSONArray("versions")?.let { vs2 -> for (k in 0 until vs2.length()) if (vs2.getString(k) == curBase()) okv = true }
                                 var okl = type != "mod"
@@ -1807,7 +1813,7 @@ class MainActivity : Activity() {
         }
         // порядок вкладок: ряд 1 — моды, шейдеры, скачанные; ряд 2 — ресурспаки, датапаки
         val types = listOf("mod" to tr("Моды", "Mods"), "shader" to tr("Шейдеры", "Shaders"), "downloaded" to tr("Скачанные", "Downloaded"),
-            "resourcepack" to tr("Ресурспаки", "Resource packs"), "datapack" to tr("Датапаки", "Datapacks"))
+            "resourcepack" to tr("Ресурспаки", "Resource packs"), "datapack" to tr("Датапаки", "Datapacks"), "modpack" to tr("Модпаки", "Modpacks"))
         val loaders = listOf("fabric", "forge", "neoforge", "quilt")
         fun loaderLabel() = (if (loader == "neoforge") "NeoForge" else loader.replaceFirstChar { c -> c.uppercase() }) + " ▾"
         fun smallBtn(txt: String, onClick: () -> Unit) = TextView(this).apply {
@@ -1833,7 +1839,7 @@ class MainActivity : Activity() {
         val loaderRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         loaderRow.addView(verBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         loaderRow.addView(loadBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
-        val typeRow = tabRows(listOf(types.subList(0, 3).map { it.second }, types.subList(3, 5).map { it.second }), 0) { i ->
+        val typeRow = tabRows(listOf(types.subList(0, 3).map { it.second }, types.subList(3, 6).map { it.second }), 0) { i ->
             type = types[i].first
             loaderRow.visibility = if (type == "mod") View.VISIBLE else View.GONE
             q.visibility = if (type == "downloaded" || prefs.getBoolean("catCollapsed", false)) View.GONE else View.VISIBLE
@@ -1944,22 +1950,27 @@ class MainActivity : Activity() {
     }
 
     // ---------- CurseForge ----------
-    private fun cfGet(path: String): JSONObject {
+    private fun cfGet(path: String, body: String? = null): JSONObject {
         val c = URL("https://api.curseforge.com/v1" + path).openConnection() as HttpURLConnection
         c.connectTimeout = 12000; c.readTimeout = 25000
         c.setRequestProperty("Accept", "application/json")
         c.setRequestProperty("x-api-key", BuildConfig.CF_KEY)
         c.setRequestProperty("User-Agent", "Kumolix/Mobilix (Android launcher)")
+        if (body != null) {
+            c.requestMethod = "POST"; c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        }
         if (c.responseCode !in 200..299) throw RuntimeException("HTTP ${c.responseCode}")
         return JSONObject(c.inputStream.bufferedReader().use { it.readText() })
     }
     private fun cfLoaderType(l: String) = when (l) { "forge" -> 1; "fabric", "quilt" -> 4; "neoforge" -> 6; else -> 0 }
-    private fun cfClass(type: String) = when (type) { "resourcepack" -> 12; "shader" -> 6552; "datapack" -> 6945; else -> 6 }
+    private fun cfClass(type: String) = when (type) { "modpack" -> 4471; "resourcepack" -> 12; "shader" -> 6552; "datapack" -> 6945; else -> 6 }
 
     private fun cfSearch(query: String, type: String, loader: String, strict: Boolean): JSONArray {
         var p = "/mods/search?gameId=432&classId=${cfClass(type)}&pageSize=25&sortOrder=desc&sortField=" + (if (query.isEmpty()) 2 else 1)
         if (query.isNotEmpty()) p += "&searchFilter=" + java.net.URLEncoder.encode(query, "UTF-8")
-        if (strict) {
+        if (strict && type != "modpack") {
             p += "&gameVersion=" + java.net.URLEncoder.encode(curBase(), "UTF-8")
             if (type == "mod" && cfLoaderType(loader) != 0) p += "&modLoaderType=" + cfLoaderType(loader)
         }
@@ -2759,6 +2770,7 @@ class MainActivity : Activity() {
             val builds = ArrayList<Pair<android.net.Uri, JSONObject>>()
             val dps = ArrayList<File>()
             val mrpacks = ArrayList<Pair<android.net.Uri, JSONObject>>()
+            val cfpacks = ArrayList<Pair<android.net.Uri, JSONObject>>()
             for (u in uris) {
                 try {
                     val name = uriName(u)
@@ -2769,6 +2781,7 @@ class MainActivity : Activity() {
                             contentResolver.openInputStream(u)!!.use { inp -> File(d, name).outputStream().use { inp.copyTo(it) } }
                             counts["mods"] = (counts["mods"] ?: 0) + 1
                         }
+                        low.endsWith(".zip") && readCfManifest(u) != null -> { cfpacks.add(u to readCfManifest(u)!!) }
                         low.endsWith(".zip") -> {
                             val (names, mf) = zipScan(u)
                             val kind = zipKind(names, mf != null) ?: throw Exception("unknown")
@@ -2797,11 +2810,13 @@ class MainActivity : Activity() {
                 val parts = counts.map { (k, v) -> "${label[k]}: $v" }.toMutableList()
                 if (builds.isNotEmpty()) parts.add(tr("сборки: ${builds.size}", "builds: ${builds.size}"))
                 if (mrpacks.isNotEmpty()) parts.add(tr("сборки Modrinth: ${mrpacks.size}", "Modrinth packs: ${mrpacks.size}"))
+                if (cfpacks.isNotEmpty()) parts.add(tr("сборки CurseForge: ${cfpacks.size}", "CurseForge packs: ${cfpacks.size}"))
                 if (fail > 0) parts.add(tr("не распознано: $fail", "unrecognized: $fail"))
                 Toast.makeText(this, (if (parts.isEmpty()) tr("Ничего не импортировано", "Nothing imported") else tr("Импорт: ", "Imported: ") + parts.joinToString(", ")), Toast.LENGTH_LONG).show()
                 importAfter?.invoke()
                 builds.forEach { (u, m) -> importBuild(u, m) }
                 mrpacks.forEach { (u, m) -> importMrpack(u, m) }
+                cfpacks.forEach { (u, m) -> importCfPack(u, m) }
                 // датапаки: по очереди спрашиваем, в какой мир положить
                 fun offer(i: Int) { if (i < dps.size) offerDatapackWorld(dps[i]) { offer(i + 1) } }
                 offer(0)
@@ -2857,6 +2872,176 @@ class MainActivity : Activity() {
                     }
                 }.start()
             }.show()
+    }
+
+    /** Читает manifest.json сборки CurseForge; null, если это не она. */
+    private fun readCfManifest(u: android.net.Uri): JSONObject? {
+        try {
+            java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+                var e = z.nextEntry
+                while (e != null) {
+                    if (zipClean(e.name) == "manifest.json") {
+                        val j = JSONObject(String(z.readBytes(), Charsets.UTF_8))
+                        return if (j.optString("manifestType") == "minecraftModpack" && j.optJSONObject("minecraft") != null && j.optJSONArray("files") != null) j else null
+                    }
+                    e = z.nextEntry
+                }
+            }
+        } catch (_: Throwable) {}
+        return null
+    }
+
+    /** Сборка CurseForge (zip с manifest.json): моды качаются через API; запрещённые автором к скачиванию предлагаются вручную. */
+    private fun importCfPack(u: android.net.Uri, man: JSONObject) {
+        if (BuildConfig.CF_KEY.isEmpty()) { Toast.makeText(this, tr("В этой сборке лаунчера нет ключа CurseForge", "This launcher build has no CurseForge key"), Toast.LENGTH_LONG).show(); return }
+        val nm = man.optString("name", tr("Сборка", "Build")).ifBlank { tr("Сборка", "Build") }
+        val mcj = man.getJSONObject("minecraft"); val mc = mcj.getString("version")
+        var loaderId = ""
+        mcj.optJSONArray("modLoaders")?.let { a -> for (i in 0 until a.length()) { val o = a.getJSONObject(i); if (loaderId.isEmpty() || o.optBoolean("primary")) loaderId = o.optString("id") } }
+        val kind = when { loaderId.startsWith("fabric") -> "fabric"; loaderId.startsWith("quilt") -> "quilt"; loaderId.startsWith("neoforge") -> "neoforge"; loaderId.startsWith("forge") -> "forge"; else -> "vanilla" }
+        val files = man.getJSONArray("files")
+        val overrides = man.optString("overrides", "overrides").ifEmpty { "overrides" }
+        MobDialog(this).setTitle(tr("Импорт сборки CurseForge", "Import CurseForge pack"))
+            .setMessage("«$nm»\n" + tr("Версия: ${kindLabel(kind, mc)}. Модов: ${files.length()}. Версию игры, если её нет, лаунчер скачает сам.", "Version: ${kindLabel(kind, mc)}. Mods: ${files.length()}. The game version is downloaded if missing."))
+            .setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Импортировать", "Import")) { _, _ ->
+                val id = "b" + System.currentTimeMillis()
+                val dir = buildDir(id)
+                Toast.makeText(this, tr("Скачивание сборки…", "Downloading the pack…"), Toast.LENGTH_LONG).show()
+                Thread {
+                    try {
+                        dir.mkdirs()
+                        val fileIds = (0 until files.length()).map { files.getJSONObject(it).getInt("fileID") }
+                        val modIds = (0 until files.length()).map { files.getJSONObject(it).getInt("projectID") }.distinct()
+                        val info = HashMap<Int, JSONObject>()       // fileId -> файл
+                        for (ch in fileIds.chunked(100)) {
+                            val d = cfGet("/mods/files", JSONObject().put("fileIds", JSONArray(ch)).toString()).getJSONArray("data")
+                            for (i in 0 until d.length()) info[d.getJSONObject(i).getInt("id")] = d.getJSONObject(i)
+                        }
+                        val mods = HashMap<Int, JSONObject>()       // modId -> проект (класс, ссылка)
+                        for (ch in modIds.chunked(100)) {
+                            val d = cfGet("/mods", JSONObject().put("modIds", JSONArray(ch)).put("filterPcOnly", false).toString()).getJSONArray("data")
+                            for (i in 0 until d.length()) mods[d.getJSONObject(i).getInt("id")] = d.getJSONObject(i)
+                        }
+                        class Task(val url: String, val dest: File, val sha: String?)
+                        val tasks = ArrayList<Task>(); val manual = ArrayList<Pair<String, String>>()   // (название, ссылка)
+                        for (i in 0 until files.length()) {
+                            val fe = files.getJSONObject(i); val fid = fe.getInt("fileID"); val pid = fe.getInt("projectID")
+                            val f = info[fid]; val proj = mods[pid]
+                            val site = proj?.optJSONObject("links")?.optString("websiteUrl") ?: ""
+                            if (f == null) { manual.add((proj?.optString("name") ?: "mod $pid") to (if (site.isNotEmpty()) "$site/files/$fid" else "")); continue }
+                            val url = if (f.isNull("downloadUrl")) "" else f.optString("downloadUrl")
+                            if (url.isEmpty()) { manual.add(f.optString("displayName", f.optString("fileName")) to (if (site.isNotEmpty()) "$site/files/$fid" else "")); continue }
+                            val sub = when (proj?.optInt("classId")) { 12 -> "resourcepacks"; 6552 -> "shaderpacks"; 6945 -> "datapacks"; else -> "mods" }
+                            val dest = File(dir, sub + "/" + zipClean(f.getString("fileName")).substringAfterLast('/'))
+                            var sha: String? = null
+                            f.optJSONArray("hashes")?.let { hs -> for (k in 0 until hs.length()) if (hs.getJSONObject(k).optInt("algo") == 1) sha = hs.getJSONObject(k).optString("value").ifEmpty { null } }
+                            tasks.add(Task(url, dest, sha))
+                        }
+                        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
+                        val done = java.util.concurrent.atomic.AtomicInteger(0)
+                        val futures = tasks.map { t ->
+                            pool.submit<Boolean> {
+                                val ok = download(t.url, t.dest, t.sha)
+                                val n = done.incrementAndGet()
+                                if (n % 10 == 0 || n == tasks.size) log("Сборка CurseForge: скачано $n из ${tasks.size}")
+                                ok
+                            }
+                        }
+                        val failed = futures.count { !it.get() }
+                        pool.shutdown()
+                        if (failed > 0) throw RuntimeException(tr("не скачалось файлов: $failed. Проверьте интернет и повторите", "files failed to download: $failed. Check your connection and retry"))
+                        java.util.zip.ZipInputStream(contentResolver.openInputStream(u)!!).use { z ->
+                            var e = z.nextEntry
+                            val prefix = zipClean(overrides).trimEnd('/') + "/"
+                            while (e != null) {
+                                val n = zipClean(e.name)
+                                if (!e.isDirectory && n.startsWith(prefix)) {
+                                    val out = File(dir, n.removePrefix(prefix))
+                                    if (out.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { out.parentFile?.mkdirs(); out.outputStream().use { z.copyTo(it) } }
+                                }
+                                e = z.nextEntry
+                            }
+                        }
+                        runOnUiThread {
+                            fun finish(profile: String) {
+                                val all = builds()
+                                all.put(JSONObject().put("id", id).put("name", nm).put("profile", profile))
+                                buildsSave(all)
+                                prefs.edit().putString("profile", profile).putString("build", id).apply()
+                                versionText.text = verTitle()
+                                Toast.makeText(this, tr("Сборка «$nm» добавлена и выбрана", "Build “$nm” added and selected"), Toast.LENGTH_LONG).show()
+                                if (manual.isNotEmpty()) {
+                                    MobDialog(this).setTitle(tr("Скачайте вручную (${manual.size})", "Download manually (${manual.size})"))
+                                        .setItems(manual.map { it.first }.toTypedArray()) { _, i ->
+                                            if (manual[i].second.isNotEmpty()) try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(manual[i].second))) } catch (_: Throwable) {}
+                                        }
+                                        .setNegativeButton(tr("Закрыть", "Close"), null).show()
+                                    Toast.makeText(this, tr("Авторы этих модов запретили скачивание в лаунчерах. Скачайте файлы на сайте и добавьте через «Импорт» в каталоге.", "These mods' authors disabled launcher downloads. Download them on the site and add via Import."), Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            val have = findProfile(kind, mc)
+                            if (have != null) finish(have)
+                            else installProfile(kind, mc) { runOnUiThread { finish(findProfile(kind, mc) ?: selectedProfile()) } }
+                        }
+                    } catch (e: Throwable) {
+                        dir.deleteRecursively()
+                        runOnUiThread { Toast.makeText(this, tr("Не удалось импортировать сборку: ", "Could not import the pack: ") + e.message, Toast.LENGTH_LONG).show() }
+                    }
+                }.start()
+            }.show()
+    }
+
+    /** Установка модпака из каталога: скачивает архив во временную папку и передаёт обычному импорту. */
+    private fun installModpack(id: String, title: String, btn: Button) {
+        btn.isEnabled = false; btn.alpha = 0.6f; btn.text = tr("Скачивание…", "Downloading…")
+        Thread {
+            var res = ""; var site = ""
+            var file: File? = null
+            var cf: JSONObject? = null; var mr: JSONObject? = null
+            try {
+                val tmp = File(cacheDir, "pack_" + System.currentTimeMillis() + (if (id.startsWith("cf:")) ".zip" else ".mrpack"))
+                if (id.startsWith("cf:")) {
+                    val mid = id.substring(3).toInt()
+                    val fl = cfGet("/mods/$mid/files?pageSize=20").getJSONArray("data")
+                    var f: JSONObject? = null; var best = -1L
+                    for (i in 0 until fl.length()) {
+                        val o = fl.getJSONObject(i)
+                        val sc = (4 - o.optInt("releaseType", 3)) * 1_000_000_000_000L + (o.optString("fileDate").filter { it.isDigit() }.take(14).toLongOrNull() ?: 0L) / 1000
+                        if (sc > best) { best = sc; f = o }
+                    }
+                    val ff = f ?: throw RuntimeException(tr("у сборки нет файлов", "the pack has no files"))
+                    val url = if (ff.isNull("downloadUrl")) "" else ff.optString("downloadUrl")
+                    if (url.isEmpty()) { res = "__site"; site = try { cfGet("/mods/$mid").getJSONObject("data").getJSONObject("links").optString("websiteUrl") } catch (_: Throwable) { "" } }
+                    else {
+                        var sha: String? = null
+                        ff.optJSONArray("hashes")?.let { hs -> for (k in 0 until hs.length()) if (hs.getJSONObject(k).optInt("algo") == 1) sha = hs.getJSONObject(k).optString("value").ifEmpty { null } }
+                        if (!download(url, tmp, sha)) throw RuntimeException(tr("ошибка загрузки", "download failed"))
+                        file = tmp; cf = readCfManifest(android.net.Uri.fromFile(tmp)) ?: throw RuntimeException(tr("это не сборка CurseForge", "not a CurseForge pack"))
+                    }
+                } else {
+                    val vers = JSONArray(apiGet("/project/$id/version"))
+                    if (vers.length() == 0) throw RuntimeException(tr("у сборки нет файлов", "the pack has no files"))
+                    val files = vers.getJSONObject(0).getJSONArray("files")
+                    var f = files.getJSONObject(0)
+                    for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
+                    if (!download(f.getString("url"), tmp, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) throw RuntimeException(tr("ошибка загрузки", "download failed"))
+                    file = tmp; mr = readMrpackIndex(android.net.Uri.fromFile(tmp)) ?: throw RuntimeException(tr("это не сборка Modrinth (.mrpack)", "not a Modrinth pack (.mrpack)"))
+                }
+                if (res.isEmpty()) res = "ok"
+            } catch (e: Throwable) { res = e.message ?: e.toString() }
+            runOnUiThread {
+                btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Установить сборку", "Install pack")
+                when {
+                    res == "ok" && file != null -> { val u = android.net.Uri.fromFile(file); if (cf != null) importCfPack(u, cf) else if (mr != null) importMrpack(u, mr) }
+                    res == "__site" -> MobDialog(this).setTitle(title)
+                        .setMessage(tr("Автор отключил скачивание через сторонние лаунчеры. Скачайте архив на сайте CurseForge и добавьте через «Импорт».", "The author disabled third-party downloads. Download the archive on CurseForge and add it via Import."))
+                        .setPositiveButton(tr("Открыть сайт", "Open site")) { _, _ -> if (site.isNotEmpty()) try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(site + "/files"))) } catch (_: Throwable) {} }
+                        .setNegativeButton(tr("Закрыть", "Close"), null).show()
+                    else -> Toast.makeText(this, res, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     /** Читает modrinth.index.json из .mrpack; null, если это не сборка Modrinth. */
