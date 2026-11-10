@@ -151,6 +151,8 @@ jobs:
           echo "KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD:-throwaway}" >> "$GITHUB_ENV"
 
       - name: Build debug APK
+        env:
+          CURSEFORGE_API: ${{ secrets.CURSEFORGE_API }}
         run: gradle assembleRelease --no-daemon
 
       - name: Verify APK (signature, ABIs, size)

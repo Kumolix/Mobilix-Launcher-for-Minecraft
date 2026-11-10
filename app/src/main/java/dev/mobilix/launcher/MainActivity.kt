@@ -1571,6 +1571,7 @@ class MainActivity : Activity() {
         var type = "mod"; var loader = loaderOfProfile(build?.optString("profile") ?: selectedProfile())
         var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
         var hideDl = prefs.getBoolean("catHideDl", false)    // фильтр «Не показывать скачанное»
+        var source = if (BuildConfig.CF_KEY.isNotEmpty()) prefs.getString("catSource", "modrinth") ?: "modrinth" else "modrinth"   // modrinth | curseforge
         var searchSeq = 0                                    // номер запроса: устаревший ответ не должен перекрывать список
         val q = android.widget.EditText(this).apply {
             hint = tr("Поиск", "Search"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true)
@@ -1639,6 +1640,53 @@ class MainActivity : Activity() {
             list.removeAllViews()
             list.addView(TextView(this).apply { text = tr("Загрузка…", "Loading…"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
             val query = q.text.toString().trim()
+            if (source == "curseforge") {
+                Thread {
+                    try {
+                        val data = cfSearch(query, type, loader, strict)
+                        runOnUiThread {
+                            if (my != searchSeq) return@runOnUiThread
+                            list.removeAllViews()
+                            var shown = 0
+                            for (i in 0 until data.length()) {
+                                val h = data.getJSONObject(i)
+                                val pid = "cf:" + h.getInt("id")
+                                if (hideDl) {
+                                    val rec = idx().optJSONObject(pid)
+                                    if (rec != null && packFile(rec.optString("t"), rec.optString("f")).exists()) continue
+                                }
+                                shown++
+                                val outer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, dp(10)) }
+                                val icon = ImageView(this).apply { setBackgroundColor(Th.line2); scaleType = ImageView.ScaleType.CENTER_CROP }
+                                outer.addView(icon, LinearLayout.LayoutParams(dp(56), dp(56)).apply { marginEnd = dp(12) })
+                                loadIcon(h.optJSONObject("logo")?.optString("thumbnailUrl", "") ?: "", icon)
+                                val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                                outer.addView(row, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                                row.addView(TextView(this).apply { text = h.optString("name"); textSize = 17f; setTextColor(Th.text); typeface = Typeface.DEFAULT_BOLD })
+                                val au = h.optJSONArray("authors")?.optJSONObject(0)?.optString("name") ?: ""
+                                row.addView(TextView(this).apply { text = au + "  ·  ⬇ " + h.optLong("downloadCount") + "  ·  CurseForge"; textSize = 12f; setTextColor(Th.accent) })
+                                row.addView(TextView(this).apply { text = h.optString("summary"); textSize = 13f; setTextColor(Th.text2); maxLines = 3 })
+                                val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                                fillActions(actions, pid, type, loader, h.optString("name"))
+                                row.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+                                list.addView(outer)
+                                list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+                            }
+                            if (shown == 0) list.addView(TextView(this).apply {
+                                text = tr("Ничего не найдено в CurseForge для ${curBase()} / $loader", "Nothing found on CurseForge for ${curBase()} / $loader")
+                                setTextColor(Th.dim); setPadding(0, dp(16), 0, 0)
+                            })
+                        }
+                    } catch (e: Throwable) {
+                        runOnUiThread {
+                            if (my != searchSeq) return@runOnUiThread
+                            list.removeAllViews()
+                            list.addView(TextView(this).apply { text = tr("CurseForge недоступен: ", "CurseForge unavailable: ") + e.message; setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
+                        }
+                    }
+                }.start()
+                return
+            }
             Thread {
                 try {
                     val facets = JSONArray()
@@ -1787,6 +1835,21 @@ class MainActivity : Activity() {
             search()
         }
         box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(4); bottomMargin = dp(8) })
+        // источник каталога: Modrinth / CurseForge (CurseForge виден, только если в сборку вшит ключ)
+        if (BuildConfig.CF_KEY.isNotEmpty()) {
+            val srcBtn = smallBtn("") {}
+            fun srcLabel() = tr("Источник: ", "Source: ") + (if (source == "curseforge") "CurseForge" else "Modrinth") + " ▾"
+            srcBtn.text = srcLabel()
+            srcBtn.setOnClickListener {
+                val names = arrayOf("Modrinth" + (if (source == "modrinth") "  ✓" else ""), "CurseForge" + (if (source == "curseforge") "  ✓" else ""))
+                MobDialog(this).setTitle(tr("Источник каталога", "Catalog source")).setItems(names) { _, i ->
+                    source = if (i == 1) "curseforge" else "modrinth"
+                    prefs.edit().putString("catSource", source).apply()
+                    srcBtn.text = srcLabel(); search()
+                }.setNegativeButton(tr("Закрыть", "Close"), null).show()
+            }
+            box.addView(srcBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
+        }
         // кнопка фильтров справа от Fabric/Forge: иконка с ползунками и числом включённых фильтров
         val filt = FilterView(this)
         fun refreshFilt() { filt.count = (if (strict) 1 else 0) + (if (hideDl) 1 else 0) }
@@ -1875,8 +1938,101 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    // ---------- CurseForge ----------
+    private fun cfGet(path: String): JSONObject {
+        val c = URL("https://api.curseforge.com/v1" + path).openConnection() as HttpURLConnection
+        c.connectTimeout = 12000; c.readTimeout = 25000
+        c.setRequestProperty("Accept", "application/json")
+        c.setRequestProperty("x-api-key", BuildConfig.CF_KEY)
+        c.setRequestProperty("User-Agent", "Kumolix/Mobilix (Android launcher)")
+        if (c.responseCode !in 200..299) throw RuntimeException("HTTP ${c.responseCode}")
+        return JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+    }
+    private fun cfLoaderType(l: String) = when (l) { "forge" -> 1; "fabric", "quilt" -> 4; "neoforge" -> 6; else -> 0 }
+    private fun cfClass(type: String) = when (type) { "resourcepack" -> 12; "shader" -> 6552; "datapack" -> 6945; else -> 6 }
+
+    private fun cfSearch(query: String, type: String, loader: String, strict: Boolean): JSONArray {
+        var p = "/mods/search?gameId=432&classId=${cfClass(type)}&pageSize=25&sortOrder=desc&sortField=" + (if (query.isEmpty()) 2 else 1)
+        if (query.isNotEmpty()) p += "&searchFilter=" + java.net.URLEncoder.encode(query, "UTF-8")
+        if (strict) {
+            p += "&gameVersion=" + java.net.URLEncoder.encode(curBase(), "UTF-8")
+            if (type == "mod" && cfLoaderType(loader) != 0) p += "&modLoaderType=" + cfLoaderType(loader)
+        }
+        return cfGet(p).getJSONArray("data")
+    }
+
+    /** Скачивает файл CurseForge под текущую версию/загрузчик. Возвращает имя файла или бросает исключение. */
+    private fun cfDownloadFile(modId: Int, type: String, loader: String): String {
+        var p = "/mods/$modId/files?pageSize=30&gameVersion=" + java.net.URLEncoder.encode(curBase(), "UTF-8")
+        if (type == "mod" && cfLoaderType(loader) != 0) p += "&modLoaderType=" + cfLoaderType(loader)
+        val files = cfGet(p).getJSONArray("data")
+        if (files.length() == 0) throw RuntimeException(tr("нет файла под ${curBase()} / $loader", "no file for ${curBase()} / $loader"))
+        var f: JSONObject? = null
+        var best = -1L
+        for (i in 0 until files.length()) {   // самый свежий релиз; релизы (1) важнее бета/альфа (2,3)
+            val o = files.getJSONObject(i)
+            val score = (4 - o.optInt("releaseType", 3)) * 1_000_000_000_000L + (o.optString("fileDate").filter { it.isDigit() }.take(14).toLongOrNull() ?: 0L) / 1000
+            if (score > best) { best = score; f = o }
+        }
+        val file = f!!
+        val name = file.getString("fileName")
+        val url = if (file.isNull("downloadUrl")) "" else file.optString("downloadUrl")
+        if (url.isEmpty()) throw RuntimeException("__cfsite")
+        var sha: String? = null
+        file.optJSONArray("hashes")?.let { hs -> for (i in 0 until hs.length()) if (hs.getJSONObject(i).optInt("algo") == 1) sha = hs.getJSONObject(i).optString("value").ifEmpty { null } }
+        val dest = File(curGameDir(), typeDir(type) + "/" + name)
+        if (!download(url, dest, sha)) throw RuntimeException(tr("ошибка загрузки", "download failed"))
+        // обязательные зависимости (relationType 3): ставим, что получится
+        if (type == "mod") {
+            val deps = file.optJSONArray("dependencies")
+            if (deps != null) for (i in 0 until deps.length()) {
+                val d = deps.getJSONObject(i)
+                if (d.optInt("relationType") != 3) continue
+                val did = d.optInt("modId"); val key = "cf:$did"
+                val rec = idx().optJSONObject(key)
+                if (rec != null && packFile(rec.optString("t"), rec.optString("f")).exists()) continue
+                try {
+                    val dn = cfDownloadFile(did, "mod", loader)
+                    idxSave(idx().apply { put(key, JSONObject().put("t", "mod").put("f", dn).put("n", try { cfGet("/mods/$did").getJSONObject("data").optString("name", "CF $did") } catch (_: Throwable) { "CF $did" }).put("l", loader).put("v", curBase())) })
+                } catch (_: Throwable) {}
+            }
+        }
+        return name
+    }
+
+    private fun cfInstall(modId: Int, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit) {
+        Thread {
+            var res = ""
+            var destFile: File? = null
+            var site = ""
+            try {
+                val name = cfDownloadFile(modId, type, loader)
+                destFile = File(curGameDir(), typeDir(type) + "/" + name)
+                idxSave(idx().apply { put("cf:$modId", JSONObject().put("t", type).put("f", name).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase())) })
+                res = "ok"
+            } catch (e: Throwable) {
+                res = e.message ?: e.toString()
+                if (res == "__cfsite") try { site = cfGet("/mods/$modId").getJSONObject("data").getJSONObject("links").optString("websiteUrl") } catch (_: Throwable) {}
+            }
+            runOnUiThread {
+                if (res == "ok") { onDone(); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
+                else {
+                    btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download")
+                    if (res == "__cfsite") {
+                        MobDialog(this).setTitle(title)
+                            .setMessage(tr("Автор отключил скачивание через сторонние лаунчеры. Файл можно скачать на сайте CurseForge и добавить через «Импорт».", "The author disabled downloads via third-party launchers. Download the file on the CurseForge website and add it with “Import”."))
+                            .setPositiveButton(tr("Открыть сайт", "Open site")) { _, _ ->
+                                if (site.isNotEmpty()) try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(site + "/files"))) } catch (_: Throwable) {}
+                            }.setNegativeButton(tr("Закрыть", "Close"), null).show()
+                    } else Toast.makeText(this, res, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
     private fun installProject(id: String, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit) {
         btn.isEnabled = false; btn.alpha = 0.6f; btn.text = tr("Скачивание…", "Downloading…")
+        if (id.startsWith("cf:")) { cfInstall(id.substring(3).toInt(), type, loader, title, btn, onDone); return }
         Thread {
             var res = ""
             var destFile: File? = null

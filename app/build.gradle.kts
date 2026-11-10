@@ -7,7 +7,10 @@ android {
     namespace = "dev.mobilix.launcher"
     compileSdk = 34
 
+    buildFeatures { buildConfig = true }
+
     defaultConfig {
+        buildConfigField("String", "CF_KEY", "\"${System.getenv("CURSEFORGE_API") ?: ""}\"")
         applicationId = "dev.mobilix.launcher"
         minSdk = 28
         targetSdk = 34
