@@ -749,11 +749,86 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         handleAuthIntent(intent)
+        checkLastCrash()
         if (prefs.getBoolean("worldBackup", true)) {
             WorldBackup.checkAfterGame(this, dataRoot()) { n ->
                 if (n != null) runOnUiThread { Toast.makeText(this, tr("Резервная копия миров сохранена (миров: $n)", "World backup saved (worlds: $n)"), Toast.LENGTH_LONG).show() }
             }
         }
+    }
+
+    /** При установке Sodium/Iris и подобных модов напоминает про профиль рендера Renderlix. */
+    private fun suggestRenderlix(title: String) {
+        val t = title.lowercase()
+        if (listOf("sodium", "iris", "embeddium", "oculus", "rubidium", "distant horizons").none { t.contains(it) }) return
+        if (prefs.getInt("renderPreset", 0) == 1 || prefs.getBoolean("renderlixAsked", false)) return
+        prefs.edit().putBoolean("renderlixAsked", true).apply()
+        MobDialog(this).setTitle(tr("Включить Renderlix для Sodium/Iris?", "Enable Renderlix for Sodium/Iris?"))
+            .setMessage(tr("Эти моды плохо работают со стандартными настройками рендера: игра может вылетать. Профиль Renderlix «Sodium / Iris» включает OpenGL 4.5, compute-шейдеры и игнор ошибок шейдеров. Его можно переключить в Настройки → Игра.",
+                "These mods run poorly with the default renderer settings and the game may crash. The Renderlix “Sodium / Iris” profile enables OpenGL 4.5, compute shaders and shader error ignoring. You can switch it in Settings → Game."))
+            .setNegativeButton(tr("Не сейчас", "Not now"), null)
+            .setPositiveButton(tr("Включить", "Enable")) { _, _ -> prefs.edit().putInt("renderPreset", 1).apply(); Toast.makeText(this, tr("Профиль Renderlix «Sodium / Iris» включён", "Renderlix “Sodium / Iris” profile enabled"), Toast.LENGTH_LONG).show() }
+            .show()
+    }
+
+    /** После аварийного завершения игры предлагает автоматическое или ручное исправление модов. */
+    private fun checkLastCrash() {
+        CrashDoctor.trFn = { ru, en -> tr(ru, en) }
+        val det = try { CrashDoctor.detect(this, dataRoot()) } catch (_: Throwable) { null } ?: return
+        if (prefs.getLong("crashSeen", 0L) == det.start) return
+        prefs.edit().putLong("crashSeen", det.start).apply()
+        Thread {
+            val rep = try { CrashDoctor.analyze(det) } catch (_: Throwable) { null }
+            runOnUiThread { if (rep != null && !isFinishing) showCrashDialog(rep, det) }
+        }.start()
+    }
+
+    private fun showCrashDialog(rep: CrashDoctor.Report, det: CrashDoctor.Detected) {
+        val head = when (det.kind) {
+            "crash" -> tr("Игра вылетела (есть отчёт о вылете).", "The game crashed (a crash report exists).")
+            "native" -> tr("Игра упала на уровне системы (hs_err.log).", "The game crashed at the system level (hs_err.log).")
+            else -> tr("Игра завершилась аварийно: процесс исчез без ошибки в логе (возможно, не хватило памяти).", "The game ended abnormally: the process vanished with no error in the log (possibly out of memory).")
+        }
+        val sb = StringBuilder(head).append("\n\n")
+        if (rep.suspects.isNotEmpty()) {
+            sb.append(tr("Подозрительные моды:", "Suspect mods:")).append('\n')
+            rep.suspects.forEach { sb.append("• ").append(it.mod.name).append(" — ").append(it.why).append('\n') }
+        } else sb.append(tr("Виновный мод не определён.", "No culprit mod was identified.")).append('\n')
+        rep.notes.forEach { sb.append('\n').append(it) }
+        if (rep.hasRenderMod && prefs.getInt("renderPreset", 0) == 0)
+            sb.append("\n\n").append(tr("В сборке есть Sodium/Iris: попробуйте профиль Renderlix «Sodium / Iris» (Настройки → Игра).", "The build has Sodium/Iris: try the Renderlix “Sodium / Iris” profile (Settings → Game)."))
+        val d = MobDialog(this).setTitle(tr("Вылет игры", "Game crash")).setMessage(sb.toString())
+            .setNegativeButton(tr("Закрыть", "Close"), null)
+            .setNeutralButton(tr("Вручную", "Manually")) { _, _ -> crashManual(rep, rep.suspects.map { it.mod.id }.toMutableSet()) }
+        if (rep.suspects.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
+            val off = CrashDoctor.disable(rep, rep.suspects.map { it.mod })
+            MobDialog(this).setTitle(tr("Готово", "Done"))
+                .setMessage(tr("Отключено модов: ${off.size}\n", "Mods disabled: ${off.size}\n") + off.joinToString("\n") { "• $it" } + "\n\n" + tr("Файлы переименованы в .disabled, их можно вернуть в разделе «Вручную». Запустите игру снова.", "Files were renamed to .disabled and can be restored via “Manually”. Launch the game again."))
+                .setPositiveButton("OK", null).show()
+        }
+        else if (rep.hasRenderMod && prefs.getInt("renderPreset", 0) == 0) d.setPositiveButton(tr("Включить Renderlix", "Enable Renderlix")) { _, _ ->
+            prefs.edit().putInt("renderPreset", 1).apply()
+            Toast.makeText(this, tr("Профиль Renderlix «Sodium / Iris» включён", "Renderlix “Sodium / Iris” profile enabled"), Toast.LENGTH_LONG).show()
+        }
+        d.show()
+    }
+
+    /** Ручной выбор: нажатие переключает галочку, «Отключить» переименовывает выбранные моды, «Вернуть» возвращает все отключённые. */
+    private fun crashManual(rep: CrashDoctor.Report, picked: MutableSet<String>) {
+        val mods = rep.mods
+        val labels = mods.map { (if (it.id in picked) "☑  " else "☐  ") + it.name }.toTypedArray()
+        val back = CrashDoctor.disabledFiles(rep.gameDir).size
+        MobDialog(this).setTitle(tr("Какие моды отключить?", "Which mods to disable?"))
+            .setItems(labels) { _, i -> val id = mods[i].id; if (!picked.remove(id)) picked.add(id); crashManual(rep, picked) }
+            .setPositiveButton(tr("Отключить выбранные (${picked.size})", "Disable selected (${picked.size})")) { _, _ ->
+                if (picked.isEmpty()) return@setPositiveButton
+                val off = CrashDoctor.disable(rep, mods.filter { it.id in picked })
+                Toast.makeText(this, tr("Отключено модов: ${off.size}", "Mods disabled: ${off.size}"), Toast.LENGTH_LONG).show()
+            }
+            .setNeutralButton(if (back > 0) tr("Вернуть отключённые ($back)", "Restore disabled ($back)") else tr("Закрыть", "Close")) { _, _ ->
+                if (back > 0) Toast.makeText(this, tr("Возвращено модов: ${CrashDoctor.restoreAll(rep.gameDir)}", "Mods restored: ${CrashDoctor.restoreAll(rep.gameDir)}"), Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton(tr("Отмена", "Cancel"), null).show()
     }
 
     /** Список копий миров текущей папки игры: по нажатию восстанавливает миры рядом с существующими. */
@@ -2085,7 +2160,7 @@ class MainActivity : Activity() {
                 if (res == "__cfsite") try { site = cfGet("/mods/$modId").getJSONObject("data").getJSONObject("links").optString("websiteUrl") } catch (_: Throwable) {}
             }
             runOnUiThread {
-                if (res == "ok") { onDone(); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
+                if (res == "ok") { onDone(); if (type == "mod") suggestRenderlix(title); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
                 else {
                     btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download")
                     if (res == "__cfsite") {
@@ -2122,7 +2197,7 @@ class MainActivity : Activity() {
                 res = "ok"
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
-                if (res == "ok") { onDone(); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
+                if (res == "ok") { onDone(); if (type == "mod") suggestRenderlix(title); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
                 else {
                     btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download")
                     // нет файла под вашу версию/загрузчик: предлагаем выбрать любой файл вручную
