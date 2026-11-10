@@ -1128,9 +1128,6 @@ class MainActivity : Activity() {
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
-        col.addView(TextView(this).apply { text = tr("Источник каталога", "Catalog source"); setTextColor(Th.text); setPadding(0, 0, 0, dp(6)) })
-        col.addView(chipRow(listOf("Modrinth", "Modrinth Black", "CurseForge"), prefs.getInt("modSource", 2) - 1) { i -> prefs.edit().putInt("modSource", i + 1).apply() })
-        if (BuildConfig.CF_KEY.isEmpty()) col.addView(note(tr("CurseForge недоступен: в эту сборку лаунчера не вшит ключ (секрет CURSEFORGE_API).", "CurseForge unavailable: this launcher build has no key (CURSEFORGE_API secret).")))
         col.addView(TextView(this).apply { text = tr("Адрес API зеркала", "Mirror API address"); setTextColor(Th.text); setPadding(0, dp(14), 0, 0) })
         val mirror = android.widget.EditText(this).apply {
             setText(prefs.getString("mirrorApi", DEFAULT_MIRROR)); setTextColor(Th.text); setSingleLine(true)
@@ -1145,8 +1142,8 @@ class MainActivity : Activity() {
             text = tr("Сбросить адрес", "Reset address"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
             setOnClickListener { mirror.setText(DEFAULT_MIRROR); prefs.edit().putString("mirrorApi", DEFAULT_MIRROR).apply() }
         }, LinearLayout.LayoutParams(dp(180), dp(40)).apply { topMargin = dp(6) })
-        col.addView(note(tr("Если Modrinth недоступен, выберите Modrinth Black. Если зеркало не отвечает, поправьте адрес API здесь.",
-            "If Modrinth is unreachable, choose Modrinth Black. If the mirror does not respond, fix the API address here.")))
+        col.addView(note(tr("Зеркало Modrinth используется первым, официальный API — запасным. Если зеркало не отвечает, поправьте адрес API здесь. Источник каталога (Modrinth / CurseForge) выбирается в самом каталоге.",
+            "The Modrinth mirror is tried first, the official API is the fallback. If the mirror does not respond, fix the API address here. The catalog source (Modrinth / CurseForge) is chosen in the catalog itself.")))
         if (!cmp) { sv.addView(one); return sv }
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val holder = FrameLayout(this)
@@ -1578,6 +1575,10 @@ class MainActivity : Activity() {
         var type = "mod"; var loader = loaderOfProfile(build?.optString("profile") ?: selectedProfile())
         var strict = prefs.getBoolean("catStrict", true)     // фильтр «Совместимость версий»
         var hideDl = prefs.getBoolean("catHideDl", false)    // фильтр «Не показывать скачанное»
+        var page = 0                                         // страница результатов (с 0)
+        var srcRef: View? = null
+        var goPage: (Int) -> Unit = {}
+        var svRef: ScrollView? = null
         var source = if (BuildConfig.CF_KEY.isNotEmpty() && prefs.getInt("modSource", 2) == 3) "curseforge" else "modrinth"   // modrinth | curseforge
         var searchSeq = 0                                    // номер запроса: устаревший ответ не должен перекрывать список
         val q = android.widget.EditText(this).apply {
@@ -1641,7 +1642,27 @@ class MainActivity : Activity() {
             }
             if (ents.isEmpty()) list.addView(TextView(this).apply { text = tr("Пока ничего не скачано", "Nothing downloaded yet"); setTextColor(Th.dim); setPadding(0, dp(16), 0, 0) })
         }
-        fun search() {
+        fun addPager(total: Int) {
+            val pages = (total + 24) / 25
+            if (pages <= 1) return
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, dp(14), 0, dp(10)) }
+            fun cell(label: String, target: Int, selected: Boolean) {
+                row.addView(TextView(this).apply {
+                    text = label; textSize = 15f; gravity = Gravity.CENTER; typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                    setTextColor(Th.chipText); isClickable = true
+                    background = if (selected) GradientDrawable().apply { setColor(Th.act) } else sel(Th.chip)
+                    setOnClickListener { if (!selected) goPage(target) }
+                }, LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(3); marginEnd = dp(3) })
+            }
+            val start = (page - 2).coerceIn(0, maxOf(0, pages - 5))
+            if (pages > 5) cell("‹", maxOf(0, page - 1), page == 0)
+            for (n in start until minOf(pages, start + 5)) cell((n + 1).toString(), n, n == page)
+            if (pages > 5) cell("›", minOf(pages - 1, page + 1), page == pages - 1)
+            list.addView(row)
+        }
+        lateinit var doSearch: () -> Unit
+        fun search() { page = 0; doSearch() }
+        doSearch = fun() {
             val my = ++searchSeq
             if (type == "downloaded") { showDownloaded(); return }
             list.removeAllViews()
@@ -1650,7 +1671,7 @@ class MainActivity : Activity() {
             if (source == "curseforge") {
                 Thread {
                     try {
-                        val data = cfSearch(query, type, loader, strict)
+                        val resp = cfSearch(query, type, loader, strict, page * 25); val data = resp.getJSONArray("data"); val cfTotal = minOf(resp.optJSONObject("pagination")?.optInt("totalCount") ?: data.length(), 10000)
                         runOnUiThread {
                             if (my != searchSeq) return@runOnUiThread
                             list.removeAllViews()
@@ -1673,12 +1694,30 @@ class MainActivity : Activity() {
                                 val au = h.optJSONArray("authors")?.optJSONObject(0)?.optString("name") ?: ""
                                 row.addView(TextView(this).apply { text = au + "  ·  ⬇ " + h.optLong("downloadCount") + "  ·  CurseForge"; textSize = 12f; setTextColor(Th.accent) })
                                 row.addView(TextView(this).apply { text = h.optString("summary"); textSize = 13f; setTextColor(Th.text2); maxLines = 3 })
+                                if (type != "modpack") {
+                                    val lt = cfLoaderType(loader)
+                                    var okv = false; var okl = type != "mod"
+                                    h.optJSONArray("latestFilesIndexes")?.let { fi ->
+                                        for (k in 0 until fi.length()) {
+                                            val o = fi.getJSONObject(k)
+                                            if (o.optString("gameVersion") == curBase()) { okv = true; if (type == "mod" && (lt == 0 || o.optInt("modLoader", -1) == lt)) okl = true }
+                                        }
+                                    }
+                                    val ldName = if (loader == "neoforge") "NeoForge" else loader.replaceFirstChar { c -> c.uppercase() }
+                                    val lbl = if (type == "mod") "${curBase()} / $ldName" else curBase()
+                                    row.addView(TextView(this).apply {
+                                        text = if (okv && okl) "✓ " + tr("заявлен для $lbl", "listed for $lbl") + (if (loader == "quilt" && type == "mod") tr(" (через Fabric)", " (via Fabric)") else "")
+                                               else "⚠ " + tr("не заявлен для $lbl", "not listed for $lbl")
+                                        textSize = 12f; setTextColor(if (okv && okl) 0xFF66BB6A.toInt() else 0xFFFFB74D.toInt())
+                                    })
+                                }
                                 val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                                 fillActions(actions, pid, type, loader, h.optString("name"))
                                 row.addView(actions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
                                 list.addView(outer)
                                 list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
                             }
+                            addPager(cfTotal)
                             if (shown == 0) list.addView(TextView(this).apply {
                                 text = tr("Ничего не найдено в CurseForge для ${curBase()} / $loader", "Nothing found on CurseForge for ${curBase()} / $loader")
                                 setTextColor(Th.dim); setPadding(0, dp(16), 0, 0)
@@ -1701,13 +1740,13 @@ class MainActivity : Activity() {
                     facets.put(JSONArray().put("project_type:$type"))
                     if (strict && type == "mod") facets.put(JSONArray().apply { loaderCats(loader).forEach { put("categories:$it") } })
                     val path = "/search?query=" + java.net.URLEncoder.encode(query, "UTF-8") +
-                        "&facets=" + java.net.URLEncoder.encode(facets.toString(), "UTF-8") + "&limit=25&index=" + (if (query.isEmpty()) "downloads" else "relevance")
+                        "&facets=" + java.net.URLEncoder.encode(facets.toString(), "UTF-8") + "&limit=25&offset=${page * 25}&index=" + (if (query.isEmpty()) "downloads" else "relevance")
                     fun searchPath(q: String, f: JSONArray, limit: Int) = "/search?query=" + java.net.URLEncoder.encode(q, "UTF-8") +
                         "&facets=" + java.net.URLEncoder.encode(f.toString(), "UTF-8") + "&limit=$limit&index=" + (if (q.isEmpty()) "downloads" else "relevance")
-                    var hits = JSONObject(apiGet(path)).getJSONArray("hits")
+                    val resp0 = JSONObject(apiGet(path)); var hits = resp0.getJSONArray("hits"); var totalHits = resp0.optInt("total_hits", hits.length())
                     // знаки вроде «!» в названии могут мешать поиску: пробуем без них
                     val cleaned = query.replace(Regex("[^\\p{L}\\p{N} ]"), " ").replace(Regex("\\s+"), " ").trim()
-                    if (hits.length() == 0 && cleaned.isNotEmpty() && cleaned != query) hits = JSONObject(apiGet(searchPath(cleaned, facets, 25))).getJSONArray("hits")
+                    if (hits.length() == 0 && cleaned.isNotEmpty() && cleaned != query) { val r1 = JSONObject(apiGet(searchPath(cleaned, facets, 25))); hits = r1.getJSONArray("hits"); totalHits = r1.optInt("total_hits", hits.length()) }
                     // то, что нашлось по названию, но не прошло фильтры (версия, загрузчик, тип): покажем отдельно с причиной
                     val extra = ArrayList<JSONObject>()
                     val qq = if (cleaned.isNotEmpty()) cleaned else query
@@ -1722,6 +1761,7 @@ class MainActivity : Activity() {
                             }
                         } catch (_: Throwable) {}
                     }
+                    val totalFinal = totalHits
                     runOnUiThread {
                         if (my != searchSeq) return@runOnUiThread
                         list.removeAllViews()
@@ -1768,6 +1808,7 @@ class MainActivity : Activity() {
                             text = tr("Всё найденное уже скачано (фильтр «Не показывать скачанное»)", "Everything found is already downloaded (hide-downloaded filter)")
                             setTextColor(Th.dim); setPadding(0, dp(16), 0, 0)
                         })
+                        addPager(totalFinal)
                         if (extra.isNotEmpty()) {
                             list.addView(TextView(this).apply {
                                 text = tr("Найдено, но не подходит под фильтры (версия ${curBase()}, загрузчик $loader, тип «$type»):", "Found, but filtered out (version ${curBase()}, loader $loader, type \"$type\"):")
@@ -1843,7 +1884,8 @@ class MainActivity : Activity() {
         val typeRow = tabRows(listOf(types.subList(0, 3).map { it.second }, types.subList(3, 6).map { it.second }), 0) { i ->
             type = types[i].first
             loaderRow.visibility = if (type == "mod") View.VISIBLE else View.GONE
-            q.visibility = if (type == "downloaded" || prefs.getBoolean("catCollapsed", false)) View.GONE else View.VISIBLE
+            q.visibility = if (type == "downloaded") View.GONE else View.VISIBLE
+            srcRef?.visibility = if (type == "downloaded" || prefs.getBoolean("catCollapsed", false)) View.GONE else View.VISIBLE
             search()
         }
         box.addView(typeRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(4); bottomMargin = dp(8) })
@@ -1863,7 +1905,8 @@ class MainActivity : Activity() {
                     }
                 }.setNegativeButton(tr("Закрыть", "Close"), null).show()
             }
-            box.addView(srcBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); bottomMargin = dp(6) })
+            srcRef = srcBtn
+            box.addView(srcBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(6) })
         }
         // кнопка фильтров справа от Fabric/Forge: иконка с ползунками и числом включённых фильтров
         val filt = FilterView(this)
@@ -1902,7 +1945,8 @@ class MainActivity : Activity() {
             val c = prefs.getBoolean("catCollapsed", false)
             caret.up = !c
             typeRow.visibility = if (c) View.GONE else View.VISIBLE
-            q.visibility = if (c || type == "downloaded") View.GONE else View.VISIBLE
+            q.visibility = if (type == "downloaded") View.GONE else View.VISIBLE
+            srcRef?.visibility = if (c || type == "downloaded") View.GONE else View.VISIBLE
         }
         caret.setOnClickListener { prefs.edit().putBoolean("catCollapsed", !prefs.getBoolean("catCollapsed", false)).apply(); applyCollapse() }
         applyCollapse()
@@ -1929,6 +1973,8 @@ class MainActivity : Activity() {
         box.addView(filterRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12); marginEnd = dp(12); bottomMargin = dp(6) })
         val sv = ScrollView(this); sv.addView(list)
         box.addView(sv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        svRef = sv
+        goPage = { n -> page = n; sv.scrollTo(0, 0); doSearch() }
         q.setOnEditorActionListener { _, _, _ -> search(); true }
         search()
         return box
@@ -1971,14 +2017,14 @@ class MainActivity : Activity() {
     private fun cfLoaderType(l: String) = when (l) { "forge" -> 1; "fabric", "quilt" -> 4; "neoforge" -> 6; else -> 0 }
     private fun cfClass(type: String) = when (type) { "modpack" -> 4471; "resourcepack" -> 12; "shader" -> 6552; "datapack" -> 6945; else -> 6 }
 
-    private fun cfSearch(query: String, type: String, loader: String, strict: Boolean): JSONArray {
-        var p = "/mods/search?gameId=432&classId=${cfClass(type)}&pageSize=25&sortOrder=desc&sortField=" + (if (query.isEmpty()) 2 else 1)
+    private fun cfSearch(query: String, type: String, loader: String, strict: Boolean, index: Int = 0): JSONObject {
+        var p = "/mods/search?gameId=432&classId=${cfClass(type)}&pageSize=25&index=$index&sortOrder=desc&sortField=" + (if (query.isEmpty()) 2 else 1)
         if (query.isNotEmpty()) p += "&searchFilter=" + java.net.URLEncoder.encode(query, "UTF-8")
         if (strict && type != "modpack") {
             p += "&gameVersion=" + java.net.URLEncoder.encode(curBase(), "UTF-8")
             if (type == "mod" && cfLoaderType(loader) != 0) p += "&modLoaderType=" + cfLoaderType(loader)
         }
-        return cfGet(p).getJSONArray("data")
+        return cfGet(p)
     }
 
     /** Скачивает файл CurseForge под текущую версию/загрузчик. Возвращает имя файла или бросает исключение. */
