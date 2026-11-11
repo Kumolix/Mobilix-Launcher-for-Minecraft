@@ -14,7 +14,7 @@ android {
         applicationId = "dev.mobilix.launcher"
         minSdk = 28
         targetSdk = 34
-        versionCode = 96
+        versionCode = 97
         versionName = rootProject.file("VERSION").readText().trim()
     }
 
