@@ -1299,6 +1299,10 @@ class MainActivity : Activity() {
             "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Auto” (recommended): the Sodium / Iris profile is switched on automatically when the build has Sodium, Iris, Embeddium and similar mods, otherwise Standard. “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. Applied on next launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
+        col.addView(TextView(this).apply { text = tr("Скачивание модов", "Mod downloads"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Вручную", "Manual")), if (prefs.getBoolean("modDlManual", false)) 1 else 0) { i -> prefs.edit().putBoolean("modDlManual", i == 1).apply() })
+        col.addView(note(tr("Авто: лаунчер сам берёт свежую версию под вашу игру и загрузчик. Вручную: при скачивании открывается список версий мода (совместимые отмечены ✓), вы выбираете нужную.",
+            "Auto: the launcher picks the latest version for your game and loader. Manual: a list of the mod's versions opens when you download (compatible ones marked ✓) and you pick the one you need.")))
         col.addView(TextView(this).apply { text = tr("Скрыть системные кнопки в игре", "Hide system buttons in game"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("hideSys", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("hideSys", i == 1).apply(); writeGameSettings()
@@ -2212,7 +2216,8 @@ class MainActivity : Activity() {
     }
 
     /** Скачивает файл CurseForge под текущую версию/загрузчик. Возвращает имя файла или бросает исключение. */
-    private fun cfDownloadFile(modId: Int, type: String, loader: String): String {
+    private fun cfDownloadFile(modId: Int, type: String, loader: String, chosen: JSONObject? = null): String {
+        if (chosen != null) return cfDownloadChosen(chosen, type, loader)
         var p = "/mods/$modId/files?pageSize=30&gameVersion=" + java.net.URLEncoder.encode(curBase(), "UTF-8")
         if (type == "mod" && cfLoaderType(loader) != 0) p += "&modLoaderType=" + cfLoaderType(loader)
         val files = cfGet(p).getJSONArray("data")
@@ -2224,7 +2229,10 @@ class MainActivity : Activity() {
             val score = (4 - o.optInt("releaseType", 3)) * 1_000_000_000_000L + (o.optString("fileDate").filter { it.isDigit() }.take(14).toLongOrNull() ?: 0L) / 1000
             if (score > best) { best = score; f = o }
         }
-        val file = f!!
+        return cfDownloadChosen(f!!, type, loader)
+    }
+
+    private fun cfDownloadChosen(file: JSONObject, type: String, loader: String): String {
         val name = file.getString("fileName")
         val url = if (file.isNull("downloadUrl")) "" else file.optString("downloadUrl")
         if (url.isEmpty()) throw RuntimeException("__cfsite")
@@ -2250,13 +2258,38 @@ class MainActivity : Activity() {
         return name
     }
 
-    private fun cfInstall(modId: Int, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit) {
+    /** Режим «Вручную»: список всех файлов проекта CurseForge, совместимые с текущей версией игры сверху. */
+    private fun cfPickFile(modId: Int, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit) {
+        btn.isEnabled = false; btn.alpha = 0.6f
+        Thread {
+            try {
+                val arr = cfGet("/mods/$modId/files?pageSize=50").getJSONArray("data")
+                runOnUiThread {
+                    btn.isEnabled = true; btn.alpha = 1f
+                    if (arr.length() == 0) { Toast.makeText(this, tr("У проекта нет файлов", "The project has no files"), Toast.LENGTH_LONG).show(); return@runOnUiThread }
+                    fun fits(o: JSONObject): Boolean { val g = o.optJSONArray("gameVersions") ?: return false; return (0 until g.length()).any { g.getString(it) == curBase() } }
+                    val all = (0 until arr.length()).map { arr.getJSONObject(it) }.sortedByDescending { if (fits(it)) 1 else 0 }
+                    val items = all.map { o ->
+                        val g = o.optJSONArray("gameVersions")
+                        val gs = if (g == null) "" else (0 until g.length()).map { g.getString(it) }.take(6).joinToString(", ")
+                        (if (fits(o)) "✓ " else "✗ ") + o.optString("displayName", o.optString("fileName")) + "\n" + gs
+                    }
+                    MobDialog(this).setTitle(title + "\n" + tr("выберите файл (CurseForge)", "pick a file (CurseForge)"))
+                        .setItems(items.toTypedArray()) { _, i -> cfInstall(modId, type, loader, title, btn, onDone, all[i]) }
+                        .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+                }
+            } catch (e: Throwable) { runOnUiThread { btn.isEnabled = true; btn.alpha = 1f; Toast.makeText(this, e.message ?: e.toString(), Toast.LENGTH_LONG).show() } }
+        }.start()
+    }
+
+    private fun cfInstall(modId: Int, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit, chosen: JSONObject? = null) {
+        btn.isEnabled = false; btn.alpha = 0.6f; btn.text = tr("Скачивание…", "Downloading…")
         Thread {
             var res = ""
             var destFile: File? = null
             var site = ""
             try {
-                val name = cfDownloadFile(modId, type, loader)
+                val name = cfDownloadFile(modId, type, loader, chosen)
                 destFile = File(curGameDir(), typeDir(type) + "/" + name)
                 idxSave(idx().apply { put("cf:$modId", JSONObject().put("t", type).put("f", name).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase())) })
                 res = "ok"
@@ -2281,6 +2314,12 @@ class MainActivity : Activity() {
     }
 
     private fun installProject(id: String, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit) {
+        // «Скачивание модов: вручную» — пользователь сам выбирает версию файла
+        if (prefs.getBoolean("modDlManual", false)) {
+            if (id.startsWith("cf:")) cfPickFile(id.substring(3).toInt(), type, loader, title, btn, onDone)
+            else openManualDownload(id, type, title, onDone)
+            return
+        }
         btn.isEnabled = false; btn.alpha = 0.6f; btn.text = tr("Скачивание…", "Downloading…")
         if (id.startsWith("cf:")) { cfInstall(id.substring(3).toInt(), type, loader, title, btn, onDone); return }
         Thread {
