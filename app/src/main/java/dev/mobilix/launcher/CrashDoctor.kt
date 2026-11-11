@@ -18,6 +18,7 @@ object CrashDoctor {
         val native: Boolean,          // нет Java-ошибки: процесс упал или был убит
         val hasRenderMod: Boolean,
         val missing: List<String> = emptyList(),   // id модов-зависимостей, которых нет в сборке
+        val updates: List<Pair<String, String>> = emptyList(),   // (id мода, минимальная версия): мод устарел для другого мода сборки
     )
     class Detected(val gameDir: File, val start: Long, val kind: String)
 
@@ -135,6 +136,12 @@ object CrashDoctor {
         Regex("Suspected Mods:\\s*\\n((?:[ \\t]+.*\\n)+)").find(text)?.groupValues?.get(1)?.lines()?.forEach { l ->
             Regex("\\(([A-Za-z0-9_\\-.]+)\\)").findAll(l).forEach { add(it.groupValues[1], tr("в списке «Suspected Mods» отчёта о вылете", "listed in the crash report's Suspected Mods")) }
         }
+        // 1b. «Mod 'Sodium' (sodium) … is incompatible with any version before 1.8.7 of mod 'Iris' (iris)» — устарел Iris, его надо обновить
+        val updates = LinkedHashMap<String, String>()
+        val incompat = Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?is incompatible with any version before (\\S+?)!? of mod '([^']+)' \\(([^)]+)\\)")
+        incompat.findAll(text).forEach { m -> if (byId.containsKey(m.groupValues[5])) updates[m.groupValues[5]] = m.groupValues[3].trimEnd('!', '.') }
+        // «Fix: … Remove mod 'Iris' (iris)» — решение, которое предлагает сам Fabric (запасной вариант)
+        Regex("Remove mod '([^']+)' \\(([^)]+)\\)").findAll(text).forEach { m -> if (!updates.containsKey(m.groupValues[2])) add(m.groupValues[2], tr("Fabric предлагает убрать этот мод (несовместим с другими)", "Fabric suggests removing this mod (incompatible with others)")) }
         // 2. Ошибки зависимостей Fabric: «Mod 'X' (id) requires/conflicts/breaks …»
         Regex("Mod '([^']+)' \\(([^)]+)\\)[^\\n]*?(requires|conflicts|breaks|depends)[^\\n]*").findAll(text).take(8).forEach { m ->
             add(m.groupValues[2], tr("проблема зависимостей", "dependency problem"))
@@ -160,10 +167,10 @@ object CrashDoctor {
         if (reason.isEmpty() && (!javaError || d.kind != "crash")) {
             renderMods.forEach { add(it.id, tr("рендер-мод: на мобильном рендере часто роняет игру без ошибки в логе", "render mod: often crashes the game on the mobile renderer with no log error")) }
         }
-        val suspects = reason.entries.map { Suspect(byId[it.key]!!, it.value) }
+        val suspects = reason.entries.filter { !updates.containsKey(it.key) }.map { Suspect(byId[it.key]!!, it.value) }
         val missing = LinkedHashSet<String>(missingDeps(mods))
         Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?which is missing").findAll(text).forEach { m -> if (m.groupValues[2] !in BUILTIN) missing.add(m.groupValues[2]) }
-        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList())
+        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList(), updates.entries.map { it.key to it.value })
     }
 
     /** Отключает моды (переименование в .disabled) вместе с модами, которые от них зависят. Возвращает названия отключённых. */
@@ -182,6 +189,18 @@ object CrashDoctor {
         }
         return names
     }
+
+    /** Сравнение версий вида «1.8.7+mc1.21.3»: берёт числа до «+»/«-». */
+    fun versionAtLeast(have: String, need: String): Boolean {
+        fun parts(v: String) = v.substringBefore('+').substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
+        val a = parts(have); val b = parts(need)
+        for (i in 0 until maxOf(a.size, b.size)) { val x = a.getOrElse(i) { 0 }; val y = b.getOrElse(i) { 0 }; if (x != y) return x > y }
+        return true
+    }
+
+    fun modVersion(f: File): String = try {
+        ZipFile(f).use { z -> z.getEntry("fabric.mod.json")?.let { JSONObject(z.getInputStream(it).bufferedReader().use { r -> r.readText() }).optString("version") } ?: "" }
+    } catch (_: Throwable) { "" }
 
     fun restoreAll(gd: File): Int {
         var n = 0

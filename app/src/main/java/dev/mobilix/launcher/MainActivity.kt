@@ -825,16 +825,33 @@ class MainActivity : Activity() {
         val d = MobDialog(this).setTitle(tr("Вылет игры", "Game crash")).setMessage(sb.toString())
             .setNegativeButton(tr("Закрыть", "Close"), null)
             .setNeutralButton(tr("Вручную", "Manually")) { _, _ -> crashManual(rep, rep.suspects.map { it.mod.id }.toMutableSet()) }
-        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
+        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
             val off = if (rep.suspects.isNotEmpty()) CrashDoctor.disable(rep, rep.suspects.map { it.mod }) else emptyList()
             Toast.makeText(this, tr("Исправляю…", "Fixing…"), Toast.LENGTH_SHORT).show()
             Thread {
+                // моды, которые устарели для других модов сборки (Iris для Sodium и т. п.): пробуем обновить до свежей версии
+                val upOk = ArrayList<String>(); val upBad = ArrayList<String>()
+                for ((uid, need) in rep.updates) {
+                    val old = rep.mods.firstOrNull { it.id == uid } ?: continue
+                    val bak = File(old.file.parentFile, old.file.name + ".disabled")
+                    if (!old.file.renameTo(bak)) continue
+                    val (okU, _) = installMissingDeps(listOf(uid), rep.gameDir)
+                    val newJar = CrashDoctor.enabledMods(rep.gameDir).firstOrNull { it.id == uid }
+                    if (okU.isNotEmpty() && newJar != null && CrashDoctor.versionAtLeast(CrashDoctor.modVersion(newJar.file), need)) { bak.delete(); upOk.add(old.name + " → " + CrashDoctor.modVersion(newJar.file)) }
+                    else {
+                        newJar?.file?.delete()
+                        // для этой версии игры нужной версии нет — следуем совету Fabric: оставляем мод отключённым
+                        upBad.add(old.name + " (" + tr("нужна версия ≥ $need, для вашей версии игры её нет", "need version ≥ $need, none for your game version") + ")")
+                    }
+                }
                 // зависимости считаем заново, уже без отключённых модов
                 val need = (CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)) + rep.missing.filter { m -> off.isEmpty() || CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)).contains(m) }).distinct()
                 val (okDeps, badDeps) = if (need.isNotEmpty()) installMissingDeps(need, rep.gameDir) else (emptyList<String>() to emptyList())
                 runOnUiThread {
                     val m = StringBuilder()
                     if (off.isNotEmpty()) m.append(tr("Отключено модов: ${off.size}\n", "Mods disabled: ${off.size}\n")).append(off.joinToString("\n") { "• $it" }).append("\n\n")
+                    if (upOk.isNotEmpty()) m.append(tr("Обновлено:\n", "Updated:\n")).append(upOk.joinToString("\n") { "• $it" }).append("\n\n")
+                    if (upBad.isNotEmpty()) m.append(tr("Отключено (не удалось обновить):\n", "Disabled (could not update):\n")).append(upBad.joinToString("\n") { "• $it" }).append("\n").append(tr("Совет: поставьте более старую версию Sodium, подходящую к этому моду, либо версию игры, для которой есть нужная версия.", "Tip: install an older Sodium version that matches this mod, or a game version that has the required version.")).append("\n\n")
                     if (okDeps.isNotEmpty()) m.append(tr("Докачаны зависимости:\n", "Dependencies downloaded:\n")).append(okDeps.joinToString("\n") { "• $it" }).append("\n\n")
                     if (badDeps.isNotEmpty()) m.append(tr("Не удалось найти под вашу версию:\n", "Not found for your version:\n")).append(badDeps.joinToString("\n") { "• $it" }).append("\n\n")
                     if (m.isEmpty()) m.append(tr("Нечего исправлять автоматически.\n\n", "Nothing to fix automatically.\n\n"))
