@@ -18,7 +18,7 @@ object CrashDoctor {
         val native: Boolean,          // нет Java-ошибки: процесс упал или был убит
         val hasRenderMod: Boolean,
         val missing: List<String> = emptyList(),   // id модов-зависимостей, которых нет в сборке
-        val updates: List<Pair<String, String>> = emptyList(),   // (id мода, минимальная версия): мод устарел для другого мода сборки
+        val updates: List<Triple<String, String, String>> = emptyList(),   // (id устаревшего мода, минимальная версия, id мода, который её требует)
     )
     class Detected(val gameDir: File, val start: Long, val kind: String)
 
@@ -137,9 +137,9 @@ object CrashDoctor {
             Regex("\\(([A-Za-z0-9_\\-.]+)\\)").findAll(l).forEach { add(it.groupValues[1], tr("в списке «Suspected Mods» отчёта о вылете", "listed in the crash report's Suspected Mods")) }
         }
         // 1b. «Mod 'Sodium' (sodium) … is incompatible with any version before 1.8.7 of mod 'Iris' (iris)» — устарел Iris, его надо обновить
-        val updates = LinkedHashMap<String, String>()
+        val updates = LinkedHashMap<String, Pair<String, String>>()
         val incompat = Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?is incompatible with any version before (\\S+?)!? of mod '([^']+)' \\(([^)]+)\\)")
-        incompat.findAll(text).forEach { m -> if (byId.containsKey(m.groupValues[5])) updates[m.groupValues[5]] = m.groupValues[3].trimEnd('!', '.') }
+        incompat.findAll(text).forEach { m -> if (byId.containsKey(m.groupValues[5])) updates[m.groupValues[5]] = m.groupValues[3].trimEnd('!', '.') to m.groupValues[2] }
         // «Fix: … Remove mod 'Iris' (iris)» — решение, которое предлагает сам Fabric (запасной вариант)
         Regex("Remove mod '([^']+)' \\(([^)]+)\\)").findAll(text).forEach { m -> if (!updates.containsKey(m.groupValues[2])) add(m.groupValues[2], tr("Fabric предлагает убрать этот мод (несовместим с другими)", "Fabric suggests removing this mod (incompatible with others)")) }
         // 2. Ошибки зависимостей Fabric: «Mod 'X' (id) requires/conflicts/breaks …»
@@ -170,7 +170,7 @@ object CrashDoctor {
         val suspects = reason.entries.filter { !updates.containsKey(it.key) }.map { Suspect(byId[it.key]!!, it.value) }
         val missing = LinkedHashSet<String>(missingDeps(mods))
         Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?which is missing").findAll(text).forEach { m -> if (m.groupValues[2] !in BUILTIN) missing.add(m.groupValues[2]) }
-        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList(), updates.entries.map { it.key to it.value })
+        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList(), updates.entries.map { Triple(it.key, it.value.first, it.value.second) })
     }
 
     /** Отключает моды (переименование в .disabled) вместе с модами, которые от них зависят. Возвращает названия отключённых. */
@@ -195,6 +195,56 @@ object CrashDoctor {
         fun parts(v: String) = v.substringBefore('+').substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
         val a = parts(have); val b = parts(need)
         for (i in 0 until maxOf(a.size, b.size)) { val x = a.getOrElse(i) { 0 }; val y = b.getOrElse(i) { 0 }; if (x != y) return x > y }
+        return true
+    }
+
+    fun modJson(f: File): JSONObject? = try {
+        ZipFile(f).use { z -> z.getEntry("fabric.mod.json")?.let { JSONObject(z.getInputStream(it).bufferedReader().use { r -> r.readText() }) } }
+    } catch (_: Throwable) { null }
+
+    /** Подходит ли версия под условие Fabric: строка («>=0.6.0 <0.7», «0.6.x», «<1.8.7») или массив (любое из). */
+    fun satisfies(ver: String, pred: Any?): Boolean {
+        when (pred) {
+            null, JSONObject.NULL -> return true
+            is org.json.JSONArray -> { for (i in 0 until pred.length()) if (satisfies(ver, pred.get(i))) return true; return pred.length() == 0 }
+        }
+        val v = ver.substringBefore('+').substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
+        fun cmp(w: String): Int {
+            val p = w.substringBefore('+').substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
+            for (i in 0 until maxOf(v.size, p.size)) { val x = v.getOrElse(i) { 0 }; val y = p.getOrElse(i) { 0 }; if (x != y) return x.compareTo(y) }
+            return 0
+        }
+        for (tok in pred.toString().trim().split(Regex("\\s+")).filter { it.isNotEmpty() }) {
+            val ok = when {
+                tok == "*" -> true
+                tok.startsWith(">=") -> cmp(tok.substring(2)) >= 0
+                tok.startsWith("<=") -> cmp(tok.substring(2)) <= 0
+                tok.startsWith(">") -> cmp(tok.substring(1)) > 0
+                tok.startsWith("<") -> cmp(tok.substring(1)) < 0
+                tok.startsWith("=") -> cmp(tok.substring(1)) == 0
+                tok.contains('x') || tok.contains('X') || tok.contains('*') -> {
+                    val pre = tok.split('.').takeWhile { it != "x" && it != "X" && it != "*" }.map { it.toIntOrNull() ?: -1 }
+                    pre.indices.all { v.getOrElse(it) { 0 } == pre[it] }
+                }
+                tok.startsWith("~") -> { val p = tok.substring(1).split('.').map { it.toIntOrNull() ?: 0 }; v.getOrElse(0) { 0 } == p[0] && v.getOrElse(1) { 0 } == p.getOrElse(1) { 0 } && cmp(tok.substring(1)) >= 0 }
+                tok.startsWith("^") -> v.getOrElse(0) { 0 } == (tok.substring(1).split('.')[0].toIntOrNull() ?: 0) && cmp(tok.substring(1)) >= 0
+                else -> cmp(tok) == 0
+            }
+            if (!ok) return false
+        }
+        return true
+    }
+
+    /** Совместима ли пара: candidate (вышестоящий мод, например Sodium) с target (например Iris), по breaks/depends обеих сторон. */
+    fun pairCompatible(candFile: File, candId: String, targetFile: File, targetId: String): Boolean {
+        val c = modJson(candFile) ?: return false; val t = modJson(targetFile) ?: return false
+        val cv = c.optString("version"); val tv = t.optString("version")
+        // candidate «ломает» target?
+        c.opt("breaks").let { b -> if (b is JSONObject && b.has(targetId) && satisfies(tv, b.opt(targetId))) return false }
+        c.opt("conflicts").let { b -> if (b is JSONObject && b.has(targetId) && satisfies(tv, b.opt(targetId))) return false }
+        // target «ломает» candidate или требует другой диапазон?
+        t.opt("breaks").let { b -> if (b is JSONObject && b.has(candId) && satisfies(cv, b.opt(candId))) return false }
+        t.optJSONObject("depends")?.let { d -> if (d.has(candId) && !satisfies(cv, d.opt(candId))) return false }
         return true
     }
 

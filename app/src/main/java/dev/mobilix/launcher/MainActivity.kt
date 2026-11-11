@@ -757,6 +757,31 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Подбирает у мода-«требователя» (например, Sodium) более старую версию, совместимую с уже стоящим модом (Iris), и заменяет файл. Возвращает описание или null. */
+    private fun downgradeToMatch(breakerId: String, targetId: String, targetFile: File, gd: File): String? {
+        val oldBreaker = CrashDoctor.enabledMods(gd).firstOrNull { it.id == breakerId } ?: return null
+        val ld = loaderOfProfile(selectedProfile())
+        val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") + "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(ld)).toString(), "UTF-8")
+        val vers = JSONArray(apiGet("/project/$breakerId/version$g"))
+        for (i in 0 until minOf(vers.length(), 20)) {
+            val files = vers.getJSONObject(i).getJSONArray("files")
+            var f = files.getJSONObject(0)
+            for (k in 0 until files.length()) if (files.getJSONObject(k).optBoolean("primary")) f = files.getJSONObject(k)
+            if (f.getString("filename") == oldBreaker.file.name) continue
+            val tmp = File(cacheDir, "cand_$i.jar")
+            try {
+                if (!download(f.getString("url"), tmp, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) continue
+                if (!CrashDoctor.pairCompatible(tmp, breakerId, targetFile, targetId)) continue
+                val dest = File(oldBreaker.file.parentFile, f.getString("filename"))
+                val oldName = oldBreaker.file.name
+                oldBreaker.file.delete()
+                tmp.copyTo(dest, overwrite = true)
+                return oldBreaker.name + ": " + oldName + " → " + dest.name + " (" + tr("подобран под ", "matched to ") + CrashDoctor.modVersion(targetFile).let { v -> CrashDoctor.readMod(targetFile).name + " " + v } + ")"
+            } finally { tmp.delete() }
+        }
+        return null
+    }
+
     /** Докачивает недостающие моды-зависимости с Modrinth под текущую версию и загрузчик. Вызывается в фоновом потоке. Возвращает (установлено, не удалось). */
     private fun installMissingDeps(ids: List<String>, gd: File): Pair<List<String>, List<String>> {
         val ok = ArrayList<String>(); val bad = ArrayList<String>()
@@ -831,7 +856,7 @@ class MainActivity : Activity() {
             Thread {
                 // моды, которые устарели для других модов сборки (Iris для Sodium и т. п.): пробуем обновить до свежей версии
                 val upOk = ArrayList<String>(); val upBad = ArrayList<String>()
-                for ((uid, need) in rep.updates) {
+                for ((uid, need, breaker) in rep.updates) {
                     val old = rep.mods.firstOrNull { it.id == uid } ?: continue
                     val bak = File(old.file.parentFile, old.file.name + ".disabled")
                     if (!old.file.renameTo(bak)) continue
@@ -840,8 +865,14 @@ class MainActivity : Activity() {
                     if (okU.isNotEmpty() && newJar != null && CrashDoctor.versionAtLeast(CrashDoctor.modVersion(newJar.file), need)) { bak.delete(); upOk.add(old.name + " → " + CrashDoctor.modVersion(newJar.file)) }
                     else {
                         newJar?.file?.delete()
-                        // для этой версии игры нужной версии нет — следуем совету Fabric: оставляем мод отключённым
-                        upBad.add(old.name + " (" + tr("нужна версия ≥ $need, для вашей версии игры её нет", "need version ≥ $need, none for your game version") + ")")
+                        // нужной версии нет: возвращаем старый и подбираем более старую версию «требующего» мода (Sodium) под него
+                        bak.renameTo(old.file)
+                        val fixed = try { downgradeToMatch(breaker, old.id, old.file, rep.gameDir) } catch (_: Throwable) { null }
+                        if (fixed != null) upOk.add(fixed)
+                        else {
+                            old.file.renameTo(bak)
+                            upBad.add(old.name + " (" + tr("нужна версия ≥ $need, для вашей версии игры её нет, а подходящую старую версию $breaker подобрать не удалось", "need version ≥ $need, none for your game version, and no matching older $breaker was found") + ")")
+                        }
                     }
                 }
                 // зависимости считаем заново, уже без отключённых модов
