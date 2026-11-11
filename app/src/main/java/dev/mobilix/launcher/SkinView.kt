@@ -119,15 +119,22 @@ class SkinView(ctx: Context) : View(ctx) {
             c.drawBitmap(b, f.rect, RectF(f.rect), paint)
             c.restore()
         }
-        postInvalidateOnAnimation()
+        // экономия энергии: ~25 кадров/с вместо частоты экрана, а через 20 с без касаний вращение останавливается (касание возобновляет)
+        if (touching || now - rotStart < 20_000_000_000L) postInvalidateDelayed(40)
     }
+
+    private var rotStart = System.nanoTime()
+    private fun restartRotation() { rotStart = System.nanoTime(); last = rotStart; invalidate() }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); restartRotation() }
+    override fun onVisibilityChanged(changed: View, visibility: Int) { super.onVisibilityChanged(changed, visibility); if (visibility == VISIBLE) restartRotation() }
+    override fun onWindowVisibilityChanged(visibility: Int) { super.onWindowVisibilityChanged(visibility); if (visibility == VISIBLE) restartRotation() }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { touching = true; lastX = e.x; lastY = e.y; parent?.requestDisallowInterceptTouchEvent(true) }
+            MotionEvent.ACTION_DOWN -> { touching = true; rotStart = System.nanoTime(); lastX = e.x; lastY = e.y; parent?.requestDisallowInterceptTouchEvent(true) }
             MotionEvent.ACTION_MOVE -> { yaw += (e.x - lastX) * 0.6f; lastX = e.x
                 pitch = (pitch + (e.y - lastY) * 0.5f).coerceIn(-70f, 70f); lastY = e.y; invalidate() }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { touching = false; last = System.nanoTime() }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { touching = false; last = System.nanoTime(); rotStart = last; invalidate() }
         }
         return true
     }

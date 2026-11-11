@@ -390,7 +390,7 @@ class FxFrame(ctx: Context) : android.widget.FrameLayout(ctx) {
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
         val k = Fx.kind
-        if (k != null && Fx.on) { fx.draw(c, width, height, k); postInvalidateOnAnimation() }
+        if (k != null && Fx.on) { fx.draw(c, width, height, k); postInvalidateDelayed(33) }
     }
 }
 
@@ -401,7 +401,7 @@ class FxLinear(ctx: Context) : LinearLayout(ctx) {
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
         val k = Fx.kind
-        if (k != null && Fx.on) { fx.draw(c, width, height, k); postInvalidateOnAnimation() }
+        if (k != null && Fx.on) { fx.draw(c, width, height, k); postInvalidateDelayed(33) }
     }
 }
 
