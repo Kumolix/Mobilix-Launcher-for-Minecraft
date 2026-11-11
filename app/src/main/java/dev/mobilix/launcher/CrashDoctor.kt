@@ -8,7 +8,7 @@ import java.util.zip.ZipFile
 
 /** Разбор вылетов из-за модов: находит подозрительные моды по crash-report, latest.log и hs_err.log. */
 object CrashDoctor {
-    class Mod(val id: String, val name: String, val file: File, val depends: Set<String>)
+    class Mod(val id: String, val name: String, val file: File, val depends: Set<String>, val provides: Set<String> = emptySet())
     class Suspect(val mod: Mod, val why: String)
     class Report(
         val gameDir: File,
@@ -17,6 +17,7 @@ object CrashDoctor {
         val notes: List<String>,
         val native: Boolean,          // нет Java-ошибки: процесс упал или был убит
         val hasRenderMod: Boolean,
+        val missing: List<String> = emptyList(),   // id модов-зависимостей, которых нет в сборке
     )
     class Detected(val gameDir: File, val start: Long, val kind: String)
 
@@ -50,7 +51,7 @@ object CrashDoctor {
         File(gd, "crash-reports").listFiles()?.filter { it.isFile && it.lastModified() >= since - 5000 }?.maxByOrNull { it.lastModified() }
 
     fun readMod(f: File): Mod {
-        var id = ""; var name = ""; val dep = HashSet<String>()
+        var id = ""; var name = ""; val dep = HashSet<String>(); val prov = HashSet<String>()
         try {
             ZipFile(f).use { z ->
                 fun text(n: String) = z.getEntry(n)?.let { z.getInputStream(it).bufferedReader().use { r -> r.readText() } }
@@ -60,6 +61,7 @@ object CrashDoctor {
                 if (fj != null) {
                     val o = JSONObject(fj); id = o.optString("id"); name = o.optString("name")
                     o.optJSONObject("depends")?.keys()?.forEach { dep.add(it) }
+                    o.optJSONArray("provides")?.let { a -> for (i in 0 until a.length()) prov.add(a.optString(i)) }
                 } else if (qj != null) {
                     val o = JSONObject(qj).optJSONObject("quilt_loader")
                     id = o?.optString("id") ?: ""; name = o?.optJSONObject("metadata")?.optString("name") ?: ""
@@ -70,7 +72,25 @@ object CrashDoctor {
             }
         } catch (_: Throwable) {}
         val base = f.name.removeSuffix(".disabled").removeSuffix(".jar")
-        return Mod(id.ifEmpty { base.lowercase() }, name.ifEmpty { base }, f, dep)
+        return Mod(id.ifEmpty { base.lowercase() }, name.ifEmpty { base }, f, dep, prov)
+    }
+
+    fun hasRenderMods(gd: File): Boolean = enabledMods(gd).any { it.id in RENDER_MODS }
+
+    private val BUILTIN = setOf("minecraft", "java", "fabricloader", "fabric-loader", "quilt_loader", "quilt_loader_minecraft", "forge", "neoforge", "mixinextras")
+
+    /** Обязательные зависимости Fabric, которых нет среди модов сборки (id проекта на Modrinth обычно совпадает с id мода). */
+    fun missingDeps(mods: List<Mod>): List<String> {
+        val have = HashSet<String>()
+        mods.forEach { have.add(it.id); have.addAll(it.provides) }
+        val hasApi = "fabric-api" in have
+        val out = LinkedHashSet<String>()
+        for (m in mods) for (d in m.depends) {
+            if (d in BUILTIN || d in have) continue
+            if (d.startsWith("fabric-") && d != "fabric-api") { if (!hasApi) out.add("fabric-api"); continue }   // модули Fabric API лежат внутри fabric-api
+            out.add(d)
+        }
+        return out.toList()
     }
 
     fun enabledMods(gd: File): List<Mod> =
@@ -128,7 +148,9 @@ object CrashDoctor {
             renderMods.forEach { add(it.id, tr("рендер-мод: на мобильном рендере часто роняет игру без ошибки в логе", "render mod: often crashes the game on the mobile renderer with no log error")) }
         }
         val suspects = reason.entries.map { Suspect(byId[it.key]!!, it.value) }
-        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty())
+        val missing = LinkedHashSet<String>(missingDeps(mods))
+        Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?which is missing").findAll(text).forEach { m -> if (m.groupValues[2] !in BUILTIN) missing.add(m.groupValues[2]) }
+        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList())
     }
 
     /** Отключает моды (переименование в .disabled) вместе с модами, которые от них зависят. Возвращает названия отключённых. */

@@ -757,11 +757,35 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Докачивает недостающие моды-зависимости с Modrinth под текущую версию и загрузчик. Вызывается в фоновом потоке. Возвращает (установлено, не удалось). */
+    private fun installMissingDeps(ids: List<String>, gd: File): Pair<List<String>, List<String>> {
+        val ok = ArrayList<String>(); val bad = ArrayList<String>()
+        val ld = loaderOfProfile(selectedProfile())
+        for (id in ids.distinct()) {
+            try {
+                val proj = JSONObject(apiGet("/project/$id"))
+                val title = proj.optString("title", id)
+                val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") + "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(ld)).toString(), "UTF-8")
+                val vers = JSONArray(apiGet("/project/$id/version$g"))
+                if (vers.length() == 0) { bad.add(title); continue }
+                val files = vers.getJSONObject(0).getJSONArray("files")
+                var f = files.getJSONObject(0)
+                for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
+                val dest = File(gd, "mods/" + f.getString("filename"))
+                if (download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) {
+                    idxSave(idx().apply { put(proj.optString("id", id), JSONObject().put("t", "mod").put("f", f.getString("filename")).put("n", title).put("l", ld).put("v", curBase())) })
+                    ok.add(title)
+                } else bad.add(title)
+            } catch (_: Throwable) { bad.add(id) }
+        }
+        return ok to bad
+    }
+
     /** При установке Sodium/Iris и подобных модов напоминает про профиль рендера Renderlix. */
     private fun suggestRenderlix(title: String) {
         val t = title.lowercase()
         if (listOf("sodium", "iris", "embeddium", "oculus", "rubidium", "distant horizons").none { t.contains(it) }) return
-        if (prefs.getInt("renderPreset", 0) == 1 || prefs.getBoolean("renderlixAsked", false)) return
+        if (prefs.getInt("renderPreset", 2) != 0 || prefs.getBoolean("renderlixAsked", false)) return
         prefs.edit().putBoolean("renderlixAsked", true).apply()
         MobDialog(this).setTitle(tr("Включить Renderlix для Sodium/Iris?", "Enable Renderlix for Sodium/Iris?"))
             .setMessage(tr("Эти моды плохо работают со стандартными настройками рендера: игра может вылетать. Профиль Renderlix «Sodium / Iris» включает OpenGL 4.5, compute-шейдеры и игнор ошибок шейдеров. Его можно переключить в Настройки → Игра.",
@@ -794,19 +818,32 @@ class MainActivity : Activity() {
             sb.append(tr("Подозрительные моды:", "Suspect mods:")).append('\n')
             rep.suspects.forEach { sb.append("• ").append(it.mod.name).append(" — ").append(it.why).append('\n') }
         } else sb.append(tr("Виновный мод не определён.", "No culprit mod was identified.")).append('\n')
+        if (rep.missing.isNotEmpty()) sb.append('\n').append(tr("Не хватает модов-зависимостей: ", "Missing dependency mods: ")).append(rep.missing.joinToString(", ")).append('\n')
         rep.notes.forEach { sb.append('\n').append(it) }
-        if (rep.hasRenderMod && prefs.getInt("renderPreset", 0) == 0)
+        if (rep.hasRenderMod && prefs.getInt("renderPreset", 2) == 0)
             sb.append("\n\n").append(tr("В сборке есть Sodium/Iris: попробуйте профиль Renderlix «Sodium / Iris» (Настройки → Игра).", "The build has Sodium/Iris: try the Renderlix “Sodium / Iris” profile (Settings → Game)."))
         val d = MobDialog(this).setTitle(tr("Вылет игры", "Game crash")).setMessage(sb.toString())
             .setNegativeButton(tr("Закрыть", "Close"), null)
             .setNeutralButton(tr("Вручную", "Manually")) { _, _ -> crashManual(rep, rep.suspects.map { it.mod.id }.toMutableSet()) }
-        if (rep.suspects.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
-            val off = CrashDoctor.disable(rep, rep.suspects.map { it.mod })
-            MobDialog(this).setTitle(tr("Готово", "Done"))
-                .setMessage(tr("Отключено модов: ${off.size}\n", "Mods disabled: ${off.size}\n") + off.joinToString("\n") { "• $it" } + "\n\n" + tr("Файлы переименованы в .disabled, их можно вернуть в разделе «Вручную». Запустите игру снова.", "Files were renamed to .disabled and can be restored via “Manually”. Launch the game again."))
-                .setPositiveButton("OK", null).show()
+        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
+            val off = if (rep.suspects.isNotEmpty()) CrashDoctor.disable(rep, rep.suspects.map { it.mod }) else emptyList()
+            Toast.makeText(this, tr("Исправляю…", "Fixing…"), Toast.LENGTH_SHORT).show()
+            Thread {
+                // зависимости считаем заново, уже без отключённых модов
+                val need = (CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)) + rep.missing.filter { m -> off.isEmpty() || CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)).contains(m) }).distinct()
+                val (okDeps, badDeps) = if (need.isNotEmpty()) installMissingDeps(need, rep.gameDir) else (emptyList<String>() to emptyList())
+                runOnUiThread {
+                    val m = StringBuilder()
+                    if (off.isNotEmpty()) m.append(tr("Отключено модов: ${off.size}\n", "Mods disabled: ${off.size}\n")).append(off.joinToString("\n") { "• $it" }).append("\n\n")
+                    if (okDeps.isNotEmpty()) m.append(tr("Докачаны зависимости:\n", "Dependencies downloaded:\n")).append(okDeps.joinToString("\n") { "• $it" }).append("\n\n")
+                    if (badDeps.isNotEmpty()) m.append(tr("Не удалось найти под вашу версию:\n", "Not found for your version:\n")).append(badDeps.joinToString("\n") { "• $it" }).append("\n\n")
+                    if (m.isEmpty()) m.append(tr("Нечего исправлять автоматически.\n\n", "Nothing to fix automatically.\n\n"))
+                    m.append(tr("Отключённые файлы переименованы в .disabled, их можно вернуть в разделе «Вручную». Запустите игру снова.", "Disabled files were renamed to .disabled and can be restored via “Manually”. Launch the game again."))
+                    MobDialog(this).setTitle(tr("Готово", "Done")).setMessage(m.toString()).setPositiveButton("OK", null).show()
+                }
+            }.start()
         }
-        else if (rep.hasRenderMod && prefs.getInt("renderPreset", 0) == 0) d.setPositiveButton(tr("Включить Renderlix", "Enable Renderlix")) { _, _ ->
+        else if (rep.hasRenderMod && prefs.getInt("renderPreset", 2) == 0) d.setPositiveButton(tr("Включить Renderlix", "Enable Renderlix")) { _, _ ->
             prefs.edit().putInt("renderPreset", 1).apply()
             Toast.makeText(this, tr("Профиль Renderlix «Sodium / Iris» включён", "Renderlix “Sodium / Iris” profile enabled"), Toast.LENGTH_LONG).show()
         }
@@ -1202,9 +1239,9 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
         col.addView(TextView(this).apply { text = tr("Рендер Renderlix", "Renderlix renderer"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Стандарт", "Standard"), "Sodium / Iris"), prefs.getInt("renderPreset", 0)) { i -> prefs.edit().putInt("renderPreset", i).apply() })
-        col.addView(note(tr("Renderlix — профиль настроек MobileGlues (LGPL-2.1, © MobileGL-Dev). «Sodium / Iris»: OpenGL 4.5, compute-шейдеры, игнор ошибок шейдеров и кэш шейдеров. Может быть медленнее на слабых GPU. Применяется при следующем запуске.",
-            "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. May be slower on weak GPUs. Applied on next launch.")))
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Стандарт", "Standard"), "Sodium / Iris"), when (prefs.getInt("renderPreset", 2)) { 2 -> 0; 0 -> 1; else -> 2 }) { i -> prefs.edit().putInt("renderPreset", when (i) { 0 -> 2; 1 -> 0; else -> 1 }).apply() })
+        col.addView(note(tr("Renderlix — профиль настроек MobileGlues (LGPL-2.1, © MobileGL-Dev). «Авто» (рекомендуется): профиль Sodium / Iris включается сам, если в сборке есть Sodium, Iris, Embeddium и подобные моды, иначе — стандартный. «Sodium / Iris»: OpenGL 4.5, compute-шейдеры, игнор ошибок шейдеров и кэш шейдеров. Применяется при следующем запуске.",
+            "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Auto” (recommended): the Sodium / Iris profile is switched on automatically when the build has Sodium, Iris, Embeddium and similar mods, otherwise Standard. “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. Applied on next launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Адрес API зеркала", "Mirror API address"); setTextColor(Th.text); setPadding(0, dp(14), 0, 0) })
@@ -5120,7 +5157,8 @@ class MainActivity : Activity() {
     /** Профиль рендера Renderlix (настройки MobileGlues): 0 — стандарт, 1 — моды-шейдеры (Sodium/Iris). Пишет config.json и возвращает папку. */
     private fun writeRenderConfig(): File {
         val dir = File(filesDir, "mg"); dir.mkdirs()
-        val shaders = prefs.getInt("renderPreset", 0) == 1
+        val preset = prefs.getInt("renderPreset", 2)
+        val shaders = preset == 1 || (preset == 2 && try { CrashDoctor.hasRenderMods(curGameDir()) } catch (_: Throwable) { false })
         val c = JSONObject()
             .put("enableANGLE", 0)
             .put("enableNoError", if (shaders) 2 else 0)            // 2 = игнорировать ошибки шейдеров (частично)
@@ -5133,7 +5171,7 @@ class MainActivity : Activity() {
             .put("fsr1Setting", 0)
             .put("hideMGEnvLevel", 0)
         File(dir, "config.json").writeText(c.toString())
-        log("Renderlix: профиль «" + (if (shaders) "Sodium/Iris" else "стандарт") + "», конфиг: " + dir.path)
+        log("Renderlix: профиль «" + (if (shaders) "Sodium/Iris" else "стандарт") + "»" + (if (preset == 2) " (авто)" else "") + ", конфиг: " + dir.path)
         return dir
     }
 
