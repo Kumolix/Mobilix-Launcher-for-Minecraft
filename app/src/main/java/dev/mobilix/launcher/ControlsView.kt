@@ -68,7 +68,9 @@ fun keyName(kind: Int, code: Int): String =
 
 /** Слой управления поверх игры: кнопки, камера, режим редактирования раскладки. */
 class ControlsView(ctx: Context) : View(ctx) {
-    private val file = File(ctx.filesDir, "controls.json")
+    /** Режим «Управление Bedrock»: касание — удар, удержание — добыча; своя раскладка кнопок (controls_bedrock.json). */
+    private val bedrock: Boolean = try { JSONObject(File(ctx.filesDir, "game_settings.json").readText()).optBoolean("bedrock", false) } catch (_: Throwable) { false }
+    private val file = File(ctx.filesDir, if (bedrock) "controls_bedrock.json" else "controls.json")
     private val d = ctx.resources.displayMetrics.density
     val buttons = ArrayList<Btn>()
     var sens = 1.0f
@@ -92,7 +94,7 @@ class ControlsView(ctx: Context) : View(ctx) {
 
     private sealed class Owner {
         class B(val b: Btn, var sx: Float, var sy: Float, var moved: Boolean = false) : Owner()
-        class Cam(var lx: Float, var ly: Float) : Owner()
+        class Cam(var lx: Float, var ly: Float, val sx: Float = 0f, val sy: Float = 0f, val t0: Long = 0L, var moved: Boolean = false, var held: Boolean = false, var hold: Runnable? = null) : Owner()
         class Pad(val sx: Float, val sy: Float, var lx: Float, var ly: Float, val t0: Long, var moved: Boolean = false) : Owner()
         object Gui : Owner()
     }
@@ -145,7 +147,32 @@ class ControlsView(ctx: Context) : View(ctx) {
     init { load() }
 
     // ---------- раскладка ----------
+    private fun bedrockDefaults() {
+        buttons.clear()
+        fun k(l: String, c: Int, x: Float, y: Float, w: Int, h: Int = w, t: Boolean = false) = buttons.add(Btn(l, K_KEY, c, x, y, w, h, t))
+        // крестовина слева (как в Pocket Edition), в центре — бег
+        k("▲", 'W'.code, 0.12f, 0.62f, 56); k("▼", 'S'.code, 0.12f, 0.90f, 56)
+        k("◀", 'A'.code, 0.06f, 0.76f, 56); k("▶", 'D'.code, 0.18f, 0.76f, 56)
+        k("Бег", 341, 0.12f, 0.76f, 40, 40, true)
+        // справа: прыжок, приседание, «ставить» (ПКМ)
+        k("Прыжок", 32, 0.90f, 0.76f, 84)
+        k("Присед", 340, 0.80f, 0.88f, 52, 52, true)
+        buttons.add(Btn("Ставить", K_MOUSE, 1, 0.90f, 0.55f, 64, 64))
+        // верхний ряд: пауза по центру
+        buttons.add(Btn("GUI", K_HIDE, 0, 0.035f, 0.09f, 40, 40))
+        buttons.add(Btn("⌨", K_KEYBOARD, 0, 0.12f, 0.07f, 40, 40))
+        k("Чат", 'T'.code, 0.19f, 0.07f, 40); k("F5", 294, 0.26f, 0.07f, 40)
+        k("II", 256, 0.50f, 0.07f, 44)
+        buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.61f, 0.07f, 40, 40))
+        k("Бросить", 'Q'.code, 0.88f, 0.07f, 40)
+        // хотбар по центру, инвентарь справа от него
+        for (i in 1..9) k(i.toString(), 48 + i, 0.5f + (i - 5) * 0.043f, 0.94f, 36)
+        k("Инв.", 'E'.code, 0.72f, 0.94f, 44)
+        sens = 1.0f
+    }
+
     private fun defaults() {
+        if (bedrock) { bedrockDefaults(); return }
         buttons.clear()
         fun k(l: String, c: Int, x: Float, y: Float, w: Int, h: Int = w, t: Boolean = false) =
             buttons.add(Btn(l, K_KEY, c, x, y, w, h, t))
@@ -427,7 +454,13 @@ class ControlsView(ctx: Context) : View(ctx) {
                     owners[id] = Owner.Pad(x, y, x, y, android.os.SystemClock.uptimeMillis())
                     scrollAcc = 0f
                 } else if (cursorDisabled()) {
-                    owners[id] = Owner.Cam(x, y)
+                    val cam = Owner.Cam(x, y, x, y, android.os.SystemClock.uptimeMillis())
+                    owners[id] = cam
+                    if (bedrock) {
+                        // удержание без движения = добыча (ЛКМ зажата)
+                        val r = Runnable { if (owners[id] === cam && !cam.moved && !cam.held) { cam.held = true; try { Native.pushEvent(4, 0.0, 0.0, 1) } catch (_: Throwable) {} } }
+                        cam.hold = r; postDelayed(r, 300)
+                    }
                 } else {
                     owners[id] = Owner.Gui
                     vx = x.toDouble() * gameScale; vy = y.toDouble() * gameScale
@@ -448,6 +481,7 @@ class ControlsView(ctx: Context) : View(ctx) {
                             }
                         }
                         is Owner.Cam -> {
+                            if (bedrock && !o.held && !o.moved && (Math.abs(x - o.sx) > 10 * d || Math.abs(y - o.sy) > 10 * d)) { o.moved = true; o.hold?.let { removeCallbacks(it) } }
                             vx += (x - o.lx) * sens; vy += (y - o.ly) * sens
                             o.lx = x; o.ly = y
                             try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
@@ -487,6 +521,15 @@ class ControlsView(ctx: Context) : View(ctx) {
                         android.os.SystemClock.uptimeMillis() - o.t0 < 350) {
                         // короткое касание = левый клик в позиции курсора
                         try { Native.pushEvent(4, 0.0, 0.0, 1); Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
+                    }
+                    is Owner.Cam -> if (bedrock) {
+                        o.hold?.let { removeCallbacks(it) }
+                        if (o.held) { try { Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {} }
+                        else if (!o.moved && e.actionMasked != MotionEvent.ACTION_CANCEL && android.os.SystemClock.uptimeMillis() - o.t0 < 300) {
+                            // короткое касание = удар
+                            try { Native.pushEvent(4, 0.0, 0.0, 1) } catch (_: Throwable) {}
+                            postDelayed({ try { Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {} }, 70)
+                        }
                     }
                     else -> {}
                 }
