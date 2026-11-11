@@ -1000,6 +1000,7 @@ class MainActivity : Activity() {
                 .put("renderScale", effectiveScale())
                 .put("joystick", prefs.getBoolean("joystick", false))
                 .put("bedrock", prefs.getBoolean("bedrock", false))
+                .put("hideSys", prefs.getBoolean("hideSys", false))
                 .put("fps", prefs.getInt("fps", 0))
                 .put("fullscreen", prefs.getBoolean("fullscreen", false)).toString())
         } catch (_: Exception) {}
@@ -1250,6 +1251,12 @@ class MainActivity : Activity() {
             "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Auto” (recommended): the Sodium / Iris profile is switched on automatically when the build has Sodium, Iris, Embeddium and similar mods, otherwise Standard. “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. Applied on next launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
+        col.addView(TextView(this).apply { text = tr("Скрыть системные кнопки в игре", "Hide system buttons in game"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("hideSys", false)) 1 else 0) { i ->
+            prefs.edit().putBoolean("hideSys", i == 1).apply(); writeGameSettings()
+        })
+        col.addView(note(tr("Прячет кнопки «Раскладка» и «Показать лог» в игре. Раскладка открывается, если удерживать кнопку Esc (в режиме Bedrock — «II») 5 секунд; закрыть — кнопка «Готово» внизу.",
+            "Hides the “Layout” and “Show log” buttons in game. The layout editor opens when you hold the Esc button (“II” in Bedrock mode) for 5 seconds; close it with the “Done” button at the bottom.")))
         col.addView(TextView(this).apply { text = tr("Управление Bedrock", "Bedrock controls"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("bedrock", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("bedrock", i == 1).apply(); writeGameSettings()

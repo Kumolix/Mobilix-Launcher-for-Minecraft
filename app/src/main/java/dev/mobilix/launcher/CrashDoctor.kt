@@ -41,10 +41,23 @@ object CrashDoctor {
             when {
                 crashReport != null -> Detected(gd, start, "crash")
                 hs != null -> Detected(gd, start, "native")
-                !ended && System.currentTimeMillis() - start > 20000 -> Detected(gd, start, "killed")
+                !ended && System.currentTimeMillis() - start > 20000 && killedBySystem(ctx, start) -> Detected(gd, start, "killed")
                 else -> null
             }
         } catch (_: Throwable) { null }
+    }
+
+    /** Процесс игры убила система (нехватка памяти, сигнал, сбой), а не пользователь (закрыл вкладку / смахнул). До Android 11 причину узнать нельзя — не считаем вылетом. */
+    private fun killedBySystem(ctx: Context, start: Long): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 30) return false
+        return try {
+            val infos = (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getHistoricalProcessExitReasons(ctx.packageName, 0, 8)
+            val g = infos.filter { it.processName.endsWith(":game") && it.timestamp >= start }.maxByOrNull { it.timestamp } ?: return false
+            g.reason in setOf(
+                android.app.ApplicationExitInfo.REASON_LOW_MEMORY, android.app.ApplicationExitInfo.REASON_CRASH,
+                android.app.ApplicationExitInfo.REASON_CRASH_NATIVE, android.app.ApplicationExitInfo.REASON_SIGNALED,
+                android.app.ApplicationExitInfo.REASON_ANR, android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE)
+        } catch (_: Throwable) { false }
     }
 
     private fun latestCrashReport(gd: File, since: Long): File? =

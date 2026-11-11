@@ -383,18 +383,30 @@ class ControlsView(ctx: Context) : View(ctx) {
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
         return object : android.view.inputmethod.BaseInputConnection(this, false) {
-            override fun commitText(t: CharSequence, p: Int): Boolean {
-                t.codePoints().forEach { pk(2, it) }
-                return true
+            // Некоторые клавиатуры (MIUI/Poco и др.) присылают текст как «составляемый» (setComposingText) или цифры и знаки
+            // как обычные нажатия клавиш: раньше такой ввод (например, IP сервера) терялся. Теперь текст пишется по мере набора.
+            private var comp = ""
+            private fun applyComp(n: String) {
+                var i = 0
+                while (i < comp.length && i < n.length && comp[i] == n[i]) i++
+                repeat(comp.length - i) { key(259) }
+                n.substring(i).codePoints().forEach { pk(2, it) }
+                comp = n
             }
-            override fun setComposingText(t: CharSequence, p: Int): Boolean = true
-            override fun finishComposingText(): Boolean = true
-            override fun deleteSurroundingText(b: Int, a: Int): Boolean { repeat(maxOf(b, 1)) { key(259) }; return true }
+            override fun commitText(t: CharSequence, p: Int): Boolean { applyComp(t.toString()); comp = ""; return true }
+            override fun setComposingText(t: CharSequence, p: Int): Boolean { applyComp(t.toString()); return true }
+            override fun finishComposingText(): Boolean { comp = ""; return true }
+            override fun deleteSurroundingText(b: Int, a: Int): Boolean { repeat(maxOf(b, 1)) { key(259); if (comp.isNotEmpty()) comp = comp.dropLast(1) }; return true }
             override fun sendKeyEvent(e: android.view.KeyEvent): Boolean {
                 if (e.action == android.view.KeyEvent.ACTION_DOWN) {
                     when (e.keyCode) {
-                        android.view.KeyEvent.KEYCODE_DEL -> key(259)
-                        android.view.KeyEvent.KEYCODE_ENTER -> key(257)
+                        android.view.KeyEvent.KEYCODE_DEL -> { key(259); if (comp.isNotEmpty()) comp = comp.dropLast(1) }
+                        android.view.KeyEvent.KEYCODE_FORWARD_DEL -> key(261)
+                        android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> key(257)
+                        android.view.KeyEvent.KEYCODE_TAB -> key(258)
+                        android.view.KeyEvent.KEYCODE_DPAD_LEFT -> key(263)
+                        android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> key(262)
+                        else -> { val u = e.unicodeChar; if (u > 0 && !e.isCtrlPressed) pk(2, u) }   // цифры, точка, двоеточие и т. п.
                     }
                 }
                 return true
@@ -424,7 +436,15 @@ class ControlsView(ctx: Context) : View(ctx) {
         if (down) all.forEach { fireOne(it[0], it[1], true) } else all.asReversed().forEach { fireOne(it[0], it[1], false) }
     }
 
+    /** Вызывается, если Esc (в Bedrock — «II») удерживать 5 секунд: вход/выход из режима раскладки. */
+    var onHoldEsc: (() -> Unit)? = null
+    private var escHold: Runnable? = null
+
     private fun press(b: Btn, down: Boolean) {
+        if (!editing && b.kind == K_KEY && b.code == 256) {
+            escHold?.let { removeCallbacks(it) }
+            if (down) { val r = Runnable { onHoldEsc?.invoke() }; escHold = r; postDelayed(r, 5000) }
+        }
         if (b.toggle) {
             if (down) { b.on = !b.on; fire(b, b.on) }
         } else {

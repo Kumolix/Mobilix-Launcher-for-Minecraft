@@ -152,11 +152,15 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             bar,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END)
         )
+        // «Скрыть системные кнопки в игре»: кнопки «Раскладка» и «Лог» прячутся, раскладка открывается удержанием Esc (Bedrock: «II») 5 с
+        if (gs().optBoolean("hideSys", false)) bar.visibility = View.GONE
+        controls.onHoldEsc = { layoutBtn.performClick() }
         val editBar = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
             addView(eb("+ Кнопка") { controls.newButton() })
             addView(eb("Камера") { controls.cameraDialog() })
             addView(eb("Сброс") { controls.reset() })
+            addView(eb("Готово") { layoutBtn.performClick() })
         }
         root.addView(
             editBar,
