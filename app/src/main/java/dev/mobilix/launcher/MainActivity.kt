@@ -1240,7 +1240,12 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
         col.addView(TextView(this).apply { text = tr("Рендер Renderlix", "Renderlix renderer"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Стандарт", "Standard"), "Sodium / Iris"), when (prefs.getInt("renderPreset", 2)) { 2 -> 0; 0 -> 1; else -> 2 }) { i -> prefs.edit().putInt("renderPreset", when (i) { 0 -> 2; 1 -> 0; else -> 1 }).apply() })
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Стандарт", "Standard"), "Sodium / Iris", tr("Свой", "Custom")), when (prefs.getInt("renderPreset", 2)) { 2 -> 0; 0 -> 1; 1 -> 2; else -> 3 }) { i -> prefs.edit().putInt("renderPreset", when (i) { 0 -> 2; 1 -> 0; 2 -> 1; else -> 3 }).apply() })
+        col.addView(Button(this).apply {
+            text = tr("Настроить свой профиль…", "Edit custom profile…"); isAllCaps = false; setTextColor(Th.accent)
+            background = GradientDrawable().apply { setColor(Th.chip2); setStroke(dp(2), Th.act) }
+            setOnClickListener { renderCustomDialog() }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(8) })
         col.addView(note(tr("Renderlix — профиль настроек MobileGlues (LGPL-2.1, © MobileGL-Dev). «Авто» (рекомендуется): профиль Sodium / Iris включается сам, если в сборке есть Sodium, Iris, Embeddium и подобные моды, иначе — стандартный. «Sodium / Iris»: OpenGL 4.5, compute-шейдеры, игнор ошибок шейдеров и кэш шейдеров. Применяется при следующем запуске.",
             "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Auto” (recommended): the Sodium / Iris profile is switched on automatically when the build has Sodium, Iris, Embeddium and similar mods, otherwise Standard. “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. Applied on next launch.")))
         col = colS
@@ -5162,11 +5167,53 @@ class MainActivity : Activity() {
         return dst
     }
 
+    /** Свой профиль Renderlix: список параметров MobileGlues, нажатие открывает выбор значения. */
+    private fun renderCustomDialog() {
+        class Opt(val key: String, val title: String, val values: List<Int>, val names: List<String>)
+        val opts = listOf(
+            Opt("rl_gl", tr("Версия OpenGL", "OpenGL version"), listOf(0, 32, 33, 40, 41, 42, 43, 44, 45, 46), listOf(tr("по умолчанию (4.0)", "default (4.0)"), "3.2", "3.3", "4.0", "4.1", "4.2", "4.3", "4.4", "4.5", "4.6")),
+            Opt("rl_noerr", tr("Ошибки OpenGL / шейдеров", "OpenGL / shader errors"), listOf(0, 1, 2, 3), listOf(tr("авто", "auto"), tr("не игнорировать", "do not ignore"), tr("игнорировать частично", "ignore partially"), tr("игнорировать полностью", "ignore fully"))),
+            Opt("rl_compute", tr("Compute-шейдеры", "Compute shaders"), listOf(0, 1), listOf(tr("выкл", "off"), tr("вкл", "on"))),
+            Opt("rl_cache", tr("Кэш шейдеров", "Shader cache"), listOf(0, 64, 128, 256, 512), listOf(tr("выкл", "off"), "64 " + tr("МБ", "MB"), "128 " + tr("МБ", "MB"), "256 " + tr("МБ", "MB"), "512 " + tr("МБ", "MB"))),
+            Opt("rl_fsr", tr("Масштабирование FSR 1", "FSR 1 upscaling"), listOf(0, 1, 2, 3, 4), listOf(tr("выкл", "off"), tr("ультра-качество", "ultra quality"), tr("качество", "quality"), tr("баланс", "balanced"), tr("производительность", "performance")))
+        )
+        fun label(o: Opt): String { val v = prefs.getInt(o.key, 0); return o.title + ": " + (o.names.getOrNull(o.values.indexOf(v)) ?: v.toString()) }
+        fun show() {
+            MobDialog(this).setTitle(tr("Свой профиль Renderlix", "Custom Renderlix profile"))
+                .setItems(opts.map { label(it) }.toTypedArray()) { _, i ->
+                    val o = opts[i]
+                    MobDialog(this).setTitle(o.title).setItems(o.names.toTypedArray()) { _, k ->
+                        prefs.edit().putInt(o.key, o.values[k]).putInt("renderPreset", 3).apply(); show()
+                    }.setNegativeButton(tr("Назад", "Back")) { _, _ -> show() }.show()
+                }
+                .setNegativeButton(tr("Закрыть", "Close"), null)
+                .setNeutralButton(tr("Сбросить", "Reset")) { _, _ -> prefs.edit().remove("rl_gl").remove("rl_noerr").remove("rl_compute").remove("rl_cache").remove("rl_fsr").apply(); show() }
+                .show()
+        }
+        show()
+    }
+
     /** Профиль рендера Renderlix (настройки MobileGlues): 0 — стандарт, 1 — моды-шейдеры (Sodium/Iris). Пишет config.json и возвращает папку. */
     private fun writeRenderConfig(): File {
         val dir = File(filesDir, "mg"); dir.mkdirs()
         val preset = prefs.getInt("renderPreset", 2)
         val shaders = preset == 1 || (preset == 2 && try { CrashDoctor.hasRenderMods(curGameDir()) } catch (_: Throwable) { false })
+        if (preset == 3) {
+            val cc = JSONObject()
+                .put("enableANGLE", 0)
+                .put("enableNoError", prefs.getInt("rl_noerr", 0))
+                .put("enableExtComputeShader", prefs.getInt("rl_compute", 0))
+                .put("enableExtTimerQuery", 1)
+                .put("enableExtDirectStateAccess", 1)
+                .put("angleDepthClearFixMode", 0)
+                .put("customGLVersion", prefs.getInt("rl_gl", 0))
+                .put("maxGlslCacheSize", prefs.getInt("rl_cache", 0))
+                .put("fsr1Setting", prefs.getInt("rl_fsr", 0))
+                .put("hideMGEnvLevel", 0)
+            File(dir, "config.json").writeText(cc.toString())
+            log("Renderlix: свой профиль: " + cc)
+            return dir
+        }
         val c = JSONObject()
             .put("enableANGLE", 0)
             .put("enableNoError", if (shaders) 2 else 0)            // 2 = игнорировать ошибки шейдеров (частично)
