@@ -20,7 +20,8 @@ Kumolix не собирает, не обрабатывает и не храни�
 ## 3. Исключения
 
 * Сторонние библиотеки. В приложении используются только библиотеки Apache Commons Compress и XZ for Java для распаковки архивов. Они не работают с сетью и ничего не собирают. Аналитики, рекламы и отчётов о сбоях в приложении нет.
-* Загрузки. Чтобы скачать нужные вам файлы, приложение обращается к серверам: Mojang/Microsoft (файлы игры), GitHub (Java, библиотеки, проверка обновлений), Fabric и Forge (загрузчики модов), Modrinth и его зеркала (каталог модов), а также Ely.by и Mojang, если вы сами импортируете скин по нику (на сервер уходит введённый ник). Эти сервисы могут видеть ваш IP-адрес и действуют по своим политикам конфиденциальности.
+* Загрузки. Чтобы скачать нужные вам файлы, приложение обращается к серверам: Mojang/Microsoft (файлы игры), GitHub (Java, библиотеки, проверка обновлений), Fabric, Quilt, Forge и NeoForge (загрузчики модов), Modrinth и его зеркала и CurseForge (каталог модов и сборок), а также Ely.by и Mojang, если вы сами импортируете скин по нику (на сервер уходит введённый ник). Эти сервисы могут видеть ваш IP-адрес и действуют по своим политикам конфиденциальности.
+* Где скачать приложение. APK выкладывается на GitHub и в Telegram-канале проекта. Эти платформы действуют по своим политикам и могут видеть ваш IP-адрес и аккаунт; нам доступна только их агрегированная статистика (число скачиваний на GitHub, просмотры постов), без данных о конкретных людях. Само приложение ничего о скачивании не отправляет.
 * Сама игра Minecraft принадлежит Mojang и работает по политике конфиденциальности Mojang/Microsoft.
 * Журналы запуска (launcher.log, game.log) лежат только на устройстве, нигде не отправляются и могут содержать путь к файлам и ник; вы сами решаете, показывать ли их кому-то.
 * Разрешения: интернет (загрузки), служба переднего плана и уведомления (чтобы загрузка не прерывалась), блокировка сна (на время загрузки). Приложение не читает контакты, местоположение, камеру, микрофон, фото и файлы вне своей папки.
@@ -43,7 +44,7 @@ Kumolix не собирает, не обрабатывает и не храни�
 
 Эта политика подготовлена в соответствии с требованиями GDPR.
 
-Дата вступления в силу: 25.10.2026
+Дата вступления в силу: 12.11.2026
 
 ---
 
@@ -65,7 +66,8 @@ The app works fully anonymously. No registration or accounts are required. Setti
 ## 3. Exceptions
 
 * Third-party libraries: only Apache Commons Compress and XZ for Java (archive extraction). They do not use the network and collect nothing. There is no analytics, advertising or crash reporting.
-* Downloads: to fetch files you ask for, the app contacts Mojang/Microsoft (game files), GitHub (Java, libraries, update check), Fabric and Forge (mod loaders), Modrinth and its mirrors (mod catalog), and Ely.by and Mojang if you import a skin by nickname (the nickname you type is sent). These services may see your IP address and follow their own privacy policies.
+* Downloads: to fetch files you ask for, the app contacts Mojang/Microsoft (game files), GitHub (Java, libraries, update check), Fabric, Quilt, Forge and NeoForge (mod loaders), Modrinth and its mirrors and CurseForge (mod and modpack catalog), and Ely.by and Mojang if you import a skin by nickname (the nickname you type is sent). These services may see your IP address and follow their own privacy policies.
+* Where to get the app: the APK is published on GitHub and in the project's Telegram channel. Those platforms follow their own policies and may see your IP address and account; we only get their aggregated statistics (GitHub download counts, post views), never data about individuals. The app itself reports nothing about how it was downloaded.
 * The Minecraft game itself belongs to Mojang and follows the Mojang/Microsoft privacy policy.
 * Launch logs (launcher.log, game.log) stay on the device, are never sent anywhere and may contain file paths and your nickname; you decide whether to share them.
 * Permissions: internet, foreground service and notifications, wake lock (downloads only). The app does not read contacts, location, camera, microphone, photos or files outside its own folder.
@@ -88,4 +90,4 @@ We may update this policy. Significant changes will be announced in the app or o
 
 This policy is prepared in line with GDPR requirements.
 
-Effective date: 2026-10-25
+Effective date: 2026-11-12
