@@ -10,6 +10,7 @@ jobs:
   mirror:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - name: Extract runtimes from the PojavLauncher APK
         run: |
           curl -fsSL https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk -o /tmp/p.apk
