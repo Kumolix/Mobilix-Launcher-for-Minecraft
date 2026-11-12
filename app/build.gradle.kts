@@ -12,7 +12,7 @@ android {
     defaultConfig {
         buildConfigField("String", "CF_KEY", "\"${System.getenv("CURSEFORGE_API") ?: ""}\"")
         applicationId = "dev.mobilix.launcher"
-        minSdk = 28
+        minSdk = (project.findProperty("minSdk") as String?)?.toIntOrNull() ?: 28   // 21 только для тестовых сборок 32-бит/x86 (job extra-abi)
         targetSdk = 34
         versionCode = 97
         versionName = rootProject.file("VERSION").readText().trim()
