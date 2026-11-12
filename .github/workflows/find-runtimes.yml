@@ -7,20 +7,14 @@ jobs:
   find:
     runs-on: ubuntu-latest
     steps:
-      - name: List runtime archives in Pojav repos
+      - name: List runtimes inside the PojavLauncher release APK
         run: |
-          for R in PojavLauncherTeam/PojavLauncher PojavLauncherTeam/android-openjdk-build-multiarch; do
-            echo "::group::$R"
-            git clone -q --depth 1 "https://github.com/$R.git" /tmp/r >/dev/null 2>&1 && {
-              (cd /tmp/r; git log -1 --format=%H; find . -path ./.git -prune -o \( -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.zip" \) -printf "%s %p\n" | head -60; ls)
-            } || echo "clone failed"
-            rm -rf /tmp/r
-            echo "::endgroup::"
-          done
-          echo "== releases"
-          for R in PojavLauncherTeam/PojavLauncher PojavLauncherTeam/android-openjdk-build-multiarch; do
-            curl -fsS "https://api.github.com/repos/$R/releases?per_page=8" | python3 -c "
+          URL=$(curl -fsS "https://api.github.com/repos/PojavLauncherTeam/PojavLauncher/releases?per_page=3" | python3 -c "
           import sys,json
           for r in json.load(sys.stdin):
-            print('$R', r['tag_name'], [(a['name'],a['size']) for a in r['assets']][:12])"
-          done
+            for a in r['assets']:
+              if a['name'].endswith('.apk'): print(a['browser_download_url']); raise SystemExit")
+          echo "APK: $URL"
+          curl -fsSL "$URL" -o /tmp/p.apk
+          unzip -l /tmp/p.apk | grep -i -E "assets/components|jre|runtime|\.tar\.xz" | head -80
+          unzip -l /tmp/p.apk | grep -E "lib/" | awk '{print $4}' | cut -d/ -f2 | sort | uniq -c
