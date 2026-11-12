@@ -1310,7 +1310,8 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
         col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es"), prefs.getInt("renderer", 0).coerceIn(0, 3)) { i -> prefs.edit().putInt("renderer", i).apply() })
+        val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (BuildConfig.LABS) listOf("Zink") else emptyList())
+        col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
         col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — если есть в плагине MobileGlues (иначе выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is used only if the MobileGlues plugin ships it (otherwise it turns off). Applies on next launch.")))
         col.addView(TextView(this).apply { text = tr("Рендер Renderlix", "Renderlix renderer"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Стандарт", "Standard"), "Sodium / Iris", tr("Свой", "Custom")), when (prefs.getInt("renderPreset", 2)) { 2 -> 0; 0 -> 1; 1 -> 2; else -> 3 }) { i -> prefs.edit().putInt("renderPreset", when (i) { 0 -> 2; 1 -> 0; 2 -> 1; else -> 3 }).apply() })
@@ -4550,7 +4551,13 @@ class MainActivity : Activity() {
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
         if (oldGl && legacy && (rendPref == 1 || rendPref == 2)) log("Версии до 1.13 работают только через gl4es, выбор рендерера игнорируется.")
         if (!useGl4es && oldGl && !legacy) log("Рендерер для 1.13–1.16.5: MobileGlues" + (if (rendPref == 2) " + ANGLE" else "") + " вместо gl4es.")
-        val mgPath = if (useGl4es) gl4es else ensureMobileGlues()
+        // Zink (только MobiLabs): Mesa OSMesa + Vulkan-драйвер телефона, рисует в буфер окна; пока для 1.17+ (OpenGL core)
+        val zink = BuildConfig.LABS && rendPref == 4 && !oldGl
+        if (BuildConfig.LABS && rendPref == 4 && oldGl) log("Zink пока только для 1.17+, для этой версии используется gl4es.")
+        val osmesaLib = File(applicationInfo.nativeLibraryDir, "libOSMesa.so")
+        if (zink && !osmesaLib.exists()) throw RuntimeException("В этой сборке нет libOSMesa.so")
+        if (zink) log("Рендерер: Zink (OSMesa → Vulkan)")
+        val mgPath = if (zink) osmesaLib.path else if (useGl4es) gl4es else ensureMobileGlues()
 
         // 6. Команда запуска
         if (elyOn() && !elyEnsureSession()) {
@@ -4632,7 +4639,8 @@ class MainActivity : Activity() {
             cmd.add("-Djna.boot.library.path=$lwjglPath")
             cmd.add("-Djna.nosys=true")
         }
-        if (mgPath != null) cmd.add("-Dorg.lwjgl.opengl.libname=$mgPath")
+        // для Zink функции GL ищутся через glXGetProcAddress из нашей libglfw.so (она перенаправляет в OSMesaGetProcAddress)
+        if (mgPath != null) cmd.add("-Dorg.lwjgl.opengl.libname=" + (if (zink) File(applicationInfo.nativeLibraryDir, "libglfw.so").path else mgPath))
         if (oldGl) {
             cmd.add("-Dlog4j2.formatMsgNoLookups=true")
             for (p in listOf("java.lang", "java.util", "java.io", "java.net", "java.nio", "sun.nio.ch")) { cmd.add("--add-opens"); cmd.add("java.base/$p=ALL-UNNAMED") }
@@ -4673,6 +4681,13 @@ class MainActivity : Activity() {
         launch.put("glLib", mgPath ?: "")
         if (useGl4es) {
             launch.put("env", JSONObject().put("LIBGL_ES", "2").put("LIBGL_NOBANNER", "1").put("LIBGL_NOERROR", "1"))
+        } else if (zink) {
+            launch.put("env", JSONObject()
+                .put("MESA_LOADER_DRIVER_OVERRIDE", "zink").put("GALLIUM_DRIVER", "zink")
+                .put("MESA_GL_VERSION_OVERRIDE", "4.6").put("MESA_GLSL_VERSION_OVERRIDE", "460")
+                .put("MESA_GLSL_CACHE_DIR", cacheDir.path).put("MESA_NO_ERROR", "1")
+                .put("force_glsl_extensions_warn", "true").put("allow_higher_compat_version", "true")
+                .put("allow_glsl_extension_directive_midshader", "true").put("ZINK_DESCRIPTORS", "lazy"))
         } else {
             // Renderlix: профиль настроек MobileGlues. Без MG_DIR_PATH MobileGlues считает лаунчер «неподдерживаемым» и игнорирует конфиг.
             try {

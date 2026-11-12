@@ -11,7 +11,11 @@ android {
 
     defaultConfig {
         buildConfigField("String", "CF_KEY", "\"${System.getenv("CURSEFORGE_API") ?: ""}\"")
-        applicationId = "dev.mobilix.launcher"
+        // MobiLabs: отдельное приложение рядом с основным (-Plabs=true, только CI-сборка для проверки Zink/ANGLE)
+        val labs = project.findProperty("labs") == "true"
+        applicationId = "dev.mobilix.launcher" + (if (labs) ".labs" else "")
+        buildConfigField("boolean", "LABS", labs.toString())
+        manifestPlaceholders["appLabel"] = if (labs) "MobiLabs" else "Mobilix"
         minSdk = (project.findProperty("minSdk") as String?)?.toIntOrNull() ?: 28   // 21 только для тестовых сборок 32-бит/x86 (job extra-abi)
         targetSdk = 34
         versionCode = 97

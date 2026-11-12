@@ -17,9 +17,9 @@
         android:allowNativeHeapPointerTagging="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="Mobilix"
+        android:label="${appLabel}"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
-        <provider android:name=".ShareProvider" android:authorities="dev.mobilix.launcher.share" android:exported="false" android:grantUriPermissions="true" />
+        <provider android:name=".ShareProvider" android:authorities="${applicationId}.share" android:exported="false" android:grantUriPermissions="true" />
         <service android:name=".InstallerService" android:process=":game" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".DownloadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <activity

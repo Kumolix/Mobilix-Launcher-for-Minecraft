@@ -65,9 +65,58 @@ EXPORT void smc_set_surface(ANativeWindow* w, int width, int height) {
     G.w = width; G.h = height;
 }
 
+#ifdef MOBILIX_OSMESA
+// ---------- Zink (MobiLabs): Mesa OSMesa рисует прямо в буфер Android-окна ----------
+// OSMesa (gallium + Zink) выполняет OpenGL на Vulkan-драйвере телефона и пишет кадр в память; мы блокируем буфер окна
+// (ANativeWindow_lock), отдаём его OSMesa и по swap публикуем (unlockAndPost). Константы из GL/osmesa.h.
+#include <android/native_window.h>
+typedef void* OSMesaContext;
+static struct {
+    int on, cur;
+    OSMesaContext ctx;
+    OSMesaContext (*create_attribs)(const int*, OSMesaContext);
+    int (*make)(OSMesaContext, void*, unsigned, int, int);
+    void (*pix)(int, int);
+    void* (*proc)(const char*);
+    void (*destroy)(OSMesaContext);
+} OS;
+static void (*os_finish)(void);
+static int os_locked = 0;
+// блокируем следующий буфер окна и привязываем к нему контекст
+static int os_lock_make(void) {
+    ANativeWindow_Buffer b;
+    if (!G.win || !OS.ctx) return 0;
+    if (ANativeWindow_lock(G.win, &b, NULL) != 0) return 0;
+    os_locked = 1;
+    OS.pix(0x10 /*OSMESA_ROW_LENGTH*/, b.stride);
+    OS.pix(0x11 /*OSMESA_Y_UP*/, 0);
+    int ok = OS.make(OS.ctx, b.bits, 0x1401 /*GL_UNSIGNED_BYTE*/, b.width, b.height);
+    OS.cur = ok ? 1 : 0;
+    return ok;
+}
+static void os_unlock(void) { if (os_locked) { ANativeWindow_unlockAndPost(G.win); os_locked = 0; } }
+// glXGetProcAddress нужен LWJGL (мы указываем libname = libglfw.so)
+EXPORT void* glXGetProcAddress(const char* n) { return OS.proc ? OS.proc(n) : NULL; }
+EXPORT void* glXGetProcAddressARB(const char* n) { return OS.proc ? OS.proc(n) : NULL; }
+#define OS_ON (OS.on)
+#else
+#define OS_ON 0
+#endif
+
 EXPORT void smc_set_gl_lib(const char* path) {
     G.gl_lib = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     LOG("gl lib %s -> %p", path, G.gl_lib);
+#ifdef MOBILIX_OSMESA
+    if (G.gl_lib && strstr(path, "OSMesa")) {
+        OS.create_attribs = (OSMesaContext (*)(const int*, OSMesaContext)) dlsym(G.gl_lib, "OSMesaCreateContextAttribs");
+        OS.make = (int (*)(OSMesaContext, void*, unsigned, int, int)) dlsym(G.gl_lib, "OSMesaMakeCurrent");
+        OS.pix = (void (*)(int, int)) dlsym(G.gl_lib, "OSMesaPixelStore");
+        OS.proc = (void* (*)(const char*)) dlsym(G.gl_lib, "OSMesaGetProcAddress");
+        OS.destroy = (void (*)(OSMesaContext)) dlsym(G.gl_lib, "OSMesaDestroyContext");
+        OS.on = OS.create_attribs && OS.make && OS.pix && OS.proc;
+        LOG("OSMesa/Zink: %s", OS.on ? "функции найдены" : "ОШИБКА: нет функций OSMesa");
+    }
+#endif
 }
 
 static double now(void) {
@@ -100,6 +149,19 @@ EXPORT void glfwWindowHintString(int h, const char* v) {}
 
 EXPORT void* glfwCreateWindow(int width, int height, const char* title, void* monitor, void* share) {
     if (!G.win) { if (G.err) G.err(0x10008, "нет Android-поверхности"); return NULL; }
+#ifdef MOBILIX_OSMESA
+    if (OS.on) {
+        ANativeWindow_setBuffersGeometry(G.win, 0, 0, 1 /*WINDOW_FORMAT_RGBA_8888*/);
+        const int at[] = { 0x22 /*FORMAT*/, 0x1908 /*GL_RGBA*/, 0x30 /*DEPTH_BITS*/, 24, 0x31 /*STENCIL_BITS*/, 8, 0x32 /*ACCUM_BITS*/, 0,
+            0x33 /*PROFILE*/, 0x34 /*CORE_PROFILE*/, 0x36 /*MAJOR*/, 3, 0x37 /*MINOR*/, 3, 0 };
+        OS.ctx = OS.create_attribs(at, NULL);
+        if (!OS.ctx) { LOG("OSMesaCreateContextAttribs fail"); return NULL; }
+        os_finish = (void (*)(void)) OS.proc("glFinish");
+        G.created = 1;
+        LOG("glfwCreateWindow (Zink) ok %dx%d", G.w, G.h);
+        return &G;
+    }
+#endif
     G.dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (!eglInitialize(G.dpy, 0, 0)) { LOG("eglInitialize fail"); return NULL; }
     const EGLint attr[] = { EGL_RENDERABLE_TYPE, 0x40, EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
@@ -119,6 +181,9 @@ EXPORT void* glfwCreateWindow(int width, int height, const char* title, void* mo
 }
 EXPORT void glfwDestroyWindow(void* w) {
     if (!G.created) return;
+#ifdef MOBILIX_OSMESA
+    if (OS.on) { OS.make(NULL, NULL, 0x1401, 0, 0); os_unlock(); if (OS.destroy && OS.ctx) OS.destroy(OS.ctx); OS.ctx = NULL; OS.cur = 0; G.created = 0; return; }
+#endif
     eglMakeCurrent(G.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroyContext(G.dpy, G.ctx); eglDestroySurface(G.dpy, G.surf);
     G.created = 0;
@@ -140,20 +205,32 @@ static void g4_init(void) {
     LOG("gl4es initialised");
 }
 EXPORT void glfwMakeContextCurrent(void* w) {
+#ifdef MOBILIX_OSMESA
+    if (OS.on) {
+        if (w) { if (!os_locked) os_lock_make(); }
+        else { OS.make(NULL, NULL, 0x1401, 0, 0); os_unlock(); OS.cur = 0; }
+        return;
+    }
+#endif
     if (w) { eglMakeCurrent(G.dpy, G.surf, G.surf, G.ctx); g4_init(); }
     else eglMakeCurrent(G.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }
-EXPORT void* glfwGetCurrentContext(void) { return eglGetCurrentContext() != EGL_NO_CONTEXT ? (void*) &G : NULL; }
+EXPORT void* glfwGetCurrentContext(void) {
+#ifdef MOBILIX_OSMESA
+    if (OS.on) return OS.cur ? (void*) &G : NULL;
+#endif
+    return eglGetCurrentContext() != EGL_NO_CONTEXT ? (void*) &G : NULL; }
 EXPORT void glfwSwapInterval(int i) { if (G.dpy) eglSwapInterval(G.dpy, i); }
 static int g_fps = 0;
 static double g_swapT = 0;                           // время внутри swap за период диагностики
 static double g_lastFrame = 0;
 EXPORT void smc_set_fps(int fps) { g_fps = fps; }
 
+EXPORT void* glfwGetProcAddress(const char* name);
 EXPORT void glfwSwapBuffers(void* w) {
     if (!G.created) return;
     if (!G.win) { usleep(30000); return; }            // поверхность потеряна (приложение свёрнуто)
-    if (G.surf_dirty) {                                // вернулись: новая поверхность
+    if (G.surf_dirty && !OS_ON) {                      // вернулись: новая поверхность
         G.surf_dirty = 0;
         eglMakeCurrent(G.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, G.ctx);
         if (G.surf != EGL_NO_SURFACE) eglDestroySurface(G.dpy, G.surf);
@@ -168,9 +245,20 @@ EXPORT void glfwSwapBuffers(void* w) {
         if (!look) { look = 1; pre = (void (*)(void)) dlsym(G.gl_lib, "gl4es_pre_swap"); post = (void (*)(void)) dlsym(G.gl_lib, "gl4es_post_swap"); }
         if (pre) pre();
     }
-    int swapped = eglSwapBuffers(G.dpy, G.surf);
+    int swapped;
+#ifdef MOBILIX_OSMESA
+    if (OS.on) {
+        // кадр готов: дожидаемся OSMesa, публикуем буфер окна и сразу блокируем следующий
+        if (os_finish) os_finish();
+        os_unlock();
+        G.surf_dirty = 0;
+        swapped = os_lock_make();
+        if (!swapped) usleep(5000);
+    } else
+#endif
+    swapped = eglSwapBuffers(G.dpy, G.surf);
     if (g4_inited) { static void (*post2)(void); static int l2 = 0; if (!l2) { l2 = 1; post2 = (void (*)(void)) dlsym(G.gl_lib, "gl4es_post_swap"); } if (post2) post2(); }
-    if (swapped == EGL_FALSE) G.surf_dirty = G.win ? 1 : 0;
+    if (swapped == EGL_FALSE && !OS_ON) G.surf_dirty = G.win ? 1 : 0;
     g_swapT += now() - ts_swap;
     if (g_fps > 0) {                                   // ограничение FPS (стабилизация производительности)
         double target = 1.0 / g_fps, t = now(), wait = g_lastFrame + target - t;
@@ -186,7 +274,7 @@ EXPORT void glfwSwapBuffers(void* w) {
         if (t - t5 >= 5.0) {
             if (!info) {
                 info = 1;
-                const unsigned char* (*gs)(unsigned int) = (const unsigned char* (*)(unsigned int)) eglGetProcAddress("glGetString");
+                const unsigned char* (*gs)(unsigned int) = (const unsigned char* (*)(unsigned int)) (OS_ON ? glfwGetProcAddress("glGetString") : (void*) eglGetProcAddress("glGetString"));
                 if (gs) fprintf(stderr, "[Mobilix] GPU: %s | %s\n", (const char*) gs(0x1F01), (const char*) gs(0x1F02));
             }
             {
@@ -202,6 +290,9 @@ EXPORT void glfwSwapBuffers(void* w) {
 }
 
 EXPORT void* glfwGetProcAddress(const char* name) {
+#ifdef MOBILIX_OSMESA
+    if (OS.on) return OS.proc(name);
+#endif
     void* p = G.gl_lib ? dlsym(G.gl_lib, name) : NULL;
     return p ? p : (void*) eglGetProcAddress(name);
 }
