@@ -23,7 +23,7 @@ jobs:
           keep = []
           total = 0
           for r in rel:
-              if r.get('draft'): continue
+              if r.get('draft') or r.get('prerelease'): continue
               assets = [{'name': a['name'], 'size': a['size'], 'download_count': a['download_count'],
                          'browser_download_url': a['browser_download_url']} for a in r.get('assets', [])]
               if len(keep) < 3: total += sum(a['download_count'] for a in assets)
