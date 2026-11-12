@@ -1,0 +1,31 @@
+name: Mirror Android runtimes
+# Копирует готовые сборки OpenJDK под Android (Java 8 / 17 / 21 для arm, arm64, x86, x86_64) из релизного APK PojavLauncher
+# в релиз "libraries" этого репозитория, чтобы лаунчер скачивал их с нашего адреса.
+# OpenJDK: GPLv2 + Classpath Exception; сборки: PojavLauncherTeam/android-openjdk-build-multiarch.
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract runtimes from the PojavLauncher APK
+        run: |
+          curl -fsSL https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk -o /tmp/p.apk
+          mkdir -p /tmp/x /tmp/out && cd /tmp/x && unzip -q /tmp/p.apk 'assets/components/jre*/*'
+          for pair in jre:jre8 jre-new:jre17 jre-21:jre21; do
+            src=${pair%%:*}; dst=${pair##*:}
+            for f in universal bin-arm bin-arm64 bin-x86 bin-x86_64; do
+              cp "assets/components/$src/$f.tar.xz" "/tmp/out/pojav-$dst-$f.tar.xz"
+            done
+            cp "assets/components/$src/version" "/tmp/out/pojav-$dst-version.txt"
+          done
+          ls -la /tmp/out
+      - name: Upload to release "libraries"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view libraries >/dev/null 2>&1 || gh release create libraries --title "Libraries backup" --notes "Копии JRE, нативов LWJGL и MobileGlues" --prerelease
+          gh release upload libraries /tmp/out/* --clobber
+          gh release view libraries --json assets --jq '.assets[]|[.name,.size,.url]|@tsv' | grep pojav
