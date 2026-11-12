@@ -1,0 +1,13 @@
+name: Find Android natives
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fsSL https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk -o /tmp/p.apk
+          unzip -l /tmp/p.apk | grep -E " lib/(armeabi-v7a|x86_64|arm64-v8a)/" | awk '{print $1, $4}'
+          mkdir -p /tmp/x; cd /tmp/x; unzip -q /tmp/p.apk 'lib/armeabi-v7a/liblwjgl.so' 'assets/components/lwjgl3/*' 2>/dev/null; strings lib/armeabi-v7a/liblwjgl.so | grep -i -m3 "3\.[0-9]\.[0-9]"; unzip -p /tmp/p.apk assets/components/lwjgl3/lwjgl-glfw-classes.jar | head -c 0; unzip -l /tmp/p.apk | grep -i "lwjgl" | head
