@@ -8,18 +8,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -fsS "https://api.github.com/repos/MobileGL-Dev/MobileGlues-release/releases?per_page=4" | python3 -c "
+          for V in V1.3.3 V1.3.0; do
+            U=$(curl -fsS "https://api.github.com/repos/MobileGL-Dev/MobileGlues-release/releases/tags/$V" | python3 -c "
           import sys,json
-          for r in json.load(sys.stdin):
-            print('REL', r['tag_name'], [(a['name'],a['size']) for a in r['assets']])"
-          URL=$(curl -fsS "https://api.github.com/repos/MobileGL-Dev/MobileGlues-release/releases?per_page=5" | python3 -c "
-          import sys,json
-          for r in json.load(sys.stdin):
-            for a in r['assets']:
-              if a['name'].endswith('.apk') and 'mobileglues' in a['name'].lower(): print(a['browser_download_url']); raise SystemExit")
-          echo "APK $URL"
-          curl -fsSL "$URL" -o /tmp/mg.apk
-          unzip -l /tmp/mg.apk | grep -E "\.so|assets" | awk '{print $1, $4}' | head -60
-          echo "--- Pojav OSMesa / zink bits"
-          curl -fsSL https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk -o /tmp/p.apk
-          unzip -l /tmp/p.apk | grep -i -E "osmesa|zink|vulkan|angle|ltw|mesa" | awk '{print $1, $4}'
+          for a in json.load(sys.stdin).get('assets',[]):
+            if a['name'].endswith('.apk'): print(a['browser_download_url'])") || continue
+            [ -z "$U" ] && continue
+            echo "== $V $U"; curl -fsSL "$U" -o /tmp/m.apk; unzip -l /tmp/m.apk | grep -E "\.so|angle|ANGLE" | awk '{print $1, $4}' | head -30
+          done
+          echo "== MG source: angle refs"
+          git clone -q --depth 1 https://github.com/MobileGL-Dev/MobileGlues.git /tmp/mg && (cd /tmp/mg && grep -rIl -i "angle" . | head -20; ls; find . -iname "*angle*" | head)
+          echo "== other prebuilt ANGLE candidates"
+          for R in MobileGL-Dev/MobileGlues-angle PojavLauncherTeam/angle-android MobileGL-Dev/angle-android; do curl -s -o /dev/null -w "$R %{http_code}\n" "https://api.github.com/repos/$R"; done
