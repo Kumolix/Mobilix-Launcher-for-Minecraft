@@ -76,6 +76,8 @@ class MainActivity : Activity() {
     /** ABI процесса приложения: arm64 | arm | x86_64 | x86 (по папке нативных библиотек, которую выбрал Android). */
     private val abiId: String by lazy { File(applicationInfo.nativeLibraryDir).name }
     private val isArm64: Boolean get() = abiId == "arm64"
+    /** Имя папки ABI внутри APK-плагинов (MobileGlues и т.п.). */
+    private val apkAbiDir: String get() = when (abiId) { "arm64" -> "arm64-v8a"; "arm" -> "armeabi-v7a"; else -> abiId }
     private val is32bit: Boolean get() = abiId == "arm" || abiId == "x86"
     /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
     private val MIRROR = "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/libraries/"
@@ -543,8 +545,8 @@ class MainActivity : Activity() {
                 prefs.edit().putBoolean("abiNoteShown", true).apply()
                 MobDialog(this)
                     .setTitle(tr("Экспериментальная поддержка", "Experimental support"))
-                    .setMessage(tr("Устройство: $abiId. Здесь работают версии до 1.16.5 (рендерер gl4es), память игры ограничена. Новые версии пока доступны только на arm64.",
-                        "Device: $abiId. Versions up to 1.16.5 work here (gl4es renderer), game memory is limited. Newer versions are arm64-only for now."))
+                    .setMessage(tr("Устройство: $abiId. Версии до 1.16.5 идут через gl4es, 1.17+ через MobileGlues" + (if (is32bit) " (до 1.20.4, память игры ограничена)" else "") + ". Поддержка экспериментальная.",
+                        "Device: $abiId. Versions up to 1.16.5 use gl4es, 1.17+ use MobileGlues" + (if (is32bit) " (up to 1.20.4, game memory is limited)" else "") + ". Support is experimental."))
                     .setPositiveButton("OK", null).show()
             }
             val es = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).deviceConfigurationInfo.reqGlEsVersion
@@ -4400,7 +4402,7 @@ class MainActivity : Activity() {
         val realMain = v.getString("mainClass")
         val preAwt = legacy && child == null && !realMain.startsWith("net.minecraft.client.main.")   // у 1.0–1.5.2 и Classic главный класс — launchwrapper, он на Java 9+ не работает
         val oldGl = legacy || javaMajor < 16
-        if (!isArm64 && !oldGl) throw RuntimeException(tr("На устройствах $abiId пока работают версии до 1.16.5: для новых нужен рендерер MobileGlues, он есть только для arm64.", "Devices of type $abiId currently run versions up to 1.16.5: newer ones need the MobileGlues renderer, which only exists for arm64."))
+        if (is32bit && !oldGl && javaMajor >= 21) throw RuntimeException(tr("На 32-битных устройствах работают версии до 1.20.4: для новее не хватает адресного пространства (память).", "32-bit devices run versions up to 1.20.4: newer ones need more address space than a 32-bit process has."))
         applyMipmap(gameDir, oldGl)
         applyPreset(gameDir, baseVer)
         val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.startsWith("quilt-loader-") -> "quilt"; profile.startsWith("neoforge-") -> "neoforge"; profile.contains("forge", true) -> "forge"; else -> null }
@@ -4537,7 +4539,7 @@ class MainActivity : Activity() {
         if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
         // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).
         val rendPref = prefs.getInt("renderer", 0)
-        val useGl4es = gl4es != null && (!isArm64 || (oldGl && !(!legacy && (rendPref == 1 || rendPref == 2))))
+        val useGl4es = gl4es != null && oldGl && !(!legacy && (rendPref == 1 || rendPref == 2))
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
         if (oldGl && legacy && (rendPref == 1 || rendPref == 2)) log("Версии до 1.13 работают только через gl4es, выбор рендерера игнорируется.")
         if (!useGl4es && oldGl && !legacy) log("Рендерер для 1.13–1.16.5: MobileGlues" + (if (rendPref == 2) " + ANGLE" else "") + " вместо gl4es.")
@@ -4889,7 +4891,7 @@ class MainActivity : Activity() {
     private fun ensureMobileGlues(): String? {
         val dir = File(filesDir, "mg")
         fun find() = if (!dir.exists()) null else dir.walkTopDown()
-            .firstOrNull { it.isFile && it.name == "libmobileglues.so" && it.path.contains("arm64") }
+            .firstOrNull { it.isFile && it.name == "libmobileglues.so" && it.parentFile?.name == apkAbiDir }
         find()?.let {
             log("MobileGlues уже установлен.")
             return it.path

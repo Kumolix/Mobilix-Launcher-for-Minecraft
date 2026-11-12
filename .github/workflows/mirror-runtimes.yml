@@ -29,6 +29,26 @@ jobs:
             (cd /tmp/nat/$id && zip -q /tmp/out/pojav-lwjgl-natives-$id.zip *.so)
           done
           ls -la /tmp/out
+      - name: Java 25 (MDTCopper/android-openjdk, same universal + bin-<abi> layout)
+        run: |
+          curl -fsS https://api.github.com/repos/MDTCopper/android-openjdk/releases/tags/jre25 -o /tmp/r25.json
+          python3 - <<'PY'
+          import json,urllib.request,re
+          r=json.load(open('/tmp/r25.json'))
+          for a in r['assets']:
+            n=a['name']; print('asset',n,a['size'])
+            m=None
+            if n=='universal.tar.xz': dst='pojav-jre25-universal.tar.xz'
+            elif n=='version': dst='pojav-jre25-version.txt'
+            else:
+              m=re.match(r'bin-(.+)\.tar\.xz$',n)
+              if not m: continue
+              k={'aarch64':'arm64','arm64':'arm64','arm':'arm','aarch32':'arm','x86_64':'x86_64','x86':'x86','i686':'x86'}.get(m.group(1))
+              if not k: print('  unknown arch',m.group(1)); continue
+              dst='pojav-jre25-bin-%s.tar.xz'%k
+            urllib.request.urlretrieve(a['browser_download_url'],'/tmp/out/'+dst); print('  ->',dst)
+          PY
+          ls -la /tmp/out | grep jre25
       - name: Upload to release "libraries"
         env:
           GH_TOKEN: ${{ github.token }}
