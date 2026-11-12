@@ -706,7 +706,11 @@ class MainActivity : Activity() {
     private var lastOrientation = 0
     override fun onConfigurationChanged(c: android.content.res.Configuration) {
         super.onConfigurationChanged(c)
-        if (lastOrientation != 0 && c.orientation != lastOrientation) { lastOrientation = c.orientation; recreate() }
+        if (lastOrientation != 0 && c.orientation != lastOrientation) {
+            lastOrientation = c.orientation
+            // Во время скачивания не пересоздаём окно: иначе загрузка «теряется» из виду (прогресс, лог, кнопка «Играть»).
+            if (busy) pendingRecreate = true else recreate()
+        }
     }
 
     // ---------- меню и страницы ----------
@@ -4075,6 +4079,7 @@ class MainActivity : Activity() {
     }
 
     @Volatile internal var busy = false
+    private var pendingRecreate = false
 
     private fun setBusy(b: Boolean) = runOnUiThread {
         busy = b
@@ -4085,6 +4090,7 @@ class MainActivity : Activity() {
         playBtn.isEnabled = !b
         playBtn.alpha = if (b) 0.6f else 1f
         if (::menuWipe.isInitialized) menuWipe.isEnabled = !b
+        if (!b && pendingRecreate) { pendingRecreate = false; recreate() }
     }
 
     private fun start() {
@@ -4119,7 +4125,8 @@ class MainActivity : Activity() {
     private fun dataRoot(): File = getExternalFilesDir(null) ?: filesDir
 
     /** Java-рантайм обязан лежать во внутренней памяти: из внешней Android не даст запустить файлы. */
-    private fun runtimeDir(): File = File(filesDir, "runtime")
+    /** Java 21 для всех игр до 1.21.x (на ней идут и Java 8/17-версии); для игр, которым нужна Java 25 (26.1+), отдельная папка. */
+    private fun runtimeDir(major: Int = 21): File = File(filesDir, if (major >= 22) "runtime25" else "runtime")
 
     /** UUID: при своём скине подбираем такой, у которого стандартный скин нужной ширины. */
     private fun skinUuid(): String {
@@ -4204,7 +4211,7 @@ class MainActivity : Activity() {
                     File(root, "natives"), File(root, "launch_command.txt"), File(root, "launch.json"),
                     File(root, "runtime.tar.xz"), File(root, "runtime.tar.gz"), File(root, "forge-installer.jar"),
                     File(root, "launcher_profiles.json"),
-                    runtimeDir(), cacheDir, File(filesDir, "natives"), File(filesDir, "lwjgl"), File(filesDir, "mg"),
+                    runtimeDir(), runtimeDir(25), cacheDir, File(filesDir, "natives"), File(filesDir, "lwjgl"), File(filesDir, "mg"),
                     File(filesDir, "skin_default.png"), File(root, "mg-plugin.apk")
                 ) + (root.listFiles { f -> f.name.startsWith("lwjgl-natives") }?.toList() ?: emptyList())
                 for (t in targets) {
@@ -5049,12 +5056,13 @@ class MainActivity : Activity() {
     }
 
     private fun ensureRuntime(root: File, javaMajor: Int): File {
-        val rt = runtimeDir()
+        val rt = runtimeDir(javaMajor)
         findJava(rt)?.let {
             log("Java-рантайм уже установлен.")
             return it
         }
-        if (!isArm64) return ensurePojavRuntime(rt)
+        if (javaMajor >= 22) return ensurePojavRuntime(rt, 25)
+        if (!isArm64) return ensurePojavRuntime(rt, 21)
         log("Установка Java-рантайма...")
         val local = listOf("runtime.tar.xz", "runtime.tar.gz").map { File(root, it) }
             .firstOrNull { it.exists() && it.length() > 0 }
@@ -5078,10 +5086,10 @@ class MainActivity : Activity() {
     }
 
     /** Java 21 для arm / x86 / x86_64: общая часть (universal) + части под ABI (bin-<abi>), обе распаковываются в одну папку. */
-    private fun ensurePojavRuntime(rt: File): File {
-        log("Установка Java 21 для $abiId...")
+    private fun ensurePojavRuntime(rt: File, ver: Int): File {
+        log("Установка Java $ver для $abiId...")
         rt.deleteRecursively(); rt.mkdirs()
-        for (n in listOf("pojav-jre21-universal.tar.xz", "pojav-jre21-bin-$abiId.tar.xz")) {
+        for (n in listOf("pojav-jre$ver-universal.tar.xz", "pojav-jre$ver-bin-$abiId.tar.xz")) {
             val dest = File(dataRoot(), n)
             log("  скачивание $n")
             downloadBig(MIRROR + n, dest)

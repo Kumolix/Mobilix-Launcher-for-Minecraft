@@ -5,6 +5,7 @@ What's new
 - Settings > Special: "Bedrock controls" mode (tap = attack, hold = mine, Pocket Edition style layout with its own editable buttons)
 - Renderers: Renderlix profiles (Auto / Standard / Sodium+Iris / Custom: OpenGL version, shader errors, compute shaders, shader cache, FSR 1)
 - Settings > Game: renderer choice (Auto / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 can now run on MobileGlues; may help on Mali and older Adreno
+- Minecraft 26.1+ (Java 25): a separate Java 25 runtime is installed automatically; rotating the screen no longer interrupts a download
 - Experimental: 32-bit (arm) and x86 / x86_64 devices in the same APK (versions up to 1.16.5, gl4es)
 
 Что нового?
@@ -14,3 +15,4 @@ What's new
 - Рендеры: профили Renderlix (Авто / Стандарт / Sodium+Iris / Свой: версия OpenGL, ошибки шейдеров, compute-шейдеры, кэш шейдеров, FSR 1)
 - Настройки → Игра: выбор рендерера (Авто / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 теперь можно запускать на MobileGlues; может помочь на Mali и старых Adreno
 - Экспериментально: 32-битные (arm) и x86 / x86_64 устройства в том же APK (версии до 1.16.5, gl4es)
+- Minecraft 26.1+ (Java 25): отдельная Java 25 ставится сама; поворот экрана больше не прерывает скачивание
