@@ -1288,6 +1288,9 @@ class MainActivity : Activity() {
             })
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
+        col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es"), prefs.getInt("renderer", 0).coerceIn(0, 3)) { i -> prefs.edit().putInt("renderer", i).apply() })
+        col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — если есть в плагине MobileGlues (иначе выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is used only if the MobileGlues plugin ships it (otherwise it turns off). Applies on next launch.")))
         col.addView(TextView(this).apply { text = tr("Рендер Renderlix", "Renderlix renderer"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Стандарт", "Standard"), "Sodium / Iris", tr("Свой", "Custom")), when (prefs.getInt("renderPreset", 2)) { 2 -> 0; 0 -> 1; 1 -> 2; else -> 3 }) { i -> prefs.edit().putInt("renderPreset", when (i) { 0 -> 2; 1 -> 0; 2 -> 1; else -> 3 }).apply() })
         col.addView(Button(this).apply {
@@ -4516,7 +4519,13 @@ class MainActivity : Activity() {
         val lwjglPath = ensureLwjgl(lwjglVer)
         val gl4es = File(applicationInfo.nativeLibraryDir, "libgl4es.so").takeIf { it.exists() }?.path
         if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
-        val mgPath = if (oldGl && gl4es != null) gl4es else ensureMobileGlues()
+        // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).
+        val rendPref = prefs.getInt("renderer", 0)
+        val useGl4es = oldGl && gl4es != null && !(!legacy && (rendPref == 1 || rendPref == 2))
+        if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
+        if (oldGl && legacy && (rendPref == 1 || rendPref == 2)) log("Версии до 1.13 работают только через gl4es, выбор рендерера игнорируется.")
+        if (!useGl4es && oldGl && !legacy) log("Рендерер для 1.13–1.16.5: MobileGlues" + (if (rendPref == 2) " + ANGLE" else "") + " вместо gl4es.")
+        val mgPath = if (useGl4es) gl4es else ensureMobileGlues()
 
         // 6. Команда запуска
         if (elyOn() && !elyEnsureSession()) {
@@ -4637,11 +4646,15 @@ class MainActivity : Activity() {
         launch.put("jvm", JSONArray(cmd.subList(1, mainIdx)))
         launch.put("game", JSONArray(cmd.subList(mainIdx + 1, cmd.size)))
         launch.put("glLib", mgPath ?: "")
-        if (oldGl && gl4es != null) {
+        if (useGl4es) {
             launch.put("env", JSONObject().put("LIBGL_ES", "2").put("LIBGL_NOBANNER", "1").put("LIBGL_NOERROR", "1"))
-        } else if (!oldGl) {
+        } else {
             // Renderlix: профиль настроек MobileGlues. Без MG_DIR_PATH MobileGlues считает лаунчер «неподдерживаемым» и игнорирует конфиг.
-            try { launch.put("env", JSONObject().put("MG_DIR_PATH", writeRenderConfig().path)) } catch (e: Throwable) { log("Профиль рендера не записан: $e") }
+            try {
+                val env = JSONObject().put("MG_DIR_PATH", writeRenderConfig().path)
+                if (angleActive() != null) env.put("MG_ANGLE_DIR", angleActive()!!.path)
+                launch.put("env", env)
+            } catch (e: Throwable) { log("Профиль рендера не записан: $e") }
         }
         File(root, "launch.json").writeText(launch.toString())
         log("Команда запуска собрана (${cmd.size} аргументов).")
@@ -5288,13 +5301,23 @@ class MainActivity : Activity() {
     }
 
     /** Профиль рендера Renderlix (настройки MobileGlues): 0 — стандарт, 1 — моды-шейдеры (Sodium/Iris). Пишет config.json и возвращает папку. */
+    /** Каталог с libEGL_angle.so / libGLESv2_angle.so, если выбран рендерер «MobileGlues + ANGLE» и библиотеки есть в плагине MobileGlues. */
+    private fun angleActive(): File? {
+        if (prefs.getInt("renderer", 0) != 2) return null
+        val dir = File(filesDir, "mg")
+        val egl = dir.walkTopDown().firstOrNull { it.isFile && it.name == "libEGL_angle.so" && it.path.contains("arm64") }
+        val gles = dir.walkTopDown().firstOrNull { it.isFile && it.name == "libGLESv2_angle.so" && it.path.contains("arm64") }
+        if (egl == null || gles == null || egl.parentFile != gles.parentFile) { log("ANGLE: библиотек нет в плагине MobileGlues, ANGLE выключен."); return null }
+        return egl.parentFile
+    }
+
     private fun writeRenderConfig(): File {
         val dir = File(filesDir, "mg"); dir.mkdirs()
         val preset = prefs.getInt("renderPreset", 2)
         val shaders = preset == 1 || (preset == 2 && try { CrashDoctor.hasRenderMods(curGameDir()) } catch (_: Throwable) { false })
         if (preset == 3) {
             val cc = JSONObject()
-                .put("enableANGLE", 0)
+                .put("enableANGLE", if (angleActive() != null) 3 else 0)
                 .put("enableNoError", prefs.getInt("rl_noerr", 0))
                 .put("enableExtComputeShader", prefs.getInt("rl_compute", 0))
                 .put("enableExtTimerQuery", 1)
@@ -5309,7 +5332,7 @@ class MainActivity : Activity() {
             return dir
         }
         val c = JSONObject()
-            .put("enableANGLE", 0)
+            .put("enableANGLE", if (angleActive() != null) 3 else 0)
             .put("enableNoError", if (shaders) 2 else 0)            // 2 = игнорировать ошибки шейдеров (частично)
             .put("enableExtComputeShader", if (shaders) 1 else 0)
             .put("enableExtTimerQuery", 1)
