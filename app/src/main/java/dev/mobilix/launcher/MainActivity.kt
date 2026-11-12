@@ -73,6 +73,13 @@ class MainActivity : Activity() {
 
     private class Task(val url: String, val dest: File, val sha1: String?)
 
+    /** ABI процесса приложения: arm64 | arm | x86_64 | x86 (по папке нативных библиотек, которую выбрал Android). */
+    private val abiId: String by lazy { File(applicationInfo.nativeLibraryDir).name }
+    private val isArm64: Boolean get() = abiId == "arm64"
+    private val is32bit: Boolean get() = abiId == "arm" || abiId == "x86"
+    /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
+    private val MIRROR = "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/libraries/"
+
     private lateinit var logView: TextView
     private lateinit var scroll: ScrollView
     private lateinit var progress: ProgressBar
@@ -524,14 +531,22 @@ class MainActivity : Activity() {
             setOnClickListener { start() }
         }
         root.addView(playBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)))
-        if (Build.SUPPORTED_64_BIT_ABIS.isEmpty()) {
+        if (!File(applicationInfo.nativeLibraryDir, "libmobilix.so").exists()) {
             playBtn.isEnabled = false
             MobDialog(this)
                 .setTitle(tr("Устройство не поддерживается", "Device not supported"))
-                .setMessage(tr("Нужна 64-битная система (arm64). Здесь работает 32-битная, поэтому Minecraft (Java 21) запустить нельзя. Лаунчер откроется, но кнопка «Играть» отключена.",
-                    "A 64-bit (arm64) system is required. This device runs a 32-bit one, so Minecraft (Java 21) cannot start. The launcher opens, but Play is disabled."))
+                .setMessage(tr("Эта сборка рассчитана на arm64. Для 32-битных устройств (arm) и x86 готовится отдельная сборка. Лаунчер откроется, но кнопка «Играть» отключена.",
+                    "This build is for arm64. A separate build for 32-bit (arm) and x86 devices is in the works. The launcher opens, but Play is disabled."))
                 .setPositiveButton("OK", null).show()
         } else {
+            if (!isArm64 && !prefs.getBoolean("abiNoteShown", false)) {
+                prefs.edit().putBoolean("abiNoteShown", true).apply()
+                MobDialog(this)
+                    .setTitle(tr("Экспериментальная поддержка", "Experimental support"))
+                    .setMessage(tr("Устройство: $abiId. Здесь работают версии до 1.16.5 (рендерер gl4es), память игры ограничена. Новые версии пока доступны только на arm64.",
+                        "Device: $abiId. Versions up to 1.16.5 work here (gl4es renderer), game memory is limited. Newer versions are arm64-only for now."))
+                    .setPositiveButton("OK", null).show()
+            }
             val es = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).deviceConfigurationInfo.reqGlEsVersion
             if (es < 0x30002) Toast.makeText(this, tr("Видеочип поддерживает OpenGL ES ниже 3.2: игра может не запуститься или работать плохо.", "GPU supports OpenGL ES below 3.2: the game may not run or may run poorly."), Toast.LENGTH_LONG).show()
         }
@@ -4385,6 +4400,7 @@ class MainActivity : Activity() {
         val realMain = v.getString("mainClass")
         val preAwt = legacy && child == null && !realMain.startsWith("net.minecraft.client.main.")   // у 1.0–1.5.2 и Classic главный класс — launchwrapper, он на Java 9+ не работает
         val oldGl = legacy || javaMajor < 16
+        if (!isArm64 && !oldGl) throw RuntimeException(tr("На устройствах $abiId пока работают версии до 1.16.5: для новых нужен рендерер MobileGlues, он есть только для arm64.", "Devices of type $abiId currently run versions up to 1.16.5: newer ones need the MobileGlues renderer, which only exists for arm64."))
         applyMipmap(gameDir, oldGl)
         applyPreset(gameDir, baseVer)
         val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.startsWith("quilt-loader-") -> "quilt"; profile.startsWith("neoforge-") -> "neoforge"; profile.contains("forge", true) -> "forge"; else -> null }
@@ -4521,7 +4537,7 @@ class MainActivity : Activity() {
         if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
         // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).
         val rendPref = prefs.getInt("renderer", 0)
-        val useGl4es = oldGl && gl4es != null && !(!legacy && (rendPref == 1 || rendPref == 2))
+        val useGl4es = gl4es != null && (!isArm64 || (oldGl && !(!legacy && (rendPref == 1 || rendPref == 2))))
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
         if (oldGl && legacy && (rendPref == 1 || rendPref == 2)) log("Версии до 1.13 работают только через gl4es, выбор рендерера игнорируется.")
         if (!useGl4es && oldGl && !legacy) log("Рендерер для 1.13–1.16.5: MobileGlues" + (if (rendPref == 2) " + ANGLE" else "") + " вместо gl4es.")
@@ -4930,7 +4946,7 @@ class MainActivity : Activity() {
         fun hasMain() = dir.exists() && dir.walkTopDown().any { it.isFile && it.name == "liblwjgl.so" }
         if (!hasMain()) {
             log("Установка LWJGL $version для Android...")
-            val archive = downloadLwjgl(version) ?: return null
+            val archive = (if (isArm64) downloadLwjgl(version) else downloadPojavLwjgl()) ?: return null
             dir.deleteRecursively()
             dir.mkdirs()
             try {
@@ -5036,6 +5052,7 @@ class MainActivity : Activity() {
             log("Java-рантайм уже установлен.")
             return it
         }
+        if (!isArm64) return ensurePojavRuntime(rt)
         log("Установка Java-рантайма...")
         val local = listOf("runtime.tar.xz", "runtime.tar.gz").map { File(root, it) }
             .firstOrNull { it.exists() && it.length() > 0 }
@@ -5057,6 +5074,36 @@ class MainActivity : Activity() {
             ?.firstOrNull { it.startsWith("JAVA_VERSION") }?.let { log("Рантайм: $it (нужна $javaMajor)") }
         return java
     }
+
+    /** Java 21 для arm / x86 / x86_64: общая часть (universal) + части под ABI (bin-<abi>), обе распаковываются в одну папку. */
+    private fun ensurePojavRuntime(rt: File): File {
+        log("Установка Java 21 для $abiId...")
+        rt.deleteRecursively(); rt.mkdirs()
+        for (n in listOf("pojav-jre21-universal.tar.xz", "pojav-jre21-bin-$abiId.tar.xz")) {
+            val dest = File(dataRoot(), n)
+            log("  скачивание $n")
+            downloadBig(MIRROR + n, dest)
+            log("  распаковка $n")
+            extractTar(dest, rt)
+            dest.delete()
+        }
+        val java = findJava(rt) ?: run {
+            rt.walkTopDown().maxDepth(3).forEach { log("  " + it.relativeTo(rt).path) }
+            throw RuntimeException("В рантайме нет bin/java")
+        }
+        java.parentFile?.listFiles()?.forEach { it.setExecutable(true, false) }
+        File(java.parentFile!!.parentFile!!, "release").takeIf { it.exists() }?.readLines()
+            ?.firstOrNull { it.startsWith("JAVA_VERSION") }?.let { log("Рантайм: $it") }
+        return java
+    }
+
+    private fun downloadPojavLwjgl(): File? = try {
+        val n = "pojav-lwjgl-natives-$abiId.zip"
+        val dest = File(dataRoot(), n)
+        log("  нативы LWJGL для $abiId: $n")
+        downloadBig(MIRROR + n, dest)
+        dest
+    } catch (e: Exception) { log("  ошибка: $e"); null }
 
     private fun downloadRuntime(root: File): File {
         val pattern = Regex("(?i)^(?!.*src).*21.*(arm64|aarch64).*\\.tar\\.(xz|gz)$")
@@ -5353,7 +5400,8 @@ class MainActivity : Activity() {
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
         val totalMb = mi.totalMem / 1024 / 1024
         val manualX = prefs.getInt("xmx", 0)
-        return if (manualX > 0) manualX else when { totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }.toInt()
+        val v = if (manualX > 0) manualX else when { totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }.toInt()
+        return if (is32bit) v.coerceAtMost(1024) else v   // 32-битный процесс: адресного пространства ~3 ГБ на всё
     }
     /** Куча установщика загрузчика: не меньше, чем у игры + 512 МБ, но не больше ~55% ОЗУ (иначе Android убивает процесс/перезагружает телефон). */
     private fun installerHeapMb(): Int {
@@ -5361,7 +5409,7 @@ class MainActivity : Activity() {
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
         val totalMb = (mi.totalMem / 1024 / 1024).toInt()
         val base = if (totalMb >= 6000) 1280 else 768
-        return minOf(maxOf(base, gameXmxMb() + 512), totalMb * 55 / 100).coerceAtLeast(512)
+        return minOf(maxOf(base, gameXmxMb() + 512), totalMb * 55 / 100).coerceAtLeast(512).let { if (is32bit) it.coerceAtMost(1280) else it }
     }
 
     private fun runForgeInstaller(rt: File, installer: File, root: File, installFlag: String = "--installClient") {
