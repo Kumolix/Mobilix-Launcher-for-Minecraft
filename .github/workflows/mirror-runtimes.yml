@@ -22,6 +22,12 @@ jobs:
             done
             cp "assets/components/$src/version" "/tmp/out/pojav-$dst-version.txt"
           done
+          # нативы LWJGL (liblwjgl*.so) под каждый ABI: для arm / x86 / x86_64 (arm64 берётся из других источников)
+          for pair in armeabi-v7a:arm x86:x86 x86_64:x86_64; do
+            a=${pair%%:*}; id=${pair##*:}
+            mkdir -p /tmp/nat/$id && unzip -q -j /tmp/p.apk "lib/$a/liblwjgl*.so" -d /tmp/nat/$id
+            (cd /tmp/nat/$id && zip -q /tmp/out/pojav-lwjgl-natives-$id.zip *.so)
+          done
           ls -la /tmp/out
       - name: Upload to release "libraries"
         env:
