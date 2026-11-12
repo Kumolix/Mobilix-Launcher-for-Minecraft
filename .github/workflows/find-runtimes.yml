@@ -7,14 +7,16 @@ jobs:
   find:
     runs-on: ubuntu-latest
     steps:
-      - name: List runtimes inside the PojavLauncher release APK
+      - name: Inspect runtime layout in the PojavLauncher release APK
         run: |
-          URL=$(curl -fsS "https://api.github.com/repos/PojavLauncherTeam/PojavLauncher/releases?per_page=3" | python3 -c "
-          import sys,json
-          for r in json.load(sys.stdin):
-            for a in r['assets']:
-              if a['name'].endswith('.apk'): print(a['browser_download_url']); raise SystemExit")
-          echo "APK: $URL"
-          curl -fsSL "$URL" -o /tmp/p.apk
-          unzip -l /tmp/p.apk | grep -i -E "assets/components|jre|runtime|\.tar\.xz" | head -80
-          unzip -l /tmp/p.apk | grep -E "lib/" | awk '{print $4}' | cut -d/ -f2 | sort | uniq -c
+          curl -fsSL https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk -o /tmp/p.apk
+          mkdir -p /tmp/x && cd /tmp/x && unzip -q /tmp/p.apk 'assets/components/jre*/*' 'assets/components/jre*/version'
+          for d in jre jre-new jre-21; do
+            echo "=== $d: version=$(cat assets/components/$d/version)"
+            for f in universal bin-arm bin-x86_64; do
+              echo "--- $d/$f (top levels)"
+              tar -tJf assets/components/$d/$f.tar.xz | awk -F/ 'NF<=3' | head -40
+            done
+          done
+          echo "=== libjvm / java binaries"
+          for d in jre jre-new jre-21; do for f in bin-arm bin-x86_64; do echo "-- $d/$f"; tar -tJf assets/components/$d/$f.tar.xz | grep -E "libjvm|/bin/java$|libjava.so|release$|libfreetype|libawt" | head; done; done
