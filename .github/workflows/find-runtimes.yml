@@ -10,7 +10,7 @@ jobs:
       - name: Inspect runtime layout in the PojavLauncher release APK
         run: |
           curl -fsSL https://github.com/PojavLauncherTeam/PojavLauncher/releases/download/gladiolus/PojavLauncher.apk -o /tmp/p.apk
-          mkdir -p /tmp/x && cd /tmp/x && unzip -q /tmp/p.apk 'assets/components/jre*/*' 'assets/components/jre*/version'
+          mkdir -p /tmp/x && cd /tmp/x && unzip -q /tmp/p.apk 'assets/components/jre*/*'
           for d in jre jre-new jre-21; do
             echo "=== $d: version=$(cat assets/components/$d/version)"
             for f in universal bin-arm bin-x86_64; do
