@@ -28,6 +28,8 @@ jobs:
             mkdir -p /tmp/nat/$id && unzip -q -j /tmp/p.apk "lib/$a/liblwjgl*.so" -d /tmp/nat/$id
             (cd /tmp/nat/$id && zip -q /tmp/out/pojav-lwjgl-natives-$id.zip *.so)
           done
+          # Mesa OSMesa (Zink) для arm64: нужен MobiLabs
+          unzip -q -j /tmp/p.apk lib/arm64-v8a/libOSMesa.so -d /tmp/osm && cp /tmp/osm/libOSMesa.so /tmp/out/pojav-osmesa-arm64.so
           ls -la /tmp/out
       - name: Java 25 (MDTCopper/android-openjdk, same universal + bin-<abi> layout)
         run: |
