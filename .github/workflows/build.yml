@@ -221,6 +221,9 @@ jobs:
           "$CC" -shared -fPIC -O2 -DMOBILIX_OSMESA -Wl,-soname,libglfw.so -o "$OUT/libglfw.so" native/glfw.c -llog -landroid -lEGL -ldl
           curl -fsSL https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/libraries/pojav-osmesa-arm64.so -o "$OUT/libOSMesa.so"
           ls -la "$OUT/libOSMesa.so" "$OUT/libglfw.so"
+          RE="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"; NM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          echo "::notice title=OSMesa deps::$("$RE" -d "$OUT/libOSMesa.so" | grep -E 'NEEDED|SONAME' | tr '\n' '|')"
+          echo "::notice title=OSMesa symbols::$("$NM" -D --defined-only "$OUT/libOSMesa.so" | grep -E 'OSMesa|glXGetProcAddress' | awk '{print $3}' | tr '\n' ' ')"
           gradle assembleRelease -Plabs=true --no-daemon
           mkdir -p labs-out
           cp app/build/outputs/apk/release/app-release.apk "labs-out/MobiLabs-v-$(cat VERSION).apk"

@@ -92,6 +92,7 @@ static int os_lock_make(void) {
     OS.pix(0x11 /*OSMESA_Y_UP*/, 0);
     int ok = OS.make(OS.ctx, b.bits, 0x1401 /*GL_UNSIGNED_BYTE*/, b.width, b.height);
     OS.cur = ok ? 1 : 0;
+    { static int n = 0; if (n < 3 || !ok) { n++; ELOG("Zink: MakeCurrent %s (буфер %dx%d stride %d формат %d)", ok ? "ok" : "НЕ УДАЛСЯ", b.width, b.height, b.stride, b.format); } }
     return ok;
 }
 static void os_unlock(void) { if (os_locked) { ANativeWindow_unlockAndPost(G.win); os_locked = 0; } }
@@ -103,9 +104,12 @@ EXPORT void* glXGetProcAddressARB(const char* n) { return OS.proc ? OS.proc(n) :
 #define OS_ON 0
 #endif
 
+// диагностика прямо в game.log (LOG пишет только в logcat)
+#define ELOG(...) do { fprintf(stderr, "[Mobilix] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
 EXPORT void smc_set_gl_lib(const char* path) {
     G.gl_lib = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     LOG("gl lib %s -> %p", path, G.gl_lib);
+    if (!G.gl_lib) ELOG("не удалось загрузить GL-библиотеку %s: %s", path, dlerror());
 #ifdef MOBILIX_OSMESA
     if (G.gl_lib && strstr(path, "OSMesa")) {
         OS.create_attribs = (OSMesaContext (*)(const int*, OSMesaContext)) dlsym(G.gl_lib, "OSMesaCreateContextAttribs");
@@ -114,7 +118,7 @@ EXPORT void smc_set_gl_lib(const char* path) {
         OS.proc = (void* (*)(const char*)) dlsym(G.gl_lib, "OSMesaGetProcAddress");
         OS.destroy = (void (*)(OSMesaContext)) dlsym(G.gl_lib, "OSMesaDestroyContext");
         OS.on = OS.create_attribs && OS.make && OS.pix && OS.proc;
-        LOG("OSMesa/Zink: %s", OS.on ? "функции найдены" : "ОШИБКА: нет функций OSMesa");
+        ELOG("OSMesa/Zink: %s (create=%p make=%p pix=%p proc=%p)", OS.on ? "функции найдены" : "ОШИБКА: нет функций OSMesa", (void*) OS.create_attribs, (void*) OS.make, (void*) OS.pix, (void*) OS.proc);
     }
 #endif
 }
@@ -154,9 +158,11 @@ EXPORT void* glfwCreateWindow(int width, int height, const char* title, void* mo
         ANativeWindow_setBuffersGeometry(G.win, 0, 0, 1 /*WINDOW_FORMAT_RGBA_8888*/);
         const int at[] = { 0x22 /*FORMAT*/, 0x1908 /*GL_RGBA*/, 0x30 /*DEPTH_BITS*/, 24, 0x31 /*STENCIL_BITS*/, 8, 0x32 /*ACCUM_BITS*/, 0,
             0x33 /*PROFILE*/, 0x34 /*CORE_PROFILE*/, 0x36 /*MAJOR*/, 3, 0x37 /*MINOR*/, 3, 0 };
+        ELOG("Zink: создаю контекст OSMesa (окно %dx%d)", G.w, G.h);
         OS.ctx = OS.create_attribs(at, NULL);
-        if (!OS.ctx) { LOG("OSMesaCreateContextAttribs fail"); return NULL; }
+        if (!OS.ctx) { ELOG("OSMesaCreateContextAttribs вернул NULL"); return NULL; }
         os_finish = (void (*)(void)) OS.proc("glFinish");
+        ELOG("Zink: контекст создан");
         G.created = 1;
         LOG("glfwCreateWindow (Zink) ok %dx%d", G.w, G.h);
         return &G;
