@@ -5,7 +5,7 @@ What's new
 - Settings > Special: "Bedrock controls" mode (tap = attack, hold = mine, Pocket Edition style layout with its own editable buttons)
 - Renderers: Renderlix profiles (Auto / Standard / Sodium+Iris / Custom: OpenGL version, shader errors, compute shaders, shader cache, FSR 1)
 - Settings > Game: renderer choice (Auto / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 can now run on MobileGlues; may help on Mali and older Adreno
-- Experimental: 32-bit (arm) and x86 / x86_64 devices in a separate build (versions up to 1.16.5, gl4es)
+- Experimental: 32-bit (arm) and x86 / x86_64 devices in the same APK (versions up to 1.16.5, gl4es)
 
 Что нового?
 - Настройки → Специальное: «Скачивание модов» Авто / Вручную (вручную можно выбрать нужную версию файла)
@@ -13,4 +13,4 @@ What's new
 - Настройки → Специальное: режим «Управление Bedrock» (касание — удар, удержание — добыча, раскладка как в Pocket Edition со своими настраиваемыми кнопками)
 - Рендеры: профили Renderlix (Авто / Стандарт / Sodium+Iris / Свой: версия OpenGL, ошибки шейдеров, compute-шейдеры, кэш шейдеров, FSR 1)
 - Настройки → Игра: выбор рендерера (Авто / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 теперь можно запускать на MobileGlues; может помочь на Mali и старых Adreno
-- Экспериментально: 32-битные (arm) и x86 / x86_64 устройства в отдельной сборке (версии до 1.16.5, gl4es)
+- Экспериментально: 32-битные (arm) и x86 / x86_64 устройства в том же APK (версии до 1.16.5, gl4es)

@@ -535,8 +535,8 @@ class MainActivity : Activity() {
             playBtn.isEnabled = false
             MobDialog(this)
                 .setTitle(tr("Устройство не поддерживается", "Device not supported"))
-                .setMessage(tr("Эта сборка рассчитана на arm64. Для 32-битных устройств (arm) и x86 готовится отдельная сборка. Лаунчер откроется, но кнопка «Играть» отключена.",
-                    "This build is for arm64. A separate build for 32-bit (arm) and x86 devices is in the works. The launcher opens, but Play is disabled."))
+                .setMessage(tr("Архитектура процессора этого устройства не поддерживается (нужны arm64, arm, x86_64 или x86). Лаунчер откроется, но кнопка «Играть» отключена.",
+                    "This device's CPU architecture is not supported (arm64, arm, x86_64 or x86 required). The launcher opens, but Play is disabled."))
                 .setPositiveButton("OK", null).show()
         } else {
             if (!isArm64 && !prefs.getBoolean("abiNoteShown", false)) {
