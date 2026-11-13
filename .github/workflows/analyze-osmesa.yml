@@ -1,0 +1,29 @@
+name: Analyze OSMesa
+on: workflow_dispatch
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disassemble crash frames
+        run: |
+          set -x
+          curl -sL -o osmesa.so "https://github.com/${{ github.repository }}/releases/download/libraries/pojav-osmesa-arm64.so"
+          ls -l osmesa.so
+          OD=$(ls $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump 2>/dev/null || which llvm-objdump || echo objdump)
+          RE=$(ls $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf 2>/dev/null || which readelf)
+          $RE --dyn-syms osmesa.so | grep -i "OSMesaCreateContextAttribs"
+          SYM=$($RE --dyn-syms osmesa.so | awk '/ OSMesaCreateContextAttribs$/{print $2}')
+          python3 - "$SYM" <<'P'
+          import sys
+          sym=int(sys.argv[1],16); base=0x6c85e3a184-sym
+          for n,pc in (("#4",0x6c863f5ae0),("#5",0x6c863f58f8),("#6",0x6c85e3a054),("#7",0x6c85e3aedc)):
+              print(n, hex(pc-base))
+          open("offs","w").write(" ".join(hex(pc-base) for pc in (0x6c863f5ae0,0x6c863f58f8,0x6c85e3a054,0x6c85e3aedc)))
+          P
+          for o in $(cat offs); do
+            s=$((o-96)); e=$((o+24))
+            echo "=== around $o"
+            $OD -d --start-address=$s --stop-address=$e osmesa.so | tail -n 40
+          done
+          $RE --dyn-syms osmesa.so | awk '{print $2, $8}' | sort | head -0
+          strings -a osmesa.so | grep -i "MESA_\|/proc\|/sys/devices" | head -60
