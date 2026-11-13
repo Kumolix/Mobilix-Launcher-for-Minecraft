@@ -3954,57 +3954,57 @@ class MainActivity : Activity() {
         })
         render()
 
+        // Сначала манифест Mojang (ваниль появляется сразу), потом Fabric / Quilt / NeoForge / Forge параллельно, каждый добавляется по готовности.
         Thread {
+            val order = HashMap<String, Int>()
+            val van = ArrayList<String>()
             try {
-                val man = JSONObject(fetchText(MANIFEST_URL)).getJSONArray("versions")
-                val order = HashMap<String, Int>()
+                val man = JSONObject(fetchCached(MANIFEST_URL, "manifest")).getJSONArray("versions")
                 var cut = false
                 for (i in 0 until man.length()) {
                     val o = man.getJSONObject(i); val id = o.getString("id")
                     order[id] = i
-                    if (!cut && o.getString("type") == "release") vanilla.add(id)
-                    else if (o.getString("type") == "old_alpha" && id.startsWith("c0.")) vanilla.add(id)   // Minecraft Classic
+                    if (!cut && o.getString("type") == "release") van.add(id)
+                    else if (o.getString("type") == "old_alpha" && id.startsWith("c0.")) van.add(id)   // Minecraft Classic
                     if (id == "1.0") cut = true   // 1.0–1.5.2 запускаются через слой без окна AWT (OldMain)
                 }
-                try {
-                    val fa = JSONArray(fetchText("https://meta.fabricmc.net/v2/versions/game"))
-                    for (i in 0 until fa.length()) {
-                        val o = fa.getJSONObject(i)
-                        if (o.optBoolean("stable") && order.containsKey(o.getString("version"))) fabric.add(o.getString("version"))
-                    }
-                } catch (_: Throwable) {}
-                try {
-                    val qa = JSONArray(fetchText("https://meta.quiltmc.org/v3/versions/game"))
-                    for (i in 0 until qa.length()) {
-                        val o = qa.getJSONObject(i)
-                        if (o.optBoolean("stable") && order.containsKey(o.getString("version"))) quilt.add(o.getString("version"))
-                    }
-                } catch (_: Throwable) {}
-                try {
-                    val xml = fetchText("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml")
-                    val set = LinkedHashSet<String>()
-                    Regex("<version>([^<]+)</version>").findAll(xml).forEach { r -> neoMc(r.groupValues[1])?.let { mc -> if (order.containsKey(mc)) set.add(mc) } }
-                    neoforge.addAll(set.sortedBy { order[it] })
-                } catch (_: Throwable) {}
-                try {
-                    val set = HashSet<String>()
-                    try {
-                        val pr = JSONObject(fetchText("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json")).getJSONObject("promos")
-                        val it = pr.keys()
-                        while (it.hasNext()) set.add(it.next().substringBefore("-"))
-                    } catch (_: Throwable) {
-                        // запасной источник списка: maven-metadata (с зеркалом BMCLAPI)
-                        val xml = fetchText("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml")
-                        Regex("<version>([\\d.]+)-[^<]+</version>").findAll(xml).forEach { set.add(it.groupValues[1]) }
-                    }
-                    val idx18 = order["1.8"] ?: Int.MAX_VALUE   // индекс в манифесте растёт к старым версиям
-                    forge.addAll(set.filter { vanilla.contains(it) && (order[it] ?: 0) <= idx18 }.sortedBy { order[it] })
-                } catch (_: Throwable) {}
+                runOnUiThread { vanilla.addAll(van); loaded = true; render() }
             } catch (e: Throwable) {
                 log("Список версий: $e")
+                runOnUiThread { loaded = true; render() }
+                return@Thread
             }
-            loaded = true
-            runOnUiThread { render() }
+            fun part(name: String, work: () -> List<String>, into: ArrayList<String>) = Thread {
+                try { val r = work(); runOnUiThread { into.addAll(r); render() } } catch (e: Throwable) { log("Список $name: $e") }
+            }.also { it.start() }
+            part("Fabric", {
+                val fa = JSONArray(fetchCached("https://meta.fabricmc.net/v2/versions/game", "fabric"))
+                (0 until fa.length()).map { fa.getJSONObject(it) }.filter { it.optBoolean("stable") && order.containsKey(it.getString("version")) }.map { it.getString("version") }
+            }, fabric)
+            part("Quilt", {
+                val qa = JSONArray(fetchCached("https://meta.quiltmc.org/v3/versions/game", "quilt"))
+                (0 until qa.length()).map { qa.getJSONObject(it) }.filter { it.optBoolean("stable") && order.containsKey(it.getString("version")) }.map { it.getString("version") }
+            }, quilt)
+            part("NeoForge", {
+                val xml = fetchCached("https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml", "neoforge")
+                val set = LinkedHashSet<String>()
+                Regex("<version>([^<]+)</version>").findAll(xml).forEach { r -> neoMc(r.groupValues[1])?.let { mc -> if (order.containsKey(mc)) set.add(mc) } }
+                set.sortedBy { order[it] }
+            }, neoforge)
+            part("Forge", {
+                val set = HashSet<String>()
+                try {
+                    val pr = JSONObject(fetchCached("https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json", "forge")).getJSONObject("promos")
+                    val it = pr.keys()
+                    while (it.hasNext()) set.add(it.next().substringBefore("-"))
+                } catch (_: Throwable) {
+                    // запасной источник списка: maven-metadata (с зеркалом BMCLAPI)
+                    val xml = fetchCached("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml", "forgemeta")
+                    Regex("<version>([\\d.]+)-[^<]+</version>").findAll(xml).forEach { set.add(it.groupValues[1]) }
+                }
+                val idx18 = order["1.8"] ?: Int.MAX_VALUE   // индекс в манифесте растёт к старым версиям
+                set.filter { van.contains(it) && (order[it] ?: 0) <= idx18 }.sortedBy { order[it] }
+            }, forge)
         }.start()
         return box
     }
@@ -4662,8 +4662,7 @@ class MainActivity : Activity() {
                 sp.writeText((lines + "enabled=false").joinToString("\n") + "\n")
             } catch (_: Exception) {}
         }
-        cmd.add("-Dorg.lwjgl.util.Debug=true")
-        cmd.add("-Dorg.lwjgl.util.DebugLoader=true")
+        cmd.add("-Dorg.lwjgl.util.DebugLoader=true")   // пути загрузки библиотек в лог; полный режим Debug выключен: он добавляет проверки в каждый вызов LWJGL
         if (elyOn()) {
             val agent = ensureAuthlib()
             if (agent != null && agentUsable(rt)) cmd.add("-javaagent:${agent.path}=https://authserver.ely.by/api/authlib-injector")
@@ -5553,20 +5552,39 @@ class MainActivity : Activity() {
         return UUID(bb.long, bb.long).toString()
     }
 
+    private fun fetchOne(u: String, connectMs: Int, readMs: Int): String {
+        val c = URL(u).openConnection() as HttpURLConnection
+        c.connectTimeout = connectMs
+        c.readTimeout = readMs
+        c.setRequestProperty("User-Agent", "Mobilix/1.4")
+        return c.inputStream.bufferedReader().use { it.readText() }
+    }
+
+    /** Официальный адрес и зеркало опрашиваются одновременно, берётся первый ответ (раньше шли по очереди: недоступный адрес стоил до 45 с). */
     internal fun fetchText(url: String): String {
-        var err: Exception? = null
-        for (u in listOf(url) + mirrorsFor(url)) {
-            try {
-                val c = URL(u).openConnection() as HttpURLConnection
-                c.connectTimeout = 15000
-                c.readTimeout = 30000
-                c.setRequestProperty("User-Agent", "Mobilix/1.4")
-                return c.inputStream.bufferedReader().use { it.readText() }
-            } catch (e: Exception) {
-                err = e
-            }
+        val urls = listOf(url) + mirrorsFor(url)
+        if (urls.size == 1) return fetchOne(url, 15000, 30000)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(urls.size)
+        try {
+            return pool.invokeAny(urls.map { u -> java.util.concurrent.Callable { fetchOne(u, 10000, 30000) } })
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw (e.cause as? Exception) ?: e
+        } finally {
+            pool.shutdownNow()
         }
-        throw err ?: RuntimeException("нет адреса")
+    }
+
+    /** Списки версий почти не меняются: свежий кэш (до [ttlMs]) отдаётся сразу, при сбое сети берётся и устаревший. */
+    private fun fetchCached(url: String, key: String, ttlMs: Long = 6L * 3600 * 1000): String {
+        val f = File(cacheDir, "list_$key.txt")
+        if (f.exists() && System.currentTimeMillis() - f.lastModified() < ttlMs) try { return f.readText() } catch (_: Exception) {}
+        return try {
+            val t = fetchText(url)
+            try { f.writeText(t) } catch (_: Exception) {}
+            t
+        } catch (e: Exception) {
+            if (f.exists()) f.readText() else throw e
+        }
     }
 
     private fun sha1Of(f: File): String {

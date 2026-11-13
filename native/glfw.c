@@ -134,7 +134,7 @@ EXPORT int glfwInit(void) {
     G.vm.width = G.w ? G.w : 1920; G.vm.height = G.h ? G.h : 1080;
     G.vm.redBits = G.vm.greenBits = G.vm.blueBits = 8; G.vm.refreshRate = 60;
     G.monlist[0] = &G.mon;
-    LOG("glfwInit");
+    LOG("glfwInit"); ELOG("glfwInit вызван");
     return 1;
 }
 EXPORT void glfwTerminate(void) { LOG("glfwTerminate"); }
@@ -152,6 +152,7 @@ EXPORT void glfwWindowHint(int h, int v) {}
 EXPORT void glfwWindowHintString(int h, const char* v) {}
 
 EXPORT void* glfwCreateWindow(int width, int height, const char* title, void* monitor, void* share) {
+    ELOG("glfwCreateWindow вызван (win=%p)", (void*) G.win);
     if (!G.win) { if (G.err) G.err(0x10008, "нет Android-поверхности"); return NULL; }
 #ifdef MOBILIX_OSMESA
     if (OS.on) {
