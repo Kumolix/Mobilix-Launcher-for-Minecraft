@@ -5,6 +5,7 @@
 #include <EGL/egl.h>
 #include <dlfcn.h>
 #include <signal.h>
+#include <ucontext.h>
 #include <unwind.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -123,6 +124,7 @@ static _Unwind_Reason_Code bt_cb(struct _Unwind_Context* c, void* arg) {
     if (pc && st->n < 28) {
         Dl_info di;
         if (dladdr((void*) pc, &di) && di.dli_fname) ELOG("  #%d pc %p %s (%s+%ld)", st->n, (void*) pc, di.dli_fname, di.dli_sname ? di.dli_sname : "?", di.dli_saddr ? (long) (pc - (uintptr_t) di.dli_saddr) : 0L);
+        if (dladdr((void*) pc, &di) && di.dli_fbase) ELOG("     файловое смещение 0x%lx", (long) (pc - (uintptr_t) di.dli_fbase));
         else ELOG("  #%d pc %p", st->n, (void*) pc);
         st->n++;
     }
@@ -130,6 +132,13 @@ static _Unwind_Reason_Code bt_cb(struct _Unwind_Context* c, void* arg) {
 }
 static void os_sig(int sig, siginfo_t* info, void* ctx) {
     ELOG("СИГНАЛ %d в OSMesa/Zink, адрес %p", sig, info ? info->si_addr : NULL);
+    if (info && sig == SIGSEGV && ((uintptr_t) info->si_addr & 0xfff) == 0 && info->si_addr) {
+        char t[65]; const unsigned char* q = (const unsigned char*) info->si_addr - 64;
+        for (int i = 0; i < 64; i++) t[i] = (q[i] >= 32 && q[i] < 127) ? (char) q[i] : '.';
+        t[64] = 0;
+        ELOG("  64 байта перед адресом: [%s]", t);
+    }
+    if (ctx) { ucontext_t* uc = (ucontext_t*) ctx; ELOG("  x0=%llx x1=%llx x2=%llx", (unsigned long long) uc->uc_mcontext.regs[0], (unsigned long long) uc->uc_mcontext.regs[1], (unsigned long long) uc->uc_mcontext.regs[2]); }
     struct bt_state st = {0};
     _Unwind_Backtrace(bt_cb, &st);
     usleep(400000);   // дать потоку лога дописать файл
