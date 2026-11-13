@@ -4624,8 +4624,11 @@ class MainActivity : Activity() {
         log("ОЗУ устройства: $totalMb МБ, память игры: $xmx МБ")
         cmd.add("-Xmx${xmx}M")
         // не-кучевая память (метаспейс, кэш кода) тоже ограничена: при загрузке меню с модами она растёт и может убить игру
-        cmd.add("-XX:MaxMetaspaceSize=${if (totalMb < 5000) 384 else 640}m")
-        cmd.add("-XX:ReservedCodeCacheSize=${if (totalMb < 5000) 96 else 160}m")
+        val lowMem = totalMb < 3500
+        cmd.add("-XX:MaxMetaspaceSize=${if (lowMem) 192 else if (totalMb < 5000) 384 else 640}m")
+        cmd.add("-XX:ReservedCodeCacheSize=${if (lowMem) 48 else if (totalMb < 5000) 96 else 160}m")
+        // слабые устройства: только быстрый компилятор C1 и один поток компиляции. Меньше нативной памяти (код, компилятор), чуть ниже пик скорости
+        if (lowMem) { cmd.add("-XX:TieredStopAtLevel=1"); cmd.add("-XX:CICompilerCount=1") }
         cmd.add(when (prefs.getString("gc", "Serial")) { "G1" -> "-XX:+UseG1GC"; "Parallel" -> "-XX:+UseParallelGC"; else -> "-XX:+UseSerialGC" })
         prefs.getString("jvmArgs", "")?.split(Regex("\\s+"))?.filter { it.startsWith("-") }?.forEach { cmd.add(it) }
         cmd.add("-XX:ErrorFile=${File(gameDir, "hs_err.log").path}")
@@ -5425,7 +5428,8 @@ class MainActivity : Activity() {
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
         val totalMb = mi.totalMem / 1024 / 1024
         val manualX = prefs.getInt("xmx", 0)
-        val v = if (manualX > 0) manualX else when { totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }.toInt()
+        val v = if (manualX > 0) manualX else when { totalMb < 3500 -> (totalMb * (if (modern) 30 else 25) / 100).toInt().coerceIn(512, 1024)   // слабые устройства: львиная доля ОЗУ занята системой
+            totalMb < 5000 -> if (modern) 1280 else 1024; totalMb < 10000 -> if (modern) 2048 else 1536; else -> 2048 }.toInt()
         return if (is32bit) v.coerceAtMost(1024) else v   // 32-битный процесс: адресного пространства ~3 ГБ на всё
     }
     /** Куча установщика загрузчика: не меньше, чем у игры + 512 МБ, но не больше ~55% ОЗУ (иначе Android убивает процесс/перезагружает телефон). */
