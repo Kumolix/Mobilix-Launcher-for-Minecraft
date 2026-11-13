@@ -4477,6 +4477,7 @@ class MainActivity : Activity() {
             cpMap[key] = dest.path
         }
         if (swap3) lwjglVer = newLwjgl
+        log("LWJGL: в описании игры '$gameLwjgl', ставим '$lwjglVer'" + (if (swap3) " (jar 3.3.3)" else ""))
         if (legacy) {
             for (a in listOf("lwjgl", "lwjgl-glfw", "lwjgl-opengl", "lwjgl-openal")) {
                 val path3 = "org/lwjgl/$a/$newLwjgl/$a-$newLwjgl.jar"
