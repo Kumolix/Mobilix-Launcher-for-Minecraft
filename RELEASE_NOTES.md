@@ -7,6 +7,7 @@ What's new
 - Settings > Game: renderer choice (Auto / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 can now run on MobileGlues; may help on Mali and older Adreno
 - Minecraft 26.1+ (Java 25): a separate Java 25 runtime is installed automatically; rotating the screen no longer interrupts a download
 - Experimental: 32-bit (arm) and x86 / x86_64 devices in the same APK (versions up to 1.16.5, gl4es)
+- 1.17–1.18.2: LWJGL 3.3.3 is used (fixes launch crash after running other versions)
 - Version list loads in parallel and is cached (shows vanilla immediately); skin preview keeps rotating; low-memory JVM profile for devices under 3.5 GB; LWJGL debug output disabled
 
 Что нового?

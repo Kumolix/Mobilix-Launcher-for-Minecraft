@@ -4435,6 +4435,11 @@ class MainActivity : Activity() {
         val libTasks = ArrayList<Task>()
         val cpMap = LinkedHashMap<String, String>()
         val libs = v.getJSONArray("libraries")
+        // Игры с LWJGL 3.2.x (1.17–1.18.2) тоже получают jar 3.3.3: готовых нативных библиотек 3.2.2 под Android нет,
+        // а 3.3.3 совпадает с тем, что уже работает для 1.13–1.16.5
+        val gameLwjgl = (0 until libs.length()).map { libs.getJSONObject(it).optString("name") }
+            .firstOrNull { it.startsWith("org.lwjgl:lwjgl:") }?.split(":")?.getOrNull(2) ?: ""
+        val swap3 = oldGl || gameLwjgl.startsWith("3.2") || gameLwjgl.startsWith("3.1")
         for (i in 0 until libs.length()) {
             val lib = libs.getJSONObject(i)
             if (!allowed(lib)) continue
@@ -4447,7 +4452,7 @@ class MainActivity : Activity() {
                 if (lib.has("natives") && art == null) continue
                 if (name.split(":").size > 3 && name.split(":")[3].startsWith("natives")) continue
             }
-            if (oldGl && name.startsWith("org.lwjgl:")) {
+            if (swap3 && name.startsWith("org.lwjgl:")) {
                 val pp = name.split(":")
                 val a = pp[1]
                 val path3 = "org/lwjgl/$a/$newLwjgl/$a-$newLwjgl.jar"
@@ -4471,7 +4476,7 @@ class MainActivity : Activity() {
             val key = if (parts.size >= 2) parts[0] + ":" + parts[1] + (if (parts.size > 3) ":" + parts[3] else "") else path
             cpMap[key] = dest.path
         }
-        if (oldGl) lwjglVer = newLwjgl
+        if (swap3) lwjglVer = newLwjgl
         if (legacy) {
             for (a in listOf("lwjgl", "lwjgl-glfw", "lwjgl-opengl", "lwjgl-openal")) {
                 val path3 = "org/lwjgl/$a/$newLwjgl/$a-$newLwjgl.jar"
