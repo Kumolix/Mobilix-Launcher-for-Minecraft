@@ -7,7 +7,13 @@ jobs:
       - name: Strings
         run: |
           curl -sL -o osmesa.so "https://github.com/${{ github.repository }}/releases/download/libraries/pojav-osmesa-arm64.so"
-          OD=$(ls $ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump)
-          $OD -s --start-address=0x9ec80 --stop-address=0x9ecd0 osmesa.so
-          $OD -s --start-address=0x92df0 --stop-address=0x92e30 osmesa.so
-          strings -a osmesa.so | grep -i "POJAV\|MESA_GL\|VK_\|LIBGL" | sort -u | head -40
+          python3 - <<'P'
+          import subprocess,struct
+          d=open('osmesa.so','rb').read()
+          shoff=struct.unpack_from('<Q',d,0x28)[0]; shentsize,shnum,shstrndx=struct.unpack_from('<HHH',d,0x3a)
+          secs=[struct.unpack_from('<IIQQQQIIQQ',d,shoff+i*shentsize) for i in range(shnum)]
+          for va in (0x9ec97,0x92dfa):
+              for (n,t,f,addr,off,size,*_) in secs:
+                  if t!=8 and addr<=va<addr+size:
+                      o=off+va-addr; e=d.index(b'\0',o); print(hex(va), d[o:e][:120]); break
+          P
