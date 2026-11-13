@@ -4,6 +4,8 @@
 #include <android/native_window.h>
 #include <EGL/egl.h>
 #include <dlfcn.h>
+#include <signal.h>
+#include <unwind.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -85,6 +87,7 @@ static struct {
 static void (*os_finish)(void);
 static int os_locked = 0;
 // блокируем следующий буфер окна и привязываем к нему контекст
+static void os_guard(int on);
 static int os_lock_make(void) {
     ANativeWindow_Buffer b;
     if (!G.win || !OS.ctx) return 0;
@@ -92,7 +95,10 @@ static int os_lock_make(void) {
     os_locked = 1;
     OS.pix(0x10 /*OSMESA_ROW_LENGTH*/, b.stride);
     OS.pix(0x11 /*OSMESA_Y_UP*/, 0);
+    static int first = 1;
+    if (first) os_guard(1);
     int ok = OS.make(OS.ctx, b.bits, 0x1401 /*GL_UNSIGNED_BYTE*/, b.width, b.height);
+    if (first) { os_guard(0); first = 0; }
     OS.cur = ok ? 1 : 0;
     { static int n = 0; if (n < 3 || !ok) { n++; ELOG("Zink: MakeCurrent %s (буфер %dx%d stride %d формат %d)", ok ? "ok" : "НЕ УДАЛСЯ", b.width, b.height, b.stride, b.format); } }
     return ok;
@@ -104,6 +110,42 @@ EXPORT void* glXGetProcAddressARB(const char* n) { return OS.proc ? OS.proc(n) :
 #define OS_ON (OS.on)
 #else
 #define OS_ON 0
+#endif
+
+
+#ifdef MOBILIX_OSMESA
+// диагностика нативного падения внутри Mesa/Zink: печатаем сигнал и стек в game.log, затем передаём сигнал дальше
+static struct sigaction os_old[32];
+struct bt_state { int n; };
+static _Unwind_Reason_Code bt_cb(struct _Unwind_Context* c, void* arg) {
+    struct bt_state* st = (struct bt_state*) arg;
+    uintptr_t pc = _Unwind_GetIP(c);
+    if (pc && st->n < 28) {
+        Dl_info di;
+        if (dladdr((void*) pc, &di) && di.dli_fname) ELOG("  #%d pc %p %s (%s+%ld)", st->n, (void*) pc, di.dli_fname, di.dli_sname ? di.dli_sname : "?", di.dli_saddr ? (long) (pc - (uintptr_t) di.dli_saddr) : 0L);
+        else ELOG("  #%d pc %p", st->n, (void*) pc);
+        st->n++;
+    }
+    return st->n >= 28 ? _URC_END_OF_STACK : _URC_NO_REASON;
+}
+static void os_sig(int sig, siginfo_t* info, void* ctx) {
+    ELOG("СИГНАЛ %d в OSMesa/Zink, адрес %p", sig, info ? info->si_addr : NULL);
+    struct bt_state st = {0};
+    _Unwind_Backtrace(bt_cb, &st);
+    usleep(400000);   // дать потоку лога дописать файл
+    struct sigaction* o = &os_old[sig];
+    sigaction(sig, o, NULL);
+    if ((o->sa_flags & SA_SIGINFO) && o->sa_sigaction) o->sa_sigaction(sig, info, ctx);
+    else if (o->sa_handler && o->sa_handler != SIG_DFL && o->sa_handler != SIG_IGN) o->sa_handler(sig);
+    else raise(sig);
+}
+static void os_guard(int on) {
+    static const int sigs[] = { SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE };
+    for (unsigned i = 0; i < sizeof sigs / sizeof *sigs; i++) {
+        if (on) { struct sigaction a; memset(&a, 0, sizeof a); a.sa_sigaction = os_sig; a.sa_flags = SA_SIGINFO | SA_ONSTACK; sigemptyset(&a.sa_mask); sigaction(sigs[i], &a, &os_old[sigs[i]]); }
+        else sigaction(sigs[i], &os_old[sigs[i]], NULL);
+    }
+}
 #endif
 
 EXPORT void smc_set_gl_lib(const char* path) {
@@ -160,7 +202,9 @@ EXPORT void* glfwCreateWindow(int width, int height, const char* title, void* mo
         const int at[] = { 0x22 /*FORMAT*/, 0x1908 /*GL_RGBA*/, 0x30 /*DEPTH_BITS*/, 24, 0x31 /*STENCIL_BITS*/, 8, 0x32 /*ACCUM_BITS*/, 0,
             0x33 /*PROFILE*/, 0x34 /*CORE_PROFILE*/, 0x36 /*MAJOR*/, 3, 0x37 /*MINOR*/, 3, 0 };
         ELOG("Zink: создаю контекст OSMesa (окно %dx%d)", G.w, G.h);
+        os_guard(1);
         OS.ctx = OS.create_attribs(at, NULL);
+        os_guard(0);
         if (!OS.ctx) { ELOG("OSMesaCreateContextAttribs вернул NULL"); return NULL; }
         os_finish = (void (*)(void)) OS.proc("glFinish");
         ELOG("Zink: контекст создан");
