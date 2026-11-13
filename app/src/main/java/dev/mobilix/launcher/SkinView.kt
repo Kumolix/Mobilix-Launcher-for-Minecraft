@@ -119,8 +119,8 @@ class SkinView(ctx: Context) : View(ctx) {
             c.drawBitmap(b, f.rect, RectF(f.rect), paint)
             c.restore()
         }
-        // экономия энергии: ~25 кадров/с вместо частоты экрана, а через 20 с без касаний вращение останавливается (касание возобновляет)
-        if (touching || now - rotStart < 20_000_000_000L) postInvalidateDelayed(40)
+        // экономия энергии: ~25 кадров/с вместо частоты экрана, через 20 с без касаний ~12 кадров/с (вращение не останавливается)
+        postInvalidateDelayed(if (touching || now - rotStart < 20_000_000_000L) 40L else 80L)
     }
 
     private var rotStart = System.nanoTime()
