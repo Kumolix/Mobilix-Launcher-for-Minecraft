@@ -120,7 +120,7 @@ class SkinView(ctx: Context) : View(ctx) {
             c.restore()
         }
         // экономия энергии: ~25 кадров/с вместо частоты экрана, через 20 с без касаний ~12 кадров/с (вращение не останавливается)
-        postInvalidateDelayed(if (touching || now - rotStart < 20_000_000_000L) 40L else 80L)
+        postInvalidateDelayed(if (touching || now - rotStart < 20_000_000_000L) 40L else 50L)
     }
 
     private var rotStart = System.nanoTime()

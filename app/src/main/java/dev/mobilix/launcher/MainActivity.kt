@@ -4553,10 +4553,9 @@ class MainActivity : Activity() {
         if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
         // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).
         val rendPref = prefs.getInt("renderer", 0)
-        val useGl4es = gl4es != null && oldGl && !(!legacy && (rendPref == 1 || rendPref == 2))
+        val useGl4es = gl4es != null && oldGl   // 1.13–1.16.5 на MobileGlues падают: нет glAlphaFunc (нужен compatibility-профиль)
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
-        if (oldGl && legacy && (rendPref == 1 || rendPref == 2)) log("Версии до 1.13 работают только через gl4es, выбор рендерера игнорируется.")
-        if (!useGl4es && oldGl && !legacy) log("Рендерер для 1.13–1.16.5: MobileGlues" + (if (rendPref == 2) " + ANGLE" else "") + " вместо gl4es.")
+        if (oldGl && (rendPref == 1 || rendPref == 2)) log("Версии до 1.17 работают только через gl4es, выбор рендерера игнорируется.")
         // Zink (только MobiLabs): Mesa OSMesa + Vulkan-драйвер телефона, рисует в буфер окна; пока для 1.17+ (OpenGL core)
         val zink = BuildConfig.LABS && rendPref == 4 && !oldGl
         if (BuildConfig.LABS && rendPref == 4 && oldGl) log("Zink пока только для 1.17+, для этой версии используется gl4es.")

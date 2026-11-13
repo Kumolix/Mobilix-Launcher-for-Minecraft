@@ -4,7 +4,7 @@ What's new
 - Settings > Special: "Hide system buttons in game" (the Layout editor opens by holding Esc / "II" in Bedrock for 5 s); on-screen keyboard now accepts input from keyboards that send digits and dots as key presses (typing a server IP); closing the game tab is no longer treated as a crash
 - Settings > Special: "Bedrock controls" mode (tap = attack, hold = mine, Pocket Edition style layout with its own editable buttons)
 - Renderers: Renderlix profiles (Auto / Standard / Sodium+Iris / Custom: OpenGL version, shader errors, compute shaders, shader cache, FSR 1)
-- Settings > Game: renderer choice (Auto / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 can now run on MobileGlues; may help on Mali and older Adreno
+- Settings > Game: renderer choice (Auto / MobileGlues / MobileGlues + ANGLE / gl4es); versions before 1.17 always use gl4es
 - Minecraft 26.1+ (Java 25): a separate Java 25 runtime is installed automatically; rotating the screen no longer interrupts a download
 - Experimental: 32-bit (arm) and x86 / x86_64 devices in the same APK (versions up to 1.16.5, gl4es)
 - 1.17–1.18.2: LWJGL 3.3.3 is used (fixes launch crash after running other versions)
