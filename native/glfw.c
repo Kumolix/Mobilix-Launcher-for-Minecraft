@@ -13,6 +13,8 @@
 #include <unistd.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_INFO, "Mobilix-GLFW", __VA_ARGS__)
+// диагностика прямо в game.log (LOG пишет только в logcat)
+#define ELOG(...) do { fprintf(stderr, "[Mobilix] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
 #define EXPORT __attribute__((visibility("default")))
 
 typedef struct { int width, height, redBits, greenBits, blueBits, refreshRate; } VidMode;
@@ -104,8 +106,6 @@ EXPORT void* glXGetProcAddressARB(const char* n) { return OS.proc ? OS.proc(n) :
 #define OS_ON 0
 #endif
 
-// диагностика прямо в game.log (LOG пишет только в logcat)
-#define ELOG(...) do { fprintf(stderr, "[Mobilix] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
 EXPORT void smc_set_gl_lib(const char* path) {
     G.gl_lib = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     LOG("gl lib %s -> %p", path, G.gl_lib);
