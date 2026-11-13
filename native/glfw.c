@@ -169,6 +169,13 @@ EXPORT void smc_set_gl_lib(const char* path) {
         OS.proc = (void* (*)(const char*)) dlsym(G.gl_lib, "OSMesaGetProcAddress");
         OS.destroy = (void (*)(OSMesaContext)) dlsym(G.gl_lib, "OSMesaDestroyContext");
         OS.on = OS.create_attribs && OS.make && OS.pix && OS.proc;
+        // OSMesa из PojavLauncher читает адрес vkGetInstanceProcAddr из переменной VULKAN_PTR (strtoul(getenv(...)) без проверки на NULL)
+        {
+            void* vk = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+            void* gip = vk ? dlsym(vk, "vkGetInstanceProcAddr") : NULL;
+            if (gip) { char hex[32]; snprintf(hex, sizeof hex, "%lx", (unsigned long) gip); setenv("VULKAN_PTR", hex, 1); ELOG("Zink: VULKAN_PTR=%s", hex); }
+            else ELOG("Zink: libvulkan.so / vkGetInstanceProcAddr не найдены: %s", dlerror());
+        }
         ELOG("OSMesa/Zink: %s (create=%p make=%p pix=%p proc=%p)", OS.on ? "функции найдены" : "ОШИБКА: нет функций OSMesa", (void*) OS.create_attribs, (void*) OS.make, (void*) OS.pix, (void*) OS.proc);
     }
 #endif
