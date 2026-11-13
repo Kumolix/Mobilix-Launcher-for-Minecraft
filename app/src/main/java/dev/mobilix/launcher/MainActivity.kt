@@ -4970,6 +4970,14 @@ class MainActivity : Activity() {
         }
         val dir = File(filesDir, "lwjgl")
         fun hasMain() = dir.exists() && dir.walkTopDown().any { it.isFile && it.name == "liblwjgl.so" }
+        // нативные библиотеки должны точно совпадать с jar игры (3.2.2 для 1.17–1.18, 3.3.x для остальных)
+        val stamp = File(dir, ".mobilix-lwjgl")
+        val want = if (isArm64) version else "pojav"
+        val have = try { stamp.readText().trim() } catch (e: Exception) { "" }
+        if (hasMain() && have != want) {
+            log("LWJGL: установлена другая версия ('" + (have.ifEmpty { "?" }) + "'), нужна '$want', переустановка")
+            dir.deleteRecursively()
+        }
         if (!hasMain()) {
             log("Установка LWJGL $version для Android...")
             val archive = (if (isArm64) downloadLwjgl(version) else downloadPojavLwjgl()) ?: return null
@@ -4981,6 +4989,7 @@ class MainActivity : Activity() {
                 log("  ошибка распаковки: $e")
                 return null
             }
+            try { stamp.writeText(want) } catch (e: Exception) {}
         } else {
             log("LWJGL уже установлен.")
         }
