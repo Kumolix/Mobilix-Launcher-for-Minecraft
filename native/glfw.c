@@ -14,6 +14,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
 
 #define LOG(...) __android_log_print(ANDROID_LOG_INFO, "Mobilix-GLFW", __VA_ARGS__)
 // диагностика прямо в game.log (LOG пишет только в logcat)
@@ -272,6 +274,10 @@ static void g4_init(void) {
     LOG("gl4es initialised");
 }
 EXPORT void glfwMakeContextCurrent(void* w) {
+    if (w) {   // поток рендера: приоритет выше обычного (как у UI-потоков Android), один раз на поток
+        static __thread int prio_done = 0;
+        if (!prio_done) { prio_done = 1; int r = setpriority(PRIO_PROCESS, (id_t) syscall(SYS_gettid), -4); ELOG("приоритет потока рендера: %s", r == 0 ? "-4" : "не удалось изменить"); }
+    }
 #ifdef MOBILIX_OSMESA
     if (OS.on) {
         if (w) { if (!os_locked) os_lock_make(); }

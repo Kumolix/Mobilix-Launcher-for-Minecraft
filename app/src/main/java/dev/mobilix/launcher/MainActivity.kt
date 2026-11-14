@@ -4946,6 +4946,11 @@ class MainActivity : Activity() {
             if (minor <= 15) kv["useVbo"] = pr.vbo.toString()
             if (minor <= 8) kv["clouds"] = pr.clouds.toString() else kv["renderClouds"] = pr.clouds.toString()
             kv["particles"] = pr.particles.toString()
+            // нагрузка на процессор: дальность симуляции и сущностей (сильно влияет на слабых телефонах)
+            val weak = pr.chunks <= 12
+            if (minor >= 18) kv["simulationDistance"] = (if (pr.chunks <= 6) 5 else if (weak) 8 else 12).toString()
+            if (minor >= 16) kv["entityDistanceScaling"] = (if (pr.chunks <= 6) "0.5" else if (weak) "0.75" else "1.0")
+            if (minor >= 21) kv["chunkSectionFadeInTime"] = if (weak) "0.0" else "0.75"
             kv["entityShadows"] = pr.fancy.toString()
             if (minor >= 15) kv["biomeBlendRadius"] = if (pr.fancy) "2" else if (pr.ao) "1" else "0"
             val opt = File(gameDir, "options.txt")

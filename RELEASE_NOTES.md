@@ -9,6 +9,7 @@ What's new
 - Experimental: 32-bit (arm) and x86 / x86_64 devices in the same APK (versions up to 1.16.5, gl4es)
 - 1.17–1.18.2: LWJGL 3.3.3 is used (fixes launch crash after running other versions)
 - Fabric: auto-update now rolls back a mod that breaks another installed one (e.g. Sodium 0.6.13 vs Iris 1.8.1); Renderlix settings removed (Sodium/Iris profile is applied automatically); renderer buttons wrap to a second row
+- Graphics presets also lower simulation and entity distance (and chunk fade-in on 1.21+) on weak presets; the render thread gets a higher priority
 - Version list loads in parallel and is cached (shows vanilla immediately); skin preview keeps rotating; low-memory JVM profile for devices under 3.5 GB; LWJGL debug output disabled
 
 Что нового?
