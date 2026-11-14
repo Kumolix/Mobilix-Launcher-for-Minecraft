@@ -1,4 +1,4 @@
-draft: 1.9.4 (чтобы выпустить релиз, замените первую строку на: version: 1.9.4)
+version: 1.9.4
 
 **EN: What's new**
 - Crash helper: after a crash the launcher finds suspect mods (crash report, log, hs_err) and offers automatic or manual fix (mods are renamed to .disabled and can be restored); installing Sodium/Iris suggests the Renderlix profile
