@@ -39,7 +39,8 @@ jobs:
           set +e
           {
             "$CC" -shared -fPIC -O2 -o "$OUT/libnotag.so" native/notag.c &&
-            "$CC" -shared -fPIC -O2 -Wl,-soname,libglfw.so -o "$OUT/libglfw.so" native/glfw.c -llog -landroid -lEGL -ldl &&
+            "$CC" -shared -fPIC -O2 -DMOBILIX_OSMESA -Wl,-soname,libglfw.so -o "$OUT/libglfw.so" native/glfw.c -llog -landroid -lEGL -ldl &&
+            curl -fsSL https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/runtime-libs/pojav-osmesa-arm64.so -o "$OUT/libOSMesa.so" &&
             "$CC" -shared -fPIC -O2 -o "$OUT/libmobilix.so" native/mobilix.c -L"$OUT" -lglfw -llog -landroid -lEGL -lGLESv2 -ldl
           } > native-build.log 2>&1
           RC=$?

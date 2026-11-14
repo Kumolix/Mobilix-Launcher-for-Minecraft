@@ -10,6 +10,7 @@ What's new
 - 1.17–1.18.2: LWJGL 3.3.3 is used (fixes launch crash after running other versions)
 - Fabric: auto-update now rolls back a mod that breaks another installed one (e.g. Sodium 0.6.13 vs Iris 1.8.1); Renderlix settings removed (Sodium/Iris profile is applied automatically); renderer buttons wrap to a second row
 - Graphics presets also lower simulation and entity distance (and chunk fade-in on 1.21+) on weak presets; the render thread gets a higher priority
+- New renderer Zink (Mesa, OpenGL over Vulkan) for 1.17+ on arm64: Settings → Game → Renderer (experimental, a bit slower than MobileGlues on some devices, can help where the GLES driver is weak)
 - Version list loads in parallel and is cached (shows vanilla immediately); skin preview keeps rotating; low-memory JVM profile for devices under 3.5 GB; LWJGL debug output disabled
 
 Что нового?

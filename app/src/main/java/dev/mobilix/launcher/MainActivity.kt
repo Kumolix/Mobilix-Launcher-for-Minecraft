@@ -78,6 +78,8 @@ class MainActivity : Activity() {
     private val isArm64: Boolean get() = abiId == "arm64"
     /** Имя папки ABI внутри APK-плагинов (MobileGlues и т.п.). */
     private val apkAbiDir: String get() = when (abiId) { "arm64" -> "arm64-v8a"; "arm" -> "armeabi-v7a"; else -> abiId }
+    /** Zink (Mesa OSMesa → Vulkan) есть только в arm64-сборке с libOSMesa.so. */
+    private val zinkOk: Boolean by lazy { isArm64 && File(applicationInfo.nativeLibraryDir, "libOSMesa.so").exists() }
     private val is32bit: Boolean get() = abiId == "arm" || abiId == "x86"
     /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
     private val MIRROR = "https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/runtime-libs/"
@@ -1314,7 +1316,7 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
         col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
-        val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (BuildConfig.LABS) listOf("Zink") else emptyList())
+        val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (zinkOk) listOf("Zink") else emptyList())
         col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
         col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — если есть в плагине MobileGlues (иначе выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is used only if the MobileGlues plugin ships it (otherwise it turns off). Applies on next launch.")))
         col = colS
@@ -4552,8 +4554,8 @@ class MainActivity : Activity() {
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
         if (oldGl && (rendPref == 1 || rendPref == 2)) log("Версии до 1.17 работают только через gl4es, выбор рендерера игнорируется.")
         // Zink (только MobiLabs): Mesa OSMesa + Vulkan-драйвер телефона, рисует в буфер окна; пока для 1.17+ (OpenGL core)
-        val zink = BuildConfig.LABS && rendPref == 4 && !oldGl
-        if (BuildConfig.LABS && rendPref == 4 && oldGl) log("Zink пока только для 1.17+, для этой версии используется gl4es.")
+        val zink = zinkOk && rendPref == 4 && !oldGl
+        if (zinkOk && rendPref == 4 && oldGl) log("Zink пока только для 1.17+, для этой версии используется gl4es.")
         val osmesaLib = File(applicationInfo.nativeLibraryDir, "libOSMesa.so")
         if (zink && !osmesaLib.exists()) throw RuntimeException("В этой сборке нет libOSMesa.so")
         if (zink) log("Рендерер: Zink (OSMesa → Vulkan)")
