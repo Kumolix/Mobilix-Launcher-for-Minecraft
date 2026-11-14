@@ -1010,10 +1010,14 @@ class MainActivity : Activity() {
     }
 
     private fun chipRow(labels: List<String>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        // больше 4 кнопок переносятся на вторую строку, чтобы не уезжать за край экрана
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val views = ArrayList<TextView>()
         fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) Th.act else Th.chip) }
+        var row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        box.addView(row)
         labels.forEachIndexed { i, l ->
+            if (i > 0 && i % 4 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; box.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) }) }
             val t = TextView(this).apply {
                 text = l; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnClickListener { paint(i); onPick(i) }
@@ -1022,7 +1026,7 @@ class MainActivity : Activity() {
             row.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) })
         }
         paint(selected)
-        return row
+        return box
     }
 
     private fun note(t: String) = TextView(this).apply { text = t; textSize = 12f; setTextColor(Th.dim); setPadding(0, dp(6), 0, 0) }
@@ -1313,15 +1317,6 @@ class MainActivity : Activity() {
         val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (BuildConfig.LABS) listOf("Zink") else emptyList())
         col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
         col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — если есть в плагине MobileGlues (иначе выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is used only if the MobileGlues plugin ships it (otherwise it turns off). Applies on next launch.")))
-        col.addView(TextView(this).apply { text = tr("Рендер Renderlix", "Renderlix renderer"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Стандарт", "Standard"), "Sodium / Iris", tr("Свой", "Custom")), when (prefs.getInt("renderPreset", 2)) { 2 -> 0; 0 -> 1; 1 -> 2; else -> 3 }) { i -> prefs.edit().putInt("renderPreset", when (i) { 0 -> 2; 1 -> 0; 2 -> 1; else -> 3 }).apply() })
-        col.addView(Button(this).apply {
-            text = tr("Настроить свой профиль…", "Edit custom profile…"); isAllCaps = false; setTextColor(Th.accent)
-            background = GradientDrawable().apply { setColor(Th.chip2); setStroke(dp(2), Th.act) }
-            setOnClickListener { renderCustomDialog() }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)).apply { topMargin = dp(8) })
-        col.addView(note(tr("Renderlix — профиль настроек MobileGlues (LGPL-2.1, © MobileGL-Dev). «Авто» (рекомендуется): профиль Sodium / Iris включается сам, если в сборке есть Sodium, Iris, Embeddium и подобные моды, иначе — стандартный. «Sodium / Iris»: OpenGL 4.5, compute-шейдеры, игнор ошибок шейдеров и кэш шейдеров. Применяется при следующем запуске.",
-            "Renderlix is a settings profile for MobileGlues (LGPL-2.1, © MobileGL-Dev). “Auto” (recommended): the Sodium / Iris profile is switched on automatically when the build has Sodium, Iris, Embeddium and similar mods, otherwise Standard. “Sodium / Iris”: OpenGL 4.5, compute shaders, shader error ignoring and shader cache. Applied on next launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Скачивание модов", "Mod downloads"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
@@ -4783,6 +4778,56 @@ class MainActivity : Activity() {
     }
 
     /** Подтягивает файлы скачанных модов под текущую версию игры и загрузчик, докачивает обязательные зависимости, предупреждает о нехватке. */
+    // ---- проверка несовместимостей модов Fabric по fabric.mod.json (breaks) ----
+    private fun cmpVer(a: String, b: String): Int {
+        fun p(x: String) = x.substringBefore('+').substringBefore('-').split('.').map { it.toIntOrNull() ?: 0 }
+        val x = p(a); val y = p(b)
+        for (i in 0 until maxOf(x.size, y.size)) { val c = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 }); if (c != 0) return c }
+        return 0
+    }
+
+    private fun rangeHit(range: String, ver: String): Boolean = range.split("||").any { part ->
+        part.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.all { c ->
+            when {
+                c == "*" -> true
+                c.startsWith(">=") -> cmpVer(ver, c.drop(2)) >= 0
+                c.startsWith("<=") -> cmpVer(ver, c.drop(2)) <= 0
+                c.startsWith(">") -> cmpVer(ver, c.drop(1)) > 0
+                c.startsWith("<") -> cmpVer(ver, c.drop(1)) < 0
+                c.startsWith("=") -> cmpVer(ver, c.drop(1)) == 0
+                c.startsWith("~") || c.startsWith("^") -> cmpVer(ver, c.drop(1)) >= 0
+                c.contains('x') || c.contains('*') -> {
+                    val pre = c.split('.').takeWhile { it != "x" && it != "*" }
+                    val vp = ver.substringBefore('+').split('.')
+                    pre.indices.all { vp.getOrNull(it) == pre[it] }
+                }
+                else -> cmpVer(ver, c) == 0
+            }
+        }
+    }
+
+    private fun fabricInfo(jar: File): JSONObject? = try {
+        java.util.zip.ZipFile(jar).use { z -> z.getEntry("fabric.mod.json")?.let { JSONObject(z.getInputStream(it).bufferedReader().readText()) } }
+    } catch (_: Throwable) { null }
+
+    /** Моды, которые по своему fabric.mod.json ломаются с уже установленными: (файл-нарушитель, id цели). */
+    private fun modConflicts(mods: File): List<Pair<File, String>> {
+        val infos = HashMap<String, Pair<File, JSONObject>>()
+        mods.listFiles { f -> f.name.endsWith(".jar") }?.forEach { f -> fabricInfo(f)?.let { infos[it.optString("id")] = Pair(f, it) } }
+        val res = ArrayList<Pair<File, String>>()
+        for ((_, pr) in infos) {
+            val br = pr.second.optJSONObject("breaks") ?: continue
+            val keys = br.keys()
+            while (keys.hasNext()) {
+                val tid = keys.next(); val tgt = infos[tid] ?: continue
+                val v = br.opt(tid)
+                val ranges = if (v is JSONArray) (0 until v.length()).map { v.getString(it) } else listOf(v.toString())
+                if (ranges.any { rangeHit(it, tgt.second.optString("version")) }) res.add(Pair(pr.first, tid))
+            }
+        }
+        return res
+    }
+
     private fun autoUpdateMods(gameDir: File, loader: String?, baseVer: String) {
         if (loader == null || !prefs.getBoolean("modAuto", true)) return
         val t0 = System.currentTimeMillis()
@@ -4831,6 +4876,41 @@ class MainActivity : Activity() {
                         } catch (_: Exception) { noDeps.add(title) }
                     }
                 } catch (_: Exception) {}
+            }
+            // несовместимые пары (например Sodium 0.6.13 ломает Iris < 1.8.7): откатываем «нарушителя» на более старую версию
+            if (loader == "fabric") {
+                val modsDir = File(gameDir, "mods")
+                for (round in 0 until 3) {
+                    val cf = modConflicts(modsDir)
+                    if (cf.isEmpty() || System.currentTimeMillis() - t0 > 60000) break
+                    for ((badFile, target) in cf) {
+                        val pid = ids.firstOrNull { index.optJSONObject(it)?.optString("f") == badFile.name } ?: continue
+                        val title = index.optJSONObject(pid)?.optString("n", pid) ?: pid
+                        log("Конфликт модов: «$title» несовместим с «$target», ищу более старую версию")
+                        val vers = try { versionsFor(pid) } catch (_: Exception) { continue }
+                        var fixed = false
+                        for (k in 0 until minOf(vers.length(), 12)) {
+                            val v = vers.getJSONObject(k)
+                            val files = v.getJSONArray("files"); var f = files.getJSONObject(0)
+                            for (q in 0 until files.length()) if (files.getJSONObject(q).optBoolean("primary")) f = files.getJSONObject(q)
+                            if (f.getString("filename") == badFile.name) continue
+                            val tmp = File(cacheDir, "conflict-try.jar")
+                            if (!download(f.getString("url"), tmp, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) continue
+                            val info = fabricInfo(tmp) ?: continue
+                            val br = info.optJSONObject("breaks")
+                            val tv = fabricInfo(File(modsDir, modsDir.listFiles { x -> x.name.endsWith(".jar") }?.firstOrNull { x -> fabricInfo(x)?.optString("id") == target }?.name ?: "")) ?.optString("version") ?: ""
+                            val v2 = br?.opt(target)
+                            val rs = if (v2 == null) emptyList() else if (v2 is JSONArray) (0 until v2.length()).map { v2.getString(it) } else listOf(v2.toString())
+                            if (rs.any { rangeHit(it, tv) }) continue
+                            val dest = File(modsDir, f.getString("filename"))
+                            tmp.copyTo(dest, true); tmp.delete(); badFile.delete()
+                            index.put(pid, JSONObject().put("t", "mod").put("f", dest.name).put("n", title).put("l", loader).put("v", baseVer))
+                            log("Конфликт модов: «$title» заменён на ${dest.name}")
+                            fixed = true; break
+                        }
+                        if (!fixed) log("Конфликт модов: подходящей версии «$title» не найдено")
+                    }
+                }
             }
             idxSave(index)
             if (updated > 0 || added > 0) log("Автообновление модов: обновлено $updated, докачано зависимостей $added")
@@ -5401,7 +5481,7 @@ class MainActivity : Activity() {
 
     private fun writeRenderConfig(): File {
         val dir = File(filesDir, "mg"); dir.mkdirs()
-        val preset = prefs.getInt("renderPreset", 2)
+        val preset = 2   // Renderlix убран из настроек: профиль Sodium/Iris включается сам, если в сборке есть такие моды
         val shaders = preset == 1 || (preset == 2 && try { CrashDoctor.hasRenderMods(curGameDir()) } catch (_: Throwable) { false })
         if (preset == 3) {
             val cc = JSONObject()
