@@ -219,7 +219,7 @@ jobs:
           CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           OUT=app/src/main/jniLibs/arm64-v8a
           "$CC" -shared -fPIC -O2 -DMOBILIX_OSMESA -Wl,-soname,libglfw.so -o "$OUT/libglfw.so" native/glfw.c -llog -landroid -lEGL -ldl
-          curl -fsSL https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/libraries/pojav-osmesa-arm64.so -o "$OUT/libOSMesa.so"
+          curl -fsSL https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/runtime-libs/pojav-osmesa-arm64.so -o "$OUT/libOSMesa.so"
           ls -la "$OUT/libOSMesa.so" "$OUT/libglfw.so"
           RE="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"; NM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
           echo "::notice title=OSMesa deps::$("$RE" -d "$OUT/libOSMesa.so" | grep -E 'NEEDED|SONAME' | tr '\n' '|')"

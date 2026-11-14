@@ -80,7 +80,7 @@ class MainActivity : Activity() {
     private val apkAbiDir: String get() = when (abiId) { "arm64" -> "arm64-v8a"; "arm" -> "armeabi-v7a"; else -> abiId }
     private val is32bit: Boolean get() = abiId == "arm" || abiId == "x86"
     /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
-    private val MIRROR = "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/releases/download/libraries/"
+    private val MIRROR = "https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/runtime-libs/"
 
     private lateinit var logView: TextView
     private lateinit var scroll: ScrollView
