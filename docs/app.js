@@ -168,7 +168,7 @@ function renderLog(){
  var box=$("#log"),rel=cache.releases;
  if(cache.failed){box.innerHTML='<p class="meta">'+T[lang].chg_fail+' <a href="https://github.com/'+REPO+'/releases">GitHub</a></p>';return;}
  if(!rel)return;
- var shown=rel.filter(function(r){return !r.draft&&!r.prerelease;}).slice(0,8);
+ var shown=rel.filter(function(r){return !r.draft&&!r.prerelease&&r.tag_name!=="libraries";}).slice(0,8);
  box.innerHTML=shown.map(function(r,i){
   var v=(r.tag_name||"").replace(/^APK-/,"");
   var li=notes(r.body).map(function(x){return "<li>"+esc(x)+"</li>";}).join("");
@@ -177,7 +177,7 @@ function renderLog(){
 }
 function renderStats(){
  var rel=cache.releases;if(!rel)return;
- var latest=rel.filter(function(r){return !r.draft&&!r.prerelease;})[0];
+ var latest=rel.filter(function(r){return !r.draft&&!r.prerelease&&r.tag_name!=="libraries";})[0];
  var apk=latest&&(latest.assets||[]).filter(function(a){return /\.apk$/i.test(a.name);})[0];
  if(apk){
   var a=$("#dl");a.href=apk.browser_download_url;
