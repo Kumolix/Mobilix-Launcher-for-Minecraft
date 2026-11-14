@@ -198,12 +198,15 @@ jobs:
         run: |
           VER="$(cat VERSION | tr -d '[:space:]')"
           TAG="APK-$VER"
-          if [ -f RELEASE_NOTES.md ] && head -1 RELEASE_NOTES.md | grep -qx "version: $VER"; then
+          # первая строка заметок: "version: X" — обычный релиз, "prerelease: X" — пре-релиз (не попадает в «последний», на сайт и в счётчик)
+          FIRST="$(head -1 RELEASE_NOTES.md 2>/dev/null)"
+          if [ "$FIRST" = "version: $VER" ] || [ "$FIRST" = "prerelease: $VER" ]; then
+            PRE=""; [ "$FIRST" = "prerelease: $VER" ] && PRE="--prerelease"
             if gh release view "$TAG" >/dev/null 2>&1; then
               echo "release $TAG already exists"
             else
               tail -n +2 RELEASE_NOTES.md > /tmp/notes.md
-              gh release create "$TAG" "out/$NAME.apk" --target "$GITHUB_SHA" --title "Mobilix Launcher $VER" --notes-file /tmp/notes.md
+              gh release create "$TAG" "out/$NAME.apk" --target "$GITHUB_SHA" --title "Mobilix Launcher $VER" --notes-file /tmp/notes.md $PRE
             fi
           else
             echo "no release notes for $VER, skipping release"

@@ -18,7 +18,7 @@ android {
         manifestPlaceholders["appLabel"] = if (labs) "MobiLabs" else "Mobilix"
         minSdk = (project.findProperty("minSdk") as String?)?.toIntOrNull() ?: 28   // 21 только для тестовых сборок 32-бит/x86 (job extra-abi)
         targetSdk = 34
-        versionCode = 97
+        versionCode = 98
         versionName = rootProject.file("VERSION").readText().trim()
     }
 

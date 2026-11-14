@@ -1,4 +1,4 @@
-draft: 1.9.5 (чтобы выпустить релиз, замените первую строку на: version: 1.9.5)
+prerelease: 1.9.5.1
 What's new
 - Settings > Special: "Mod downloads" Auto / Manual (manual lets you pick the exact file version)
 - Settings > Special: "Hide system buttons in game" (the Layout editor opens by holding Esc / "II" in Bedrock for 5 s); on-screen keyboard now accepts input from keyboards that send digits and dots as key presses (typing a server IP); closing the game tab is no longer treated as a crash
