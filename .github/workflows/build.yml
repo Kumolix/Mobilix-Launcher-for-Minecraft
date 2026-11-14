@@ -222,9 +222,15 @@ jobs:
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           CC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
           OUT=app/src/main/jniLibs/arm64-v8a
-          "$CC" -shared -fPIC -O2 -DMOBILIX_OSMESA -Wl,-soname,libglfw.so -o "$OUT/libglfw.so" native/glfw.c -llog -landroid -lEGL -ldl
+          # libadrenotools (подмена Vulkan-драйвера Adreno на Turnip): статически в libglfw.so, хуки как отдельные .so
+          git clone --recursive -q https://github.com/bylaws/libadrenotools.git /tmp/adreno
+          cmake -S /tmp/adreno -B /tmp/adreno/build -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON > /tmp/adreno-cmake.log 2>&1 || { tail -30 /tmp/adreno-cmake.log; exit 1; }
+          cmake --build /tmp/adreno/build -j4 > /tmp/adreno-build.log 2>&1 || { tail -40 /tmp/adreno-build.log; exit 1; }
+          find /tmp/adreno/build -name '*.a' -o -name '*.so' | xargs ls -la
+          find /tmp/adreno/build -name '*.so' -exec cp {} "$OUT/" \;
+          "$CC"++ -shared -fPIC -O2 -DMOBILIX_OSMESA -DMOBILIX_TURNIP -I/tmp/adreno/include -Wl,-soname,libglfw.so -o "$OUT/libglfw.so" -x c native/glfw.c -x none /tmp/adreno/build/libadrenotools.a /tmp/adreno/build/lib/linkernsbypass/liblinkernsbypass.a -static-libstdc++ -llog -landroid -lEGL -ldl
           curl -fsSL https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/runtime-libs/pojav-osmesa-arm64.so -o "$OUT/libOSMesa.so"
-          ls -la "$OUT/libOSMesa.so" "$OUT/libglfw.so"
+          ls -la "$OUT"
           RE="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"; NM="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
           echo "::notice title=OSMesa deps::$("$RE" -d "$OUT/libOSMesa.so" | grep -E 'NEEDED|SONAME' | tr '\n' '|')"
           echo "::notice title=OSMesa symbols::$("$NM" -D --defined-only "$OUT/libOSMesa.so" | grep -E 'OSMesa|glXGetProcAddress' | awk '{print $3}' | tr '\n' ' ')"

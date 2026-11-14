@@ -5,6 +5,10 @@
 #include <EGL/egl.h>
 #include <dlfcn.h>
 #include <signal.h>
+#include <sys/stat.h>
+#ifdef MOBILIX_TURNIP
+#include <adrenotools/driver.h>
+#endif
 #include <ucontext.h>
 #include <unwind.h>
 #include <pthread.h>
@@ -173,7 +177,21 @@ EXPORT void smc_set_gl_lib(const char* path) {
         OS.on = OS.create_attribs && OS.make && OS.pix && OS.proc;
         // OSMesa из PojavLauncher читает дескриптор libvulkan из переменной VULKAN_PTR (strtoul(getenv(...)) без проверки на NULL)
         {
-            void* vk = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
+            void* vk = NULL;
+#ifdef MOBILIX_TURNIP
+            const char* tdir = getenv("MOBILIX_TURNIP_DIR");
+            if (tdir && getenv("MOBILIX_TURNIP_LIB") && getenv("MOBILIX_NATIVE_DIR")) {
+                void* mapping = NULL;
+                char redir[512]; snprintf(redir, sizeof redir, "%s/redirect/", tdir); mkdir(redir, 0700);
+                char tmp[512]; snprintf(tmp, sizeof tmp, "%s/", getenv("MOBILIX_TURNIP_TMP") ? getenv("MOBILIX_TURNIP_TMP") : "/data/local/tmp");
+                char dir[512]; snprintf(dir, sizeof dir, "%s/", tdir);
+                char hook[512]; snprintf(hook, sizeof hook, "%s/", getenv("MOBILIX_NATIVE_DIR"));
+                ELOG("Turnip: загрузка драйвера %s%s", dir, getenv("MOBILIX_TURNIP_LIB"));
+                vk = adrenotools_open_libvulkan(RTLD_NOW | RTLD_GLOBAL, ADRENOTOOLS_DRIVER_CUSTOM, tmp, hook, dir, getenv("MOBILIX_TURNIP_LIB"), redir, &mapping);
+                ELOG("Turnip: adrenotools_open_libvulkan -> %p", vk);
+            }
+#endif
+            if (!vk) vk = dlopen("libvulkan.so", RTLD_NOW | RTLD_GLOBAL);
             // Mesa делает dlsym(<VULKAN_PTR>, "vkGetInstanceProcAddr"): в переменной нужен именно дескриптор dlopen, а не адрес функции
             if (vk) { char hex[32]; snprintf(hex, sizeof hex, "%lx", (unsigned long) vk); setenv("VULKAN_PTR", hex, 1); ELOG("Zink: VULKAN_PTR=%s (дескриптор libvulkan.so)", hex); }
             else ELOG("Zink: libvulkan.so не загрузилась: %s", dlerror());

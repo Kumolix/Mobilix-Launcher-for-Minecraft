@@ -79,6 +79,8 @@ class MainActivity : Activity() {
     /** Имя папки ABI внутри APK-плагинов (MobileGlues и т.п.). */
     private val apkAbiDir: String get() = when (abiId) { "arm64" -> "arm64-v8a"; "arm" -> "armeabi-v7a"; else -> abiId }
     /** Zink (Mesa OSMesa → Vulkan) есть только в arm64-сборке с libOSMesa.so. */
+    /** Turnip (открытый Vulkan-драйвер Adreno через libadrenotools) — только в MobiLabs и только если хуки есть в сборке. */
+    private val turnipOk: Boolean by lazy { BuildConfig.LABS && isArm64 && File(applicationInfo.nativeLibraryDir, "libmain_hook.so").exists() }
     private val zinkOk: Boolean by lazy { isArm64 && File(applicationInfo.nativeLibraryDir, "libOSMesa.so").exists() }
     private val is32bit: Boolean get() = abiId == "arm" || abiId == "x86"
     /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
@@ -1316,7 +1318,7 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
         col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
-        val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (zinkOk) listOf("Zink") else emptyList())
+        val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (zinkOk) listOf("Zink") else emptyList()) + (if (turnipOk) listOf("Zink + Turnip (Adreno)") else emptyList())
         col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
         col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — если есть в плагине MobileGlues (иначе выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is used only if the MobileGlues plugin ships it (otherwise it turns off). Applies on next launch.")))
         col = colS
@@ -4554,11 +4556,20 @@ class MainActivity : Activity() {
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
         if (oldGl && (rendPref == 1 || rendPref == 2)) log("Версии до 1.17 работают только через gl4es, выбор рендерера игнорируется.")
         // Zink (только MobiLabs): Mesa OSMesa + Vulkan-драйвер телефона, рисует в буфер окна; пока для 1.17+ (OpenGL core)
-        val zink = zinkOk && rendPref == 4 && !oldGl
+        val turnip = turnipOk && rendPref == 5 && !oldGl
+        val zink = zinkOk && (rendPref == 4 || turnip) && !oldGl
         if (zinkOk && rendPref == 4 && oldGl) log("Zink пока только для 1.17+, для этой версии используется gl4es.")
         val osmesaLib = File(applicationInfo.nativeLibraryDir, "libOSMesa.so")
         if (zink && !osmesaLib.exists()) throw RuntimeException("В этой сборке нет libOSMesa.so")
-        if (zink) log("Рендерер: Zink (OSMesa → Vulkan)")
+        if (zink) log("Рендерер: Zink (OSMesa → Vulkan)" + (if (turnip) " + драйвер Turnip" else ""))
+        var turnipLib = false
+        if (turnip) try {
+            val td = File(filesDir, "turnip"); td.mkdirs()
+            val drv = File(td, "vulkan.ad07xx.so")
+            if (!drv.exists() || drv.length() < 1_000_000) { log("  скачивание драйвера Turnip (17 МБ)"); downloadBig(MIRROR + "turnip/libvulkan_freedreno.so", drv) }
+            drv.setReadable(true, false); drv.setExecutable(true, false)
+            turnipLib = drv.exists()
+        } catch (e: Exception) { log("  Turnip недоступен ($e), используется системный Vulkan-драйвер") }
         val mgPath = if (zink) osmesaLib.path else if (useGl4es) gl4es else ensureMobileGlues()
 
         // 6. Команда запуска
@@ -4691,7 +4702,8 @@ class MainActivity : Activity() {
                 .put("MESA_GL_VERSION_OVERRIDE", "4.6").put("MESA_GLSL_VERSION_OVERRIDE", "460")
                 .put("MESA_GLSL_CACHE_DIR", cacheDir.path).put("MESA_NO_ERROR", "1")
                 .put("force_glsl_extensions_warn", "true").put("allow_higher_compat_version", "true")
-                .put("allow_glsl_extension_directive_midshader", "true").put("ZINK_DESCRIPTORS", "lazy"))
+                .put("allow_glsl_extension_directive_midshader", "true").put("ZINK_DESCRIPTORS", "lazy")
+                .also { if (turnipLib) it.put("MOBILIX_TURNIP_DIR", File(filesDir, "turnip").path).put("MOBILIX_TURNIP_LIB", "vulkan.ad07xx.so").put("MOBILIX_NATIVE_DIR", applicationInfo.nativeLibraryDir).put("MOBILIX_TURNIP_TMP", cacheDir.path) })
         } else {
             // Renderlix: профиль настроек MobileGlues. Без MG_DIR_PATH MobileGlues считает лаунчер «неподдерживаемым» и игнорирует конфиг.
             try {
