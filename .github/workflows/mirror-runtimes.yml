@@ -51,7 +51,7 @@ jobs:
             urllib.request.urlretrieve(a['browser_download_url'],'/tmp/out/'+dst); print('  ->',dst)
           PY
           ls -la /tmp/out | grep jre25
-      - name: Publish to branch runtime-libs (not a release: no download counters, no extra entries on the releases page)
+      - name: Publish to branch runtime-libs
         run: |
           cd /tmp/out
           git init -q -b runtime-libs
