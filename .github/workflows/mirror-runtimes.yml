@@ -51,6 +51,19 @@ jobs:
             urllib.request.urlretrieve(a['browser_download_url'],'/tmp/out/'+dst); print('  ->',dst)
           PY
           ls -la /tmp/out | grep jre25
+      - name: Turnip driver (K11MCH1/AdrenoToolsDrivers, Mesa Turnip for Adreno, MIT)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/tz /tmp/out/turnip && cd /tmp/tz
+          gh release download v26.0.0-rc08 -R K11MCH1/AdrenoToolsDrivers -p 'Turnip_v26.0.0_R8.zip' -D /tmp/tz
+          unzip -o -q Turnip_v26.0.0_R8.zip -d x
+          find x -type f | xargs ls -la
+          for f in $(find x -name 'meta.json'); do echo "--- $f"; cat "$f"; done
+          SO=$(find x -name '*.so' -printf '%s %p\n' | sort -rn | head -1 | cut -d' ' -f2-)
+          cp "$SO" /tmp/out/turnip/libvulkan_freedreno.so
+          for f in $(find x -name 'meta.json' | head -1); do cp "$f" /tmp/out/turnip/meta.json; done
+          ls -la /tmp/out/turnip
       - name: Publish to branch runtime-libs
         run: |
           cd /tmp/out
