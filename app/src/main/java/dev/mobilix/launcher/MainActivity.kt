@@ -2820,6 +2820,7 @@ class MainActivity : Activity() {
     @Volatile internal var busy = false
     private var pendingRecreate = false
 
+    @JvmName("setBusyUi")
     internal fun setBusy(b: Boolean) = runOnUiThread {
         busy = b
         try {

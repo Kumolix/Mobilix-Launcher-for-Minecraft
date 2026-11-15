@@ -93,7 +93,75 @@ internal fun MainActivity.logPreviousRun(root: File) {
     }
 }
 
+private const val NEW_LWJGL = "3.3.3"
+
+/** Общее состояние подготовки запуска: каждый шаг читает нужное и записывает свой результат. */
+internal class LaunchPlan(val profile: String, val play: Boolean) {
+    lateinit var root: File
+    lateinit var assetsDir: File
+    lateinit var librariesDir: File
+    var child: JSONObject? = null
+    lateinit var baseVer: String
+    lateinit var natives: File
+    lateinit var v: JSONObject
+    var javaMajor = 0
+    var legacy = false
+    lateinit var gameDir: File
+    var oldForge = false
+    lateinit var realMain: String
+    var preAwt = false
+    var oldGl = false
+    lateinit var clientJar: File
+    var lwjglVer = ""
+    val classpath = ArrayList<String>()
+    lateinit var indexId: String
+    lateinit var assetsForGame: File
+    lateinit var java: File
+    lateinit var rt: File
+    var lwjglPath: String? = null
+    var useGl4es = false
+    var zink = false
+    var turnipLib = false
+    var mgPath: String? = null
+    lateinit var jvmArgs: List<String>
+    lateinit var gameArgs: List<String>
+    val cmd = ArrayList<String>()
+    lateinit var mainName: String
+}
+
+/** Подготовка и запуск игры: шаги идут по порядку, общее состояние лежит в LaunchPlan. */
 internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), play: Boolean = true) {
+    val p = LaunchPlan(profile, play)
+    prepareInputs(p)        // папки, профиль, версия игры
+    loadVersionInfo(p)      // json версии, режим (старая/новая), папка игры, настройки, моды
+    downloadClient(p)       // jar клиента
+    collectLibraries(p)     // библиотеки, classpath, LWJGL
+    downloadAssets(p)       // ресурсы
+    if (!play) { log("Файлы версии скачаны."); return }
+    prepareRuntime(p)       // Java, LWJGL, рендерер
+    refreshAccounts(p)      // сессии Ely.by / Microsoft, скин
+    buildLaunchArgs(p)      // аргументы JVM и игры из json версии
+    buildJvmCommand(p)      // итоговая команда JVM
+    writeLaunchConfig(p)    // launch.json для нативного загрузчика
+    // Проверка Java (запускать программы из папки приложения нельзя, проверяем наличие файлов)
+    val rt = p.rt
+    if (!File(rt, "lib/server/libjvm.so").exists() && !File(rt, "lib/aarch64/server/libjvm.so").exists()) {
+        log("Java установлена неполностью (нет libjvm.so). Удалите скачанное и попробуйте снова.")
+        return
+    }
+    log("Java работает.")
+
+    log("Открываю окно игры...")
+    runOnUiThread {
+        if (prefs.getBoolean("worldBackup", true)) WorldBackup.begin(dataRoot(), curGameDir())
+        startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "game"))
+    }
+}
+
+/** Шаг 0: папки данных, профиль, базовая версия, лог. */
+private fun MainActivity.prepareInputs(p: LaunchPlan) {
+    val profile = p.profile
+    val play = p.play
     if (play) {
         prefs.edit().putBoolean("playedOnce", true).apply()
         runOnUiThread { setupHint?.visibility = View.GONE }
@@ -111,7 +179,20 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     log("Папка данных: ${root.path}")
     log("Профиль $profile (игра $baseVer), ник ${nickName()}")
     logPreviousRun(root)
+    p.root = root
+    p.assetsDir = assetsDir
+    p.librariesDir = librariesDir
+    p.child = child
+    p.baseVer = baseVer
+    p.natives = natives
+}
 
+/** Шаг 1: json версии, режим запуска, папка игры, пресет, моды. */
+private fun MainActivity.loadVersionInfo(p: LaunchPlan) {
+    val root = p.root
+    val profile = p.profile
+    val baseVer = p.baseVer
+    val child = p.child
     // 1. json ванильной версии
     val versionJsonFile = File(root, "versions/$baseVer/$baseVer.json")
     if (!versionJsonFile.exists()) {
@@ -156,9 +237,21 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     if (preAwt) log("Очень старая версия (до 1.6): слой LWJGL 2 + запуск без окна AWT")
     else if (legacy) log("Старая версия (формат запуска до 1.13): слой LWJGL 2 + gl4es")
     else if (oldGl) log("Версия 1.13–1.16.5: LWJGL 3.3.3 + gl4es")
-    val newLwjgl = "3.3.3"
+    p.v = v
+    p.javaMajor = javaMajor
+    p.legacy = legacy
+    p.gameDir = gameDir
+    p.oldForge = oldForge
+    p.realMain = realMain
+    p.preAwt = preAwt
+    p.oldGl = oldGl
+}
 
-    // 2. Клиентский jar
+/** Шаг 2: клиентский jar. */
+private fun MainActivity.downloadClient(p: LaunchPlan) {
+    val root = p.root
+    val baseVer = p.baseVer
+    val v = p.v
     val clientInfo = v.getJSONObject("downloads").getJSONObject("client")
     val clientJar = File(root, "versions/$baseVer/$baseVer.jar")
     downloadAll(
@@ -166,8 +259,18 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
         listOf(Task(clientInfo.getString("url"), clientJar, clientInfo.getString("sha1")))
     )
     Thread { loadSkin() }.start()
+    p.clientJar = clientJar
+}
 
-    // 3. Библиотеки
+/** Шаг 3: библиотеки, classpath, версия LWJGL. */
+private fun MainActivity.collectLibraries(p: LaunchPlan) {
+    val v = p.v
+    val oldGl = p.oldGl
+    val legacy = p.legacy
+    val oldForge = p.oldForge
+    val librariesDir = p.librariesDir
+    val clientJar = p.clientJar
+    val newLwjgl = NEW_LWJGL
     var lwjglVer = ""
     val libTasks = ArrayList<Task>()
     val cpMap = LinkedHashMap<String, String>()
@@ -233,7 +336,7 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     if (oldForge) {
         cpMap.values.firstOrNull { it.contains("/net/minecraftforge/forge/") && it.endsWith(".jar") }?.let { patchForgeJar(File(it)) }
     }
-    val classpath = ArrayList<String>()
+    val classpath = p.classpath
     if (legacy) {
         val compat = File(filesDir, "lwjgl2compat.jar")
         try {
@@ -246,8 +349,15 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     classpath.addAll(cpMap.values)
     classpath.add(clientJar.path)
     downloadAll("Библиотеки", libTasks)
+    p.lwjglVer = lwjglVer
+}
 
-    // 4. Ресурсы (звуки, языки и т.д.)
+/** Шаг 4: ресурсы (звуки, языки), копирование для старых версий. */
+private fun MainActivity.downloadAssets(p: LaunchPlan) {
+    val v = p.v
+    val assetsDir = p.assetsDir
+    val gameDir = p.gameDir
+    val preAwt = p.preAwt
     val idx = v.getJSONObject("assetIndex")
     val indexId = idx.getString("id")
     val indexFile = File(assetsDir, "indexes/$indexId.json")
@@ -280,9 +390,16 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
             if (src.exists() && !dst.exists()) { dst.parentFile?.mkdirs(); src.copyTo(dst) }
         }
     }
-    if (!play) { log("Файлы версии скачаны."); return }
+    p.indexId = indexId
+    p.assetsForGame = assetsForGame
+}
 
-    // 5. Java-рантайм
+/** Шаг 5: Java-рантайм, LWJGL, выбор рендерера (gl4es / MobileGlues / ANGLE / Zink / Turnip). */
+private fun MainActivity.prepareRuntime(p: LaunchPlan) {
+    val root = p.root
+    val javaMajor = p.javaMajor
+    val lwjglVer = p.lwjglVer
+    val oldGl = p.oldGl
     val java = ensureRuntime(root, javaMajor)
     val rt = java.parentFile!!.parentFile!!
     val lwjglPath = ensureLwjgl(lwjglVer)
@@ -310,8 +427,19 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
         turnipLib = drv.exists()
     } catch (e: Exception) { log("  Turnip недоступен ($e), используется системный Vulkan-драйвер") }
     val mgPath = if (zink) osmesaLib.path else if (useGl4es) gl4es else ensureMobileGlues()
+    p.java = java
+    p.rt = rt
+    p.lwjglPath = lwjglPath
+    p.useGl4es = useGl4es
+    p.zink = zink
+    p.turnipLib = turnipLib
+    p.mgPath = mgPath
+}
 
-    // 6. Команда запуска
+/** Шаг 6а: сессии Ely.by и Microsoft, скин. */
+private fun MainActivity.refreshAccounts(p: LaunchPlan) {
+    val gameDir = p.gameDir
+    val baseVer = p.baseVer
     if (elyOn() && !elyEnsureSession()) {
         log("Сессия Ely.by истекла: игра запускается в офлайн-режиме. Войдите снова в разделе «Аккаунт».")
         elyLogout(false)
@@ -323,6 +451,21 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     if (elyOn()) try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {}
     else if (msOn()) try { importSkinNow("mojang", nickName(), quiet = true) } catch (_: Exception) {}
     applySkinPack(gameDir, baseVer)
+}
+
+/** Шаг 6б: подстановка аргументов JVM и игры из json версии. */
+private fun MainActivity.buildLaunchArgs(p: LaunchPlan) {
+    val profile = p.profile
+    val librariesDir = p.librariesDir
+    val gameDir = p.gameDir
+    val assetsDir = p.assetsDir
+    val indexId = p.indexId
+    val natives = p.natives
+    val assetsForGame = p.assetsForGame
+    val legacy = p.legacy
+    val oldForge = p.oldForge
+    val v = p.v
+    val baseVer = p.baseVer
     val repl = mapOf(
         "auth_player_name" to nickName(),
         "version_name" to profile,
@@ -344,7 +487,7 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
         "user_properties" to "{}",
         "launcher_name" to "Mobilix",
         "launcher_version" to "0.2",
-        "classpath" to classpath.joinToString(":")
+        "classpath" to p.classpath.joinToString(":")
     )
     val sub = { s: String ->
         Regex("\\$\\{(\\w+)\\}").replace(s) { m -> repl[m.groupValues[1]] ?: m.value }
@@ -352,7 +495,7 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     val jvmArgs: List<String>
     val gameArgs: List<String>
     if (legacy) {
-        jvmArgs = listOf("-Djava.library.path=${natives.path}", "-cp", classpath.joinToString(":"))
+        jvmArgs = listOf("-Djava.library.path=${natives.path}", "-cp", p.classpath.joinToString(":"))
         val dm = resources.displayMetrics
         val sw = maxOf(dm.widthPixels, dm.heightPixels); val sh = minOf(dm.widthPixels, dm.heightPixels)
         val base = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
@@ -366,7 +509,25 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
         }
         gameArgs = collectArgs(args.optJSONArray("game"), sub)
     }
-    val cmd = ArrayList<String>()
+    p.jvmArgs = jvmArgs
+    p.gameArgs = gameArgs
+}
+
+/** Шаг 6в: итоговая команда JVM (память, GC, LWJGL, режимы старых версий и Forge, Ely.by). */
+private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
+    val java = p.java
+    val gameDir = p.gameDir
+    val oldGl = p.oldGl
+    val oldForge = p.oldForge
+    val preAwt = p.preAwt
+    val realMain = p.realMain
+    val lwjglPath = p.lwjglPath
+    val mgPath = p.mgPath
+    val zink = p.zink
+    val rt = p.rt
+    val jvmArgs = p.jvmArgs
+    val gameArgs = p.gameArgs
+    val cmd = p.cmd
     cmd.add(java.path)
     val mi = android.app.ActivityManager.MemoryInfo()
     (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
@@ -425,6 +586,19 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     cmd.add(mainName)
     if (preAwt) cmd.add(realMain)
     cmd.addAll(gameArgs)
+    p.mainName = mainName
+}
+
+/** Шаг 6г: launch_command.txt и launch.json (JVM, игра, библиотека GL, окружение рендерера). */
+private fun MainActivity.writeLaunchConfig(p: LaunchPlan) {
+    val root = p.root
+    val mainName = p.mainName
+    val rt = p.rt
+    val mgPath = p.mgPath
+    val useGl4es = p.useGl4es
+    val zink = p.zink
+    val turnipLib = p.turnipLib
+    val cmd = p.cmd
     File(root, "launch_command.txt").writeText(cmd.joinToString("\n"))
     val mainIdx = cmd.indexOf(mainName)
     val launch = JSONObject()
@@ -453,17 +627,4 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     }
     File(root, "launch.json").writeText(launch.toString())
     log("Команда запуска собрана (${cmd.size} аргументов).")
-
-    // 7. Проверка Java (запускать программы из папки приложения нельзя, проверяем наличие файлов)
-    if (!File(rt, "lib/server/libjvm.so").exists() && !File(rt, "lib/aarch64/server/libjvm.so").exists()) {
-        log("Java установлена неполностью (нет libjvm.so). Удалите скачанное и попробуйте снова.")
-        return
-    }
-    log("Java работает.")
-
-    log("Открываю окно игры...")
-    runOnUiThread {
-        if (prefs.getBoolean("worldBackup", true)) WorldBackup.begin(dataRoot(), curGameDir())
-        startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "game"))
-    }
 }
