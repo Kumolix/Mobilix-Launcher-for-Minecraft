@@ -96,10 +96,12 @@ static int os_lock_make(void) {
     if (!G.win || !OS.ctx) return 0;
     if (ANativeWindow_lock(G.win, &b, NULL) != 0) return 0;
     os_locked = 1;
-    OS.pix(0x10 /*OSMESA_ROW_LENGTH*/, b.stride);
-    OS.pix(0x11 /*OSMESA_Y_UP*/, 0);
     static int first = 1;
     if (first) os_guard(1);
+    // OSMesaPixelStore работает с ТЕКУЩИМ контекстом потока: без него падает (null deref), поэтому сперва привязываем
+    if (!OS.cur) OS.make(OS.ctx, b.bits, 0x1401 /*GL_UNSIGNED_BYTE*/, b.width, b.height);
+    OS.pix(0x10 /*OSMESA_ROW_LENGTH*/, b.stride);
+    OS.pix(0x11 /*OSMESA_Y_UP*/, 0);
     int ok = OS.make(OS.ctx, b.bits, 0x1401 /*GL_UNSIGNED_BYTE*/, b.width, b.height);
     if (first) { os_guard(0); first = 0; }
     OS.cur = ok ? 1 : 0;
