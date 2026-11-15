@@ -34,8 +34,10 @@ jobs:
           git clone --depth 1 -b "chromium/$BR" https://chromium.googlesource.com/angle/angle angle
           cd angle
           python3 scripts/bootstrap.py
-          echo 'target_os = ["android"]' >> .gclient
-          gclient sync --no-history -j8 -D 2>&1 | tail -40
+          cat .gclient
+          if grep -q '^target_os' .gclient; then sed -i 's/^target_os.*/target_os = ["android"]/' .gclient; else echo 'target_os = ["android"]' >> .gclient; fi
+          gclient sync --no-history -j8 -D > /tmp/sync.log 2>&1 || { tail -60 /tmp/sync.log; exit 1; }
+          tail -5 /tmp/sync.log
           df -h /
 
       - name: Build libEGL_angle.so and libGLESv2_angle.so
