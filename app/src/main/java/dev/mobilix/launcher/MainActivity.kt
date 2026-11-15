@@ -4862,14 +4862,6 @@ class MainActivity : Activity() {
     private fun autoUpdateMods(gameDir: File, loader: String?, baseVer: String) {
         if (loader == null || !prefs.getBoolean("modAuto", true)) return
         val t0 = System.currentTimeMillis()
-        // Не ходим в Modrinth при каждом запуске: если набор модов тот же и проверка была меньше 6 часов назад, пропускаем
-        val stampKey = "modAutoAt:${gameDir.name}:$baseVer:$loader"
-        val sigKey = "modAutoSig:${gameDir.name}:$baseVer:$loader"
-        val modsSig = (File(gameDir, "mods").listFiles { f -> f.name.endsWith(".jar") }?.map { it.name }?.sorted()?.joinToString("|") ?: "").hashCode().toString()
-        if (t0 - prefs.getLong(stampKey, 0L) < 6 * 3600_000L && prefs.getString(sigKey, null) == modsSig) {
-            log("Автообновление модов: проверено недавно, пропускаю")
-            return
-        }
         try {
             val index = idx()
             val ids = ArrayList<String>(); val keys = index.keys(); while (keys.hasNext()) ids.add(keys.next())
@@ -4962,7 +4954,6 @@ class MainActivity : Activity() {
                 }
             }
             idxSave(index)
-            prefs.edit().putLong(stampKey, System.currentTimeMillis()).putString(sigKey, (File(gameDir, "mods").listFiles { f -> f.name.endsWith(".jar") }?.map { it.name }?.sorted()?.joinToString("|") ?: "").hashCode().toString()).apply()
             if (updated > 0 || added > 0) log("Автообновление модов: обновлено $updated, докачано зависимостей $added")
             val warn = ArrayList<String>()
             if (noVersion.isNotEmpty()) warn.add(tr("нет версии под $baseVer/$loader: ", "no build for $baseVer/$loader: ") + noVersion.joinToString(", "))
@@ -4976,13 +4967,31 @@ class MainActivity : Activity() {
         } catch (e: Throwable) { log("Автообновление модов: $e") }
     }
 
+    /** Первый запуск без выбранного пресета: берём более слабое из двух — видеочип или память (у телефонов видеопамять общая с ОЗУ). Выше «Средних» сами не ставим. */
+    private fun autoPreset(): Int {
+        val tier = GpuTier.tier(prefs.getString("gpu", "") ?: "")
+        val byGpu = when (tier) { null -> 3; 0 -> 1; 1 -> 2; else -> 3 }
+        val mi = android.app.ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+        val totalMb = mi.totalMem / 1024 / 1024
+        val byMem = when { totalMb < 3000 -> 1; totalMb < 4500 -> 2; else -> 3 }
+        log("Авто-пресет: видеочип «${prefs.getString("gpu", "")}» (уровень ${tier ?: "?"}) → $byGpu, память $totalMb МБ → $byMem")
+        return minOf(byGpu, byMem)
+    }
+
     private fun applyPreset(gameDir: File, ver: String) {
         try {
-            val id = prefs.getInt("preset", 0)
-            if (id <= 0 || id > presets.size) return
-            val stamp = prefs.getInt("presetStamp", 0).toString()
-            val marker = "presetApplied:" + gameDir.name
+            val chosen = prefs.getInt("preset", 0)
+            val auto = chosen <= 0
+            val stamp = if (auto) "auto" else prefs.getInt("presetStamp", 0).toString()
+            val marker = (if (auto) "presetAuto:" else "presetApplied:") + gameDir.name
             if (prefs.getString(marker, "") == stamp) return
+            if (auto) {
+                // игрок пресет не выбирал: подбираем один раз, и только для папки, где игра ещё не писала свои настройки
+                val o = File(gameDir, "options.txt")
+                if (o.exists() && o.readText().contains("renderDistance:")) { prefs.edit().putString(marker, stamp).apply(); return }
+            } else if (chosen > presets.size) return
+            val id = if (auto) autoPreset() else chosen
             val pr = presets[id - 1]
             val minor = mcMinor(ver)
             val kv = LinkedHashMap<String, String>()
@@ -5007,7 +5016,7 @@ class MainActivity : Activity() {
             val keep = if (opt.exists()) opt.readLines().filter { l -> kv.keys.none { l.startsWith("$it:") } } else emptyList()
             opt.writeText((keep + kv.map { "${it.key}:${it.value}" }).joinToString("\n") + "\n")
             prefs.edit().putString(marker, stamp).apply()
-            log("Быстрые настройки графики: ${pr.ru} (${gameDir.name})")
+            log("Быстрые настройки графики: ${pr.ru}" + (if (auto) " (авто по видеочипу и памяти)" else "") + " (${gameDir.name})")
         } catch (_: Throwable) {}
     }
 
