@@ -53,7 +53,7 @@ import org.json.JSONObject
 // Логи запусков: последний лог остаётся доступным после вылета (панель «Лог» в лаунчере), предыдущий хранится отдельно.
 
 /** Строки-шум: список модов, блок «Incompatible Java and native library», остальное в логе оставляем. */
-private val RUN_LOG_NOISE = Regex("^\\s*(Possible (reasons|solutions):|\\[LWJGL\\])|Incompatible Java and native|^\\t(- \\S|   \\S|[ab]\\) )|^\\s+\\|--|^\\s+\\\\--")
+internal val RUN_LOG_NOISE = Regex("^\\s*(Possible (reasons|solutions):|\\[LWJGL\\])|Incompatible Java and native|^\\t(- \\S|   \\S|[ab]\\) )|^\\s+\\|--|^\\s+\\\\--")
 
 private fun MainActivity.runLogTail(f: File, maxLines: Int): List<String> =
     if (!f.exists()) emptyList() else lastLinesOf(f, 300_000).filter { it.isNotBlank() && !RUN_LOG_NOISE.containsMatchIn(it) }.takeLast(maxLines)

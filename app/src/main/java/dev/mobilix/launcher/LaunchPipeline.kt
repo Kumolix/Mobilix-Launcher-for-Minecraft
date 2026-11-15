@@ -70,8 +70,8 @@ internal fun MainActivity.logPreviousRun(root: File) {
     try {
         val gl = File(root, "game.log")
         if (gl.exists()) {
-            val noise = Regex("^\\s*(Possible|Possible solutions|a\\)|b\\)|\\[LWJGL\\]|Module:|Loaded from|JRE:|JVM:|OS:)")
-            val tail = lastLinesOf(gl).filter { it.isNotBlank() && !noise.containsMatchIn(it) && !it.contains("Incompatible Java and native") }.takeLast(40)
+            val noise = RUN_LOG_NOISE
+            val tail = lastLinesOf(gl).filter { it.isNotBlank() && !noise.containsMatchIn(it) }.takeLast(40)
             log("=== Конец лога прошлого запуска игры ===")
             tail.forEach { log("  $it") }
         }
@@ -143,11 +143,15 @@ internal fun MainActivity.logLastNativeExit() {
         log("=== Прошлая игра завершилась аварийно: причина ${g.reason}, статус ${g.status}, ${g.description ?: "-"} ===")
         val st = if (g.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) g.traceInputStream else null
         if (st != null) {
-            val raw = st.use { it.readBytes().take(1_000_000).toByteArray() }
-            val keep = Regex("[\\x20-\\x7e]{6,}").findAll(String(raw, Charsets.ISO_8859_1)).map { it.value.trim() }
-                .filter { Regex("\\.so|SIG[A-Z]+|signal|Abort|backtrace|pc [0-9a-f]{6,}|#\\d\\d").containsMatchIn(it) }
-                .distinct().take(60).toList()
-            if (keep.isEmpty()) log("  (стек краха пуст)") else keep.forEach { log("  $it") }
+            val raw = st.use { it.readBytes().take(2_000_000).toByteArray() }
+            val lines = try { Tombstone.describe(raw) } catch (_: Throwable) { emptyList() }
+            if (lines.size >= 2) lines.forEach { log("  $it") }
+            else {
+                // формат tombstone не разобран (другая версия Android): показываем найденные в нём строки
+                val keep = Regex("[\\x20-\\x7e]{6,}").findAll(String(raw, Charsets.ISO_8859_1)).map { it.value.trim() }
+                    .filter { Regex("\\.so|SIG[A-Z]+|Abort").containsMatchIn(it) }.distinct().take(40).toList()
+                if (keep.isEmpty()) log("  (стек краха пуст)") else keep.forEach { log("  $it") }
+            }
         } else log("  (стека краха нет: система его не сохранила)")
     } catch (e: Throwable) { log("Причина прошлого вылета недоступна: $e") }
 }
