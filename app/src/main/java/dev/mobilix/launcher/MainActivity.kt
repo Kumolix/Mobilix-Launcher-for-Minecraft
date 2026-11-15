@@ -1320,7 +1320,7 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (zinkOk) listOf("Zink") else emptyList()) + (if (turnipOk) listOf("Zink + Turnip (Adreno)") else emptyList())
         col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
-        col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — если есть в плагине MobileGlues (иначе выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is used only if the MobileGlues plugin ships it (otherwise it turns off). Applies on next launch.")))
+        col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — скачивается при первом запуске (если не получилось, выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is downloaded on first launch (turns off by itself if that fails). Applies on next launch.")))
         col = colS
         if (!cmp) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Скачивание модов", "Mod downloads"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
@@ -4570,6 +4570,7 @@ class MainActivity : Activity() {
         // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).
         val rendPref = prefs.getInt("renderer", 0)
         val useGl4es = gl4es != null && oldGl   // 1.13–1.16.5 на MobileGlues падают: нет glAlphaFunc (нужен compatibility-профиль)
+        if (!oldGl) ensureAngle()
         if (!oldGl && rendPref == 3) log("Рендерер gl4es не работает с 1.17+, используется MobileGlues.")
         if (oldGl && (rendPref == 1 || rendPref == 2)) log("Версии до 1.17 работают только через gl4es, выбор рендерера игнорируется.")
         // Zink (только MobiLabs): Mesa OSMesa + Vulkan-драйвер телефона, рисует в буфер окна; пока для 1.17+ (OpenGL core)
@@ -5533,14 +5534,34 @@ class MainActivity : Activity() {
     }
 
     /** Профиль рендера Renderlix (настройки MobileGlues): 0 — стандарт, 1 — моды-шейдеры (Sodium/Iris). Пишет config.json и возвращает папку. */
-    /** Каталог с libEGL_angle.so / libGLESv2_angle.so, если выбран рендерер «MobileGlues + ANGLE» и библиотеки есть в плагине MobileGlues. */
+    /** Каталог с libEGL_angle.so / libGLESv2_angle.so, если выбран рендерер «MobileGlues + ANGLE»: сначала наша копия (files/angle), потом плагин MobileGlues. */
     private fun angleActive(): File? {
         if (prefs.getInt("renderer", 0) != 2) return null
+        val own = File(filesDir, "angle")
+        if (File(own, "libEGL_angle.so").exists() && File(own, "libGLESv2_angle.so").exists()) return own
         val dir = File(filesDir, "mg")
         val egl = dir.walkTopDown().firstOrNull { it.isFile && it.name == "libEGL_angle.so" && it.path.contains("arm64") }
         val gles = dir.walkTopDown().firstOrNull { it.isFile && it.name == "libGLESv2_angle.so" && it.path.contains("arm64") }
-        if (egl == null || gles == null || egl.parentFile != gles.parentFile) { log("ANGLE: библиотек нет в плагине MobileGlues, ANGLE выключен."); return null }
+        if (egl == null || gles == null || egl.parentFile != gles.parentFile) return null
         return egl.parentFile
+    }
+
+    /** Скачивает ANGLE (arm64) из runtime-libs, если выбран «MG + ANGLE» и библиотек ещё нет. Сбой не фатален: ANGLE просто выключится. */
+    private fun ensureAngle() {
+        if (prefs.getInt("renderer", 0) != 2 || !isArm64) return
+        if (angleActive() != null) return
+        val dir = File(filesDir, "angle").apply { mkdirs() }
+        try {
+            for (n in listOf("libEGL_angle.so", "libGLESv2_angle.so")) {
+                val f = File(dir, n)
+                if (!f.exists() || f.length() < 100_000) { log("  скачивание ANGLE: $n"); downloadBig(MIRROR + "angle/arm64-v8a/" + n, f) }
+                f.setReadable(true, false)
+            }
+            log("ANGLE: библиотеки готовы (${dir.path})")
+        } catch (e: Exception) {
+            File(dir, "libEGL_angle.so").delete(); File(dir, "libGLESv2_angle.so").delete()
+            log("ANGLE недоступен ($e), MobileGlues работает без него.")
+        }
     }
 
     private fun writeRenderConfig(): File {
