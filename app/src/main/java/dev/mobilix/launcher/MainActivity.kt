@@ -523,6 +523,10 @@ class MainActivity : Activity() {
         }
         fun showLog(prev: Boolean) {
             Thread {
+                if (!prev) {   // причина вылета прошлой игры видна сразу при открытии лаунчера, не только при следующем запуске
+                    if (logFile == null) logFile = File(dataRoot(), "launcher.log")
+                    logLastNativeExit()
+                }
                 val t = readRunLog(prev)
                 runOnUiThread { logView.text = t.ifEmpty { tr("Лога пока нет.", "No log yet.") }; scroll.post { scroll.fullScroll(View.FOCUS_DOWN) } }
             }.start()
