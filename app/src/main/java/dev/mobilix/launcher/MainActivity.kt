@@ -4332,6 +4332,46 @@ class MainActivity : Activity() {
         return m
     }
 
+    /** Последние строки файла: читаем только хвост (game.log бывает в десятки МБ, readLines грузил его целиком при каждом запуске). */
+    private fun lastLinesOf(f: File, maxBytes: Int = 65536): List<String> {
+        java.io.RandomAccessFile(f, "r").use { r ->
+            val start = maxOf(0L, r.length() - maxBytes)
+            val buf = ByteArray((r.length() - start).toInt())
+            r.seek(start); r.readFully(buf)
+            val lines = String(buf, Charsets.UTF_8).split('\n').map { it.trimEnd('\r') }
+            return if (start > 0) lines.drop(1) else lines
+        }
+    }
+
+    /** Переносит в launcher.log хвост лога прошлой игры, свежие отчёты о крэше и hs_err: так причину вылета видно сразу. */
+    private fun logPreviousRun(root: File) {
+        val dirs = (root.listFiles()?.toList().orEmpty() + File(root, "builds").listFiles()?.toList().orEmpty()).filter { it.isDirectory }
+        try {
+            val gl = File(root, "game.log")
+            if (gl.exists()) {
+                val noise = Regex("^\\s*(Possible|Possible solutions|a\\)|b\\)|\\[LWJGL\\]|Module:|Loaded from|JRE:|JVM:|OS:)")
+                val tail = lastLinesOf(gl).filter { it.isNotBlank() && !noise.containsMatchIn(it) && !it.contains("Incompatible Java and native") }.takeLast(40)
+                log("=== Конец лога прошлого запуска игры ===")
+                tail.forEach { log("  $it") }
+            }
+            dirs.filter { it.name.startsWith("game") || it.parentFile?.name == "builds" }.forEach { d ->
+                val cr = File(d, "crash-reports").listFiles()?.maxByOrNull { it.lastModified() }
+                if (cr != null && System.currentTimeMillis() - cr.lastModified() < 30 * 60 * 1000) {
+                    log("=== Отчёт о крэше ${d.name}/${cr.name} ===")
+                    cr.readLines().take(45).forEach { log("  $it") }
+                }
+            }
+        } catch (_: Exception) {}
+        dirs.filter { it.name == "game" || it.name.startsWith("game-") || it.parentFile?.name == "builds" }.forEach { d ->
+            val hs = File(d, "hs_err.log")
+            if (hs.exists()) {
+                log("=== Предыдущий запуск упал (${d.name}/hs_err.log), начало: ===")
+                try { hs.readLines().take(40).forEach { log("  $it") } } catch (_: Exception) {}
+                hs.renameTo(File(d, "hs_err.old"))
+            }
+        }
+    }
+
     private fun prepareAndRun(profile: String = selectedProfile(), play: Boolean = true) {
         if (play) {
             prefs.edit().putBoolean("playedOnce", true).apply()
@@ -4349,30 +4389,7 @@ class MainActivity : Activity() {
         log("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MODEL}, ${Build.SUPPORTED_ABIS.joinToString()}")
         log("Папка данных: ${root.path}")
         log("Профиль $profile (игра $baseVer), ник ${nickName()}")
-        try {
-            val gl = File(root, "game.log")
-            if (gl.exists()) {
-                val noise = Regex("^\\s*(Possible|Possible solutions|a\\)|b\\)|\\[LWJGL\\]|Module:|Loaded from|JRE:|JVM:|OS:)")
-                val tail = gl.readLines().filter { it.isNotBlank() && !noise.containsMatchIn(it) && !it.contains("Incompatible Java and native") }.takeLast(40)
-                log("=== Конец лога прошлого запуска игры ===")
-                tail.forEach { log("  $it") }
-            }
-            (root.listFiles()?.toList().orEmpty() + File(root, "builds").listFiles()?.toList().orEmpty()).filter { it.isDirectory && (it.name.startsWith("game") || it.parentFile?.name == "builds") }.forEach { d ->
-                val cr = File(d, "crash-reports").listFiles()?.maxByOrNull { it.lastModified() }
-                if (cr != null && System.currentTimeMillis() - cr.lastModified() < 30 * 60 * 1000) {
-                    log("=== Отчёт о крэше ${d.name}/${cr.name} ===")
-                    cr.readLines().take(45).forEach { log("  $it") }
-                }
-            }
-        } catch (_: Exception) {}
-        (root.listFiles()?.toList().orEmpty() + File(root, "builds").listFiles()?.toList().orEmpty()).filter { it.isDirectory && (it.name == "game" || it.name.startsWith("game-") || it.parentFile?.name == "builds") }.forEach { d ->
-            val hs = File(d, "hs_err.log")
-            if (hs.exists()) {
-                log("=== Предыдущий запуск упал (${d.name}/hs_err.log), начало: ===")
-                try { hs.readLines().take(40).forEach { log("  $it") } } catch (_: Exception) {}
-                hs.renameTo(File(d, "hs_err.old"))
-            }
-        }
+        logPreviousRun(root)
 
         // 1. json ванильной версии
         val versionJsonFile = File(root, "versions/$baseVer/$baseVer.json")
@@ -4514,7 +4531,8 @@ class MainActivity : Activity() {
         val indexId = idx.getString("id")
         val indexFile = File(assetsDir, "indexes/$indexId.json")
         downloadAll("Индекс ресурсов", listOf(Task(idx.getString("url"), indexFile, idx.optString("sha1", "").ifEmpty { null })))
-        val objects = JSONObject(indexFile.readText()).getJSONObject("objects")
+        val idxJson = JSONObject(indexFile.readText())
+        val objects = idxJson.getJSONObject("objects")
         val assetTasks = ArrayList<Task>()
         val keys = objects.keys()
         while (keys.hasNext()) {
@@ -4523,7 +4541,6 @@ class MainActivity : Activity() {
             assetTasks.add(Task(ASSETS_URL + p, File(assetsDir, "objects/$p"), hash))
         }
         downloadAll("Ресурсы", assetTasks, fatal = false)
-        val idxJson = JSONObject(indexFile.readText())
         val virtualAssets = idxJson.optBoolean("virtual", false) || idxJson.optBoolean("map_to_resources", false)
         val mapToResources = idxJson.optBoolean("map_to_resources", false)
         val assetsForGame: File = when {
@@ -4845,11 +4862,29 @@ class MainActivity : Activity() {
     private fun autoUpdateMods(gameDir: File, loader: String?, baseVer: String) {
         if (loader == null || !prefs.getBoolean("modAuto", true)) return
         val t0 = System.currentTimeMillis()
+        // Не ходим в Modrinth при каждом запуске: если набор модов тот же и проверка была меньше 6 часов назад, пропускаем
+        val stampKey = "modAutoAt:${gameDir.name}:$baseVer:$loader"
+        val sigKey = "modAutoSig:${gameDir.name}:$baseVer:$loader"
+        val modsSig = (File(gameDir, "mods").listFiles { f -> f.name.endsWith(".jar") }?.map { it.name }?.sorted()?.joinToString("|") ?: "").hashCode().toString()
+        if (t0 - prefs.getLong(stampKey, 0L) < 6 * 3600_000L && prefs.getString(sigKey, null) == modsSig) {
+            log("Автообновление модов: проверено недавно, пропускаю")
+            return
+        }
         try {
             val index = idx()
             val ids = ArrayList<String>(); val keys = index.keys(); while (keys.hasNext()) ids.add(keys.next())
             fun enc(x: String) = java.net.URLEncoder.encode(x, "UTF-8")
             fun versionsFor(id: String) = JSONArray(apiGet("/project/$id/version?game_versions=" + enc("[\"$baseVer\"]") + "&loaders=" + enc(JSONArray(loaderCats(loader)).toString())))
+            // запросы версий идут параллельно (раньше по одному), дальше результаты разбираются по порядку как раньше
+            val prefetch = HashMap<String, java.util.concurrent.Future<JSONArray>>()
+            val lookupPool = Executors.newFixedThreadPool(6)
+            try {
+                for (id in ids.take(40)) {
+                    val rec = index.optJSONObject(id) ?: continue
+                    if (rec.optString("t") != "mod" || !File(gameDir, "mods/" + rec.optString("f")).exists()) continue
+                    prefetch[id] = lookupPool.submit(java.util.concurrent.Callable { versionsFor(id) })
+                }
+            } finally { lookupPool.shutdown() }
             fun fetch(id: String, v: JSONObject, title: String): String? {
                 val files = v.getJSONArray("files"); var f = files.getJSONObject(0)
                 for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
@@ -4869,7 +4904,7 @@ class MainActivity : Activity() {
                 if (!cur.exists()) continue
                 val title = rec.optString("n", id)
                 try {
-                    val vers = versionsFor(id)
+                    val vers = prefetch[id]?.get() ?: versionsFor(id)
                     if (vers.length() == 0) { noVersion.add(title); continue }
                     val v = vers.getJSONObject(0)
                     val old = rec.optString("f")
@@ -4927,6 +4962,7 @@ class MainActivity : Activity() {
                 }
             }
             idxSave(index)
+            prefs.edit().putLong(stampKey, System.currentTimeMillis()).putString(sigKey, (File(gameDir, "mods").listFiles { f -> f.name.endsWith(".jar") }?.map { it.name }?.sorted()?.joinToString("|") ?: "").hashCode().toString()).apply()
             if (updated > 0 || added > 0) log("Автообновление модов: обновлено $updated, докачано зависимостей $added")
             val warn = ArrayList<String>()
             if (noVersion.isNotEmpty()) warn.add(tr("нет версии под $baseVer/$loader: ", "no build for $baseVer/$loader: ") + noVersion.joinToString(", "))
