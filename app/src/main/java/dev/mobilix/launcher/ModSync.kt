@@ -202,12 +202,16 @@ internal fun MainActivity.autoUpdateMods(gameDir: File, loader: String?, baseVer
             val modsDir = File(gameDir, "mods")
             for (round in 0 until 3) {
                 val cf = modConflicts(modsDir)
-                if (cf.isEmpty() || System.currentTimeMillis() - t0 > 60000) break
+                if (cf.isEmpty() || System.currentTimeMillis() - t0 > 120000) break
+                log("Конфликты модов: " + cf.joinToString { it.first.name + " ✕ " + it.second })
                 for ((badFile, target) in cf) {
-                    val pid = ids.firstOrNull { index.optJSONObject(it)?.optString("f") == badFile.name } ?: continue
+                    // мод мог быть поставлен вручную или попасть не в индекс: тогда ищем его на Modrinth по id из fabric.mod.json (обычно совпадает со slug)
+                    val fid = fabricInfo(badFile)?.optString("id").orEmpty()
+                    val pid = ids.firstOrNull { index.optJSONObject(it)?.optString("f") == badFile.name } ?: fid.ifEmpty { null }
+                    if (pid == null) { log("Конфликт модов: не знаю, откуда «${badFile.name}», пропускаю"); continue }
                     val title = index.optJSONObject(pid)?.optString("n", pid) ?: pid
                     log("Конфликт модов: «$title» несовместим с «$target», ищу более старую версию")
-                    val vers = try { versionsFor(pid) } catch (_: Exception) { continue }
+                    val vers = try { versionsFor(pid) } catch (e: Exception) { log("Конфликт модов: версии «$title» не получены ($e)"); continue }
                     var fixed = false
                     for (k in 0 until minOf(vers.length(), 12)) {
                         val v = vers.getJSONObject(k)

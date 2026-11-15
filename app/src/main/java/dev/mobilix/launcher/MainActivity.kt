@@ -322,12 +322,19 @@ class MainActivity : Activity() {
     /** Фон кнопки: прозрачный в покое (видны эффекты), темнее при нажатии. */
     private fun selT(color: Int): android.graphics.drawable.Drawable {
         fun dk(f: Float): Int = Color.rgb((Color.red(color) * f).toInt(), (Color.green(color) * f).toInt(), (Color.blue(color) * f).toInt())
+        if (newUi()) return android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), rr(dk(0.55f), 14))
+            addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        }
         return android.graphics.drawable.StateListDrawable().apply {
             addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(dk(0.55f)))
             addState(intArrayOf(), android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         }
     }
     internal fun navBottom() = prefs.getString("nav", "side") == "bottom"
+    /** Тестовый «новый интерфейс»: скруглённые карточки, плавающая панель, градиентная «Играть». Цвета берутся из текущей (в т.ч. своей) темы. */
+    internal fun newUi() = prefs.getBoolean("newUi", false)
+    internal fun rr(color: Int, r: Int = 14) = GradientDrawable().apply { setColor(color); cornerRadius = dp(r).toFloat() }
     /** Компактный интерфейс: Версии, Каталог и Сборки объединены в «Загрузки»; раскладка, язык и удаление скачанного ушли в настройки. */
     internal fun compact() = prefs.getBoolean("compact", false)
     private var ghIdx = -1
@@ -353,7 +360,7 @@ class MainActivity : Activity() {
             val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             txt.addView(TextView(this).apply { text = title; textSize = 16f; setTextColor(if (hi) Th.altText else Th.chipText) })
             // адрес и пояснения: мелко и светло-зелёным, это второстепенное
-            txt.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(if (hi) Th.altText else 0xFF8FD6A3.toInt()); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+            txt.addView(TextView(this).apply { text = sub; textSize = 12f; setTextColor(if (hi) Th.altText else Th.text2); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
             row.addView(txt, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
@@ -433,6 +440,11 @@ class MainActivity : Activity() {
     /** Фон кнопки: при нажатии и в выключенном состоянии темнеет. */
     internal fun sel(color: Int): android.graphics.drawable.Drawable {
         fun dk(f: Float): Int = Color.rgb((Color.red(color) * f).toInt(), (Color.green(color) * f).toInt(), (Color.blue(color) * f).toInt())
+        if (newUi()) return android.graphics.drawable.StateListDrawable().apply {
+            addState(intArrayOf(-android.R.attr.state_enabled), rr(dk(0.45f)))
+            addState(intArrayOf(android.R.attr.state_pressed), rr(dk(0.55f)))
+            addState(intArrayOf(), rr(color))
+        }
         return android.graphics.drawable.StateListDrawable().apply {
             addState(intArrayOf(-android.R.attr.state_enabled), android.graphics.drawable.ColorDrawable(dk(0.45f)))
             addState(intArrayOf(android.R.attr.state_pressed), android.graphics.drawable.ColorDrawable(dk(0.55f)))
@@ -462,7 +474,7 @@ class MainActivity : Activity() {
         rootFrame.addView(root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         // верхняя полоса: название по центру, лог справа (кнопка-меню рисуется поверх всего)
-        val top = FxFrame(this).apply { setBackgroundColor(Th.bar) }
+        val top = FxFrame(this).apply { setBackgroundColor(if (newUi()) Th.bg else Th.bar) }
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         titleRow.addView(TextView(this).apply { text = "Mobilix"; textSize = 22f; setTextColor(Th.accent); gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f })
@@ -479,7 +491,9 @@ class MainActivity : Activity() {
         root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
 
         // область 3D-скина
-        val skinBox = FxFrame(this).apply { setBackgroundColor(Th.skinBg) }
+        val skinBox = FxFrame(this).apply {
+            if (newUi()) { background = rr(Th.skinBg, 22); clipToOutline = true; outlineProvider = android.view.ViewOutlineProvider.BACKGROUND } else setBackgroundColor(Th.skinBg)
+        }
         skinView = SkinView(this)
         skinBox.addView(skinView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         nickText = TextView(this).apply {
@@ -499,7 +513,7 @@ class MainActivity : Activity() {
         }
         skinBox.addView(setupHint, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP)
             .apply { topMargin = dp(14); marginStart = dp(16); marginEnd = dp(16) })
-        root.addView(skinBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(skinBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply { if (newUi()) { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(2); bottomMargin = dp(10) } })
         // скин Ely.by обновляется при каждом открытии лаунчера (если есть интернет)
         if (elyOn()) Thread { try { importSkinNow("ely", nickName(), quiet = true, strict = true) } catch (_: Exception) {} }.start()
         else if (msOn()) Thread { try { importSkinNow("mojang", nickName(), quiet = true) } catch (_: Exception) {} }.start()
@@ -516,7 +530,7 @@ class MainActivity : Activity() {
         }
         scroll.addView(logView)
         logPanel.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
-        val logHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
+        val logHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
         fun logTab(label: String, onClick: () -> Unit) = TextView(this).apply {
             text = label; textSize = 12f; setTextColor(Th.accent); setPadding(dp(10), dp(4), dp(10), dp(4))
             setOnClickListener { onClick() }
@@ -553,14 +567,25 @@ class MainActivity : Activity() {
         arrow.setOnClickListener { showVersions() }
         versionText.setOnClickListener { showVersions() }
         vrow.addView(arrow, LinearLayout.LayoutParams(dp(64), dp(56)))
+        if (newUi()) { vrow.setPadding(dp(12), 0, dp(12), 0); (arrow.layoutParams as LinearLayout.LayoutParams).marginStart = dp(8) }
         root.addView(vrow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
 
         playBtn = Button(this).apply {
             text = tr("Играть", "Play"); textSize = 22f; setTextColor(Color.WHITE)
             background = sel(Th.act); isAllCaps = false
+            if (newUi()) {
+                fun g(a: Int, b: Int) = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(a, b)).apply { cornerRadius = dp(18).toFloat() }
+                val hi = ThemeMath.mix(Th.act, Th.accent, 0.55f)
+                background = android.graphics.drawable.StateListDrawable().apply {
+                    addState(intArrayOf(-android.R.attr.state_enabled), g(ThemeMath.mix(Th.act, Th.bg, 0.55f), ThemeMath.mix(hi, Th.bg, 0.55f)))
+                    addState(intArrayOf(android.R.attr.state_pressed), g(ThemeMath.mix(Th.act, Th.bg, 0.3f), ThemeMath.mix(hi, Th.bg, 0.3f)))
+                    addState(intArrayOf(), g(Th.act, hi))
+                }
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.08f; stateListAnimator = null; elevation = 0f
+            }
             setOnClickListener { start() }
         }
-        root.addView(playBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(76)))
+        root.addView(playBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (newUi()) 64 else 76)).apply { if (newUi()) { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(10); if (!navBottom()) bottomMargin = dp(12) } })
         if (!File(applicationInfo.nativeLibraryDir, "libmobilix.so").exists()) {
             playBtn.isEnabled = false
             MobDialog(this)
@@ -610,7 +635,7 @@ class MainActivity : Activity() {
             if (badge == null) drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
             else {
                 fl.addView(TextView(this).apply {
-                    text = badge; textSize = 13f; setTextColor(0xCC5BD67B.toInt()); typeface = Typeface.DEFAULT_BOLD
+                    text = badge; textSize = 13f; setTextColor(Th.accent); typeface = Typeface.DEFAULT_BOLD
                     setPadding(dp(10), dp(4), dp(10), dp(4))
                     background = GradientDrawable().apply { setColor((Th.act and 0xFFFFFF) or 0x33000000); setStroke(dp(1), (Th.act and 0xFFFFFF) or 0x66000000); cornerRadius = dp(6).toFloat() }
                     isClickable = false
@@ -649,7 +674,7 @@ class MainActivity : Activity() {
         if (navBottom()) {
             // нижняя панель только с иконками (как в мессенджерах); боковое меню не используется
             hamb.visibility = View.GONE; drawer.visibility = View.GONE; scrim.visibility = View.GONE
-            val nav = FxLinear(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(Th.bar) }
+            val nav = FxLinear(this).apply { orientation = LinearLayout.HORIZONTAL; if (newUi()) background = GradientDrawable().apply { setColor(Th.bar); setStroke(dp(1), Th.line); cornerRadius = dp(26).toFloat() } else setBackgroundColor(Th.bar) }
             menuEntries.forEachIndexed { i, e ->
                 val cell = FrameLayout(this).apply { isClickable = true; background = selT(Th.bar); setOnClickListener { e.third() } }
                 cell.contentDescription = e.first
@@ -658,9 +683,14 @@ class MainActivity : Activity() {
                 nav.addView(cell, LinearLayout.LayoutParams(0, dp(56), 1f))
             }
             val navBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            navBox.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
-            navBox.addView(nav)
-            root.addView(navBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(57)))
+            if (newUi()) {
+                navBox.addView(nav, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+                root.addView(navBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)).apply { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(10); bottomMargin = dp(10) })
+            } else {
+                navBox.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+                navBox.addView(nav)
+                root.addView(navBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(57)))
+            }
             navBoxRef = navBox
         }
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -674,7 +704,7 @@ class MainActivity : Activity() {
         rootFrame.addView(logBtn, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.END or Gravity.TOP).apply { topMargin = dp(8); marginEnd = dp(10) })
 
         pageLayer = FrameLayout(this).apply { visibility = View.GONE }
-        rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom() && !land) bottomMargin = dp(57) })
+        rootFrame.addView(pageLayer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { if (navBottom() && !land) bottomMargin = dp(if (newUi()) 76 else 57) })
 
         season()?.let { sn ->
             // временная кнопка эффектов у скина: есть только в праздничную неделю
@@ -1019,7 +1049,7 @@ class MainActivity : Activity() {
     private fun gridChips(labels: List<String>, selected: Int, cols: Int, onPick: (Int) -> Unit): LinearLayout {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val views = ArrayList<TextView>()
-        fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) Th.act else Th.chip) }
+        fun paint(sel: Int) = views.forEachIndexed { i, t -> val c = if (i == sel) Th.act else Th.chip; if (newUi()) t.background = rr(c, 12) else t.setBackgroundColor(c) }
         var row: LinearLayout? = null
         labels.forEachIndexed { i, l ->
             if (i % cols == 0) {
@@ -1037,21 +1067,22 @@ class MainActivity : Activity() {
         return col
     }
 
-    private fun chipRow(labels: List<String>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
+    private fun chipRow(labels: List<String>, selected: Int, perRow: Int = 4, onPick: (Int) -> Unit): LinearLayout {
         // больше 4 кнопок переносятся на вторую строку, чтобы не уезжать за край экрана
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val views = ArrayList<TextView>()
-        fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) Th.act else Th.chip) }
+        fun paint(sel: Int) = views.forEachIndexed { i, t -> val c = if (i == sel) Th.act else Th.chip; if (newUi()) t.background = rr(c, 12) else t.setBackgroundColor(c) }
         var row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         box.addView(row)
         labels.forEachIndexed { i, l ->
-            if (i > 0 && i % 4 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; box.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) }) }
+            if (i > 0 && i % perRow == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; box.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) }) }
             val t = TextView(this).apply {
                 text = l; textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(10), dp(14), dp(10))
                 setOnClickListener { paint(i); onPick(i) }
             }
             views.add(t)
-            row.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) })
+            if (perRow >= labels.size) { t.setPadding(dp(4), dp(10), dp(4), dp(10)); row.addView(t, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = if (i < labels.size - 1) dp(6) else 0 }) }
+            else row.addView(t, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) })
         }
         paint(selected)
         return box
@@ -1183,6 +1214,12 @@ class MainActivity : Activity() {
                 setOnClickListener { editCustomTheme(selC) }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(8) })
         }
+        col.addView(TextView(this).apply { text = tr("Новый интерфейс (тест)", "New interface (test)"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Классический", "Classic"), tr("Новый", "New")), if (newUi()) 1 else 0) { i ->
+            prefs.edit().putBoolean("newUi", i == 1).apply()
+            recreate()
+        })
+        col.addView(note(tr("Скруглённые карточки, плавающая нижняя панель и градиентная кнопка «Играть». Работает со всеми темами, включая свои.", "Rounded cards, a floating bottom bar and a gradient Play button. Works with every theme, including custom ones.")))
         col.addView(TextView(this).apply { text = tr("Компактный интерфейс", "Compact interface"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (compact()) 1 else 0) { i ->
             prefs.edit().putBoolean("compact", i == 1).apply()
@@ -1293,7 +1330,7 @@ class MainActivity : Activity() {
         })
         col.addView(note(tr("Ограничивает FPS: меньше нагрев и расход батареи, но и частота кадров ниже. Применяется при запуске.", "Caps FPS: less heat and battery use, but lower frame rate. Applied on launch.")))
         col.addView(TextView(this).apply { text = tr("Мипмапы (уровни текстур)", "Mipmap levels"); setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
-        col.addView(chipRow(listOf(tr("Авто", "Auto"), "0", "1", "2", "3", "4"), prefs.getInt("mip", -1) + 1) { i ->
+        col.addView(chipRow(listOf(tr("Авто", "Auto"), "0", "1", "2", "3", "4"), prefs.getInt("mip", -1) + 1, 6) { i ->
             prefs.edit().putInt("mip", i - 1).apply()
         })
         col.addView(note(tr("Мипмапы — уменьшенные копии текстур. На слабых видеочипах их загрузка сильно роняет FPS в мире. «Авто» подбирает ступень по видеочипу: мощные — 4, послабее — 3, затем 2, 1 и 0 для самых слабых (на Adreno 618 из A52 нужен 0). Подбор ставится один раз, потом ваш выбор в самой игре сохраняется. Число: ставится при каждом запуске. Применяется при следующем запуске.",
@@ -1494,7 +1531,7 @@ class MainActivity : Activity() {
     private fun tabRows(rows: List<List<String>>, selected: Int, onPick: (Int) -> Unit): LinearLayout {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val views = ArrayList<TextView>()
-        fun paint(sel: Int) = views.forEachIndexed { i, t -> t.setBackgroundColor(if (i == sel) Th.act else Th.chip) }
+        fun paint(sel: Int) = views.forEachIndexed { i, t -> val c = if (i == sel) Th.act else Th.chip; if (newUi()) t.background = rr(c, 12) else t.setBackgroundColor(c) }
         var n = 0
         rows.forEachIndexed { r, labels ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -1901,7 +1938,7 @@ class MainActivity : Activity() {
                                     row.addView(TextView(this).apply {
                                         text = if (okv && okl) "✓ " + tr("заявлен для $lbl", "listed for $lbl") + (if (loader == "quilt" && type == "mod") tr(" (через Fabric)", " (via Fabric)") else "")
                                                else "⚠ " + tr("не заявлен для $lbl", "not listed for $lbl")
-                                        textSize = 12f; setTextColor(if (okv && okl) 0xFF66BB6A.toInt() else 0xFFFFB74D.toInt())
+                                        textSize = 12f; setTextColor(if (okv && okl) Th.accent else 0xFFFFB74D.toInt())
                                     })
                                 }
                                 val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -1988,7 +2025,7 @@ class MainActivity : Activity() {
                                 }) else row.addView(TextView(this).apply {
                                     val viaFabric = loader == "quilt" && type == "mod" && !(h.optJSONArray("categories")?.let { c3 -> (0 until c3.length()).any { c3.getString(it) == "quilt" } } ?: false)
                                     text = "✓ " + tr("заявлен для ${curBase()} / $ldName", "listed for ${curBase()} / $ldName") + (if (viaFabric) tr(" (через Fabric)", " (via Fabric)") else "")
-                                    textSize = 12f; setTextColor(0xFF66BB6A.toInt())
+                                    textSize = 12f; setTextColor(Th.accent)
                                 })
                             }
                             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
