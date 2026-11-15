@@ -86,7 +86,7 @@ class MainActivity : Activity() {
     /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
     internal val MIRROR = "https://raw.githubusercontent.com/Kumolix/Mobilix-Launcher-for-Minecraft/runtime-libs/"
 
-    private lateinit var logView: TextView
+    internal lateinit var logView: TextView
     private lateinit var scroll: ScrollView
     internal lateinit var progress: ProgressBar
     private lateinit var playBtn: Button
@@ -516,6 +516,26 @@ class MainActivity : Activity() {
         }
         scroll.addView(logView)
         logPanel.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(170)))
+        val logHead = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
+        fun logTab(label: String, onClick: () -> Unit) = TextView(this).apply {
+            text = label; textSize = 12f; setTextColor(Th.accent); setPadding(dp(10), dp(4), dp(10), dp(4))
+            setOnClickListener { onClick() }
+        }
+        fun showLog(prev: Boolean) {
+            Thread {
+                val t = readRunLog(prev)
+                runOnUiThread { logView.text = t.ifEmpty { tr("Лога пока нет.", "No log yet.") }; scroll.post { scroll.fullScroll(View.FOCUS_DOWN) } }
+            }.start()
+        }
+        logHead.addView(logTab(tr("Последний", "Latest")) { showLog(false) })
+        logHead.addView(logTab(tr("Предыдущий", "Previous")) { showLog(true) })
+        logHead.addView(logTab(tr("Копировать", "Copy")) {
+            val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("Mobilix log", logView.text.toString()))
+            Toast.makeText(this, tr("Лог скопирован", "Log copied"), Toast.LENGTH_SHORT).show()
+        })
+        logPanel.addView(logHead, 0)
+        showLog(false)   // после вылета лог последнего запуска виден сразу, не нужно ловить его во время запуска
         root.addView(logPanel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
