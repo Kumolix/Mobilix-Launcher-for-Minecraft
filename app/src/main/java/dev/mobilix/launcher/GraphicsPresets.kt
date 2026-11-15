@@ -26,6 +26,9 @@ import dev.mobilix.launcher.MainActivity.Companion.DEFAULT_MIRROR
 import dev.mobilix.launcher.MainActivity.Companion.LWJGL_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.MANIFEST_URL
 import dev.mobilix.launcher.MainActivity.Companion.NICK
+import dev.mobilix.launcher.MainActivity.Task
+import dev.mobilix.launcher.MainActivity.Preset
+import dev.mobilix.launcher.MainActivity.CTheme
 import dev.mobilix.launcher.MainActivity.Companion.RUNTIME_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.VERSION
 import java.io.BufferedInputStream
@@ -69,7 +72,7 @@ internal fun MainActivity.autoPreset(): Int {
     val tier = GpuTier.tier(prefs.getString("gpu", "") ?: "")
     val byGpu = when (tier) { null -> 3; 0 -> 1; 1 -> 2; else -> 3 }
     val mi = android.app.ActivityManager.MemoryInfo()
-    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+    (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
     val totalMb = mi.totalMem / 1024 / 1024
     val byMem = when { totalMb < 3000 -> 1; totalMb < 4500 -> 2; else -> 3 }
     log("Авто-пресет: видеочип «${prefs.getString("gpu", "")}» (уровень ${tier ?: "?"}) → $byGpu, память $totalMb МБ → $byMem")

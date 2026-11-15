@@ -26,6 +26,9 @@ import dev.mobilix.launcher.MainActivity.Companion.DEFAULT_MIRROR
 import dev.mobilix.launcher.MainActivity.Companion.LWJGL_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.MANIFEST_URL
 import dev.mobilix.launcher.MainActivity.Companion.NICK
+import dev.mobilix.launcher.MainActivity.Task
+import dev.mobilix.launcher.MainActivity.Preset
+import dev.mobilix.launcher.MainActivity.CTheme
 import dev.mobilix.launcher.MainActivity.Companion.RUNTIME_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.VERSION
 import java.io.BufferedInputStream

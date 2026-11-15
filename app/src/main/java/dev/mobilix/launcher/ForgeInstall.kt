@@ -26,6 +26,9 @@ import dev.mobilix.launcher.MainActivity.Companion.DEFAULT_MIRROR
 import dev.mobilix.launcher.MainActivity.Companion.LWJGL_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.MANIFEST_URL
 import dev.mobilix.launcher.MainActivity.Companion.NICK
+import dev.mobilix.launcher.MainActivity.Task
+import dev.mobilix.launcher.MainActivity.Preset
+import dev.mobilix.launcher.MainActivity.CTheme
 import dev.mobilix.launcher.MainActivity.Companion.RUNTIME_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.VERSION
 import java.io.BufferedInputStream
@@ -155,7 +158,7 @@ internal fun MainActivity.installerWithoutHashes(src: File): File {
 /** Куча установщика загрузчика: не меньше, чем у игры + 512 МБ, но не больше ~55% ОЗУ (иначе Android убивает процесс/перезагружает телефон). */
 internal fun MainActivity.installerHeapMb(): Int {
     val mi = android.app.ActivityManager.MemoryInfo()
-    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+    (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
     val totalMb = (mi.totalMem / 1024 / 1024).toInt()
     val base = if (totalMb >= 6000) 1280 else 768
     return minOf(maxOf(base, gameXmxMb() + 512), totalMb * 55 / 100).coerceAtLeast(512).let { if (is32bit) it.coerceAtMost(1280) else it }
@@ -216,7 +219,7 @@ internal fun MainActivity.runForgeInstaller(rt: File, installer: File, root: Fil
         if (done.exists()) break
         // процесс :game мог завершиться вместе с установщиком (System.exit)
         if (System.currentTimeMillis() - t0 > 20000) {
-            val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
             val alive = am.runningAppProcesses?.any { it.processName == "$packageName:game" } ?: true
             if (!alive) break
         }

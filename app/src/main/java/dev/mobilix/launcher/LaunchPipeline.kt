@@ -26,6 +26,9 @@ import dev.mobilix.launcher.MainActivity.Companion.DEFAULT_MIRROR
 import dev.mobilix.launcher.MainActivity.Companion.LWJGL_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.MANIFEST_URL
 import dev.mobilix.launcher.MainActivity.Companion.NICK
+import dev.mobilix.launcher.MainActivity.Task
+import dev.mobilix.launcher.MainActivity.Preset
+import dev.mobilix.launcher.MainActivity.CTheme
 import dev.mobilix.launcher.MainActivity.Companion.RUNTIME_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.VERSION
 import java.io.BufferedInputStream
@@ -365,7 +368,7 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
     val cmd = ArrayList<String>()
     cmd.add(java.path)
     val mi = android.app.ActivityManager.MemoryInfo()
-    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+    (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
     val totalMb = mi.totalMem / 1024 / 1024
     val modern = !oldGl   // 1.17+ тяжелее: даём больше памяти
     val xmx = gameXmxMb(modern)

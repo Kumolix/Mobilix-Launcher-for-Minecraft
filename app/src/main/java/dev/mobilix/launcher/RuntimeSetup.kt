@@ -26,6 +26,9 @@ import dev.mobilix.launcher.MainActivity.Companion.DEFAULT_MIRROR
 import dev.mobilix.launcher.MainActivity.Companion.LWJGL_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.MANIFEST_URL
 import dev.mobilix.launcher.MainActivity.Companion.NICK
+import dev.mobilix.launcher.MainActivity.Task
+import dev.mobilix.launcher.MainActivity.Preset
+import dev.mobilix.launcher.MainActivity.CTheme
 import dev.mobilix.launcher.MainActivity.Companion.RUNTIME_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.VERSION
 import java.io.BufferedInputStream
@@ -429,7 +432,7 @@ internal fun MainActivity.writeRenderConfig(): File {
 /** Память игры (МБ): ручная настройка или авто по ОЗУ устройства. */
 internal fun MainActivity.gameXmxMb(modern: Boolean = true): Int {
     val mi = android.app.ActivityManager.MemoryInfo()
-    (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+    (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
     val totalMb = mi.totalMem / 1024 / 1024
     val manualX = prefs.getInt("xmx", 0)
     val v = if (manualX > 0) manualX else when { totalMb < 3500 -> (totalMb * (if (modern) 30 else 25) / 100).toInt().coerceIn(512, 1024)   // слабые устройства: львиная доля ОЗУ занята системой

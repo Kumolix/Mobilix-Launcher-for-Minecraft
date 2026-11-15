@@ -26,6 +26,9 @@ import dev.mobilix.launcher.MainActivity.Companion.DEFAULT_MIRROR
 import dev.mobilix.launcher.MainActivity.Companion.LWJGL_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.MANIFEST_URL
 import dev.mobilix.launcher.MainActivity.Companion.NICK
+import dev.mobilix.launcher.MainActivity.Task
+import dev.mobilix.launcher.MainActivity.Preset
+import dev.mobilix.launcher.MainActivity.CTheme
 import dev.mobilix.launcher.MainActivity.Companion.RUNTIME_REPOS
 import dev.mobilix.launcher.MainActivity.Companion.VERSION
 import java.io.BufferedInputStream
@@ -198,7 +201,7 @@ internal fun MainActivity.msDeviceLogin() {
                         "1. Open $uri\n2. Enter the code: $userCode\n3. Sign in with the account that owns Minecraft and come back.\n\nThe launcher will notice the sign-in by itself."))
                     .setPositiveButton(tr("Открыть и скопировать код", "Open and copy code")) { _, _ ->
                         try {
-                            (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                            (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
                                 .setPrimaryClip(android.content.ClipData.newPlainText("code", userCode))
                             startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uri)))
                         } catch (_: Exception) {}
