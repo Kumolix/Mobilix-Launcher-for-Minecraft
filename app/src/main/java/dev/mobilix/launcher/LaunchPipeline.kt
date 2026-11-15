@@ -130,6 +130,28 @@ internal class LaunchPlan(val profile: String, val play: Boolean) {
 }
 
 /** Подготовка и запуск игры: шаги идут по порядку, общее состояние лежит в LaunchPlan. */
+/** Почему умер прошлый процесс игры (Android 11+): причина, сигнал и стек нативного краха (библиотеки и функции из tombstone). Один раз на каждый вылет. */
+internal fun MainActivity.logLastNativeExit() {
+    if (android.os.Build.VERSION.SDK_INT < 30) return
+    try {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val g = am.getHistoricalProcessExitReasons(packageName, 0, 8).filter { it.processName.endsWith(":game") }.maxByOrNull { it.timestamp } ?: return
+        if (g.reason != android.app.ApplicationExitInfo.REASON_CRASH_NATIVE && g.reason != android.app.ApplicationExitInfo.REASON_SIGNALED &&
+            g.reason != android.app.ApplicationExitInfo.REASON_CRASH && g.reason != android.app.ApplicationExitInfo.REASON_LOW_MEMORY) return
+        if (prefs.getLong("exitLogged", 0L) == g.timestamp) return
+        prefs.edit().putLong("exitLogged", g.timestamp).apply()
+        log("=== Прошлая игра завершилась аварийно: причина ${g.reason}, статус ${g.status}, ${g.description ?: "-"} ===")
+        val st = if (g.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE) g.traceInputStream else null
+        if (st != null) {
+            val raw = st.use { it.readBytes().take(1_000_000).toByteArray() }
+            val keep = Regex("[\\x20-\\x7e]{6,}").findAll(String(raw, Charsets.ISO_8859_1)).map { it.value.trim() }
+                .filter { Regex("\\.so|SIG[A-Z]+|signal|Abort|backtrace|pc [0-9a-f]{6,}|#\\d\\d").containsMatchIn(it) }
+                .distinct().take(60).toList()
+            if (keep.isEmpty()) log("  (стек краха пуст)") else keep.forEach { log("  $it") }
+        } else log("  (стека краха нет: система его не сохранила)")
+    } catch (e: Throwable) { log("Причина прошлого вылета недоступна: $e") }
+}
+
 internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), play: Boolean = true) {
     val p = LaunchPlan(profile, play)
     prepareInputs(p)        // папки, профиль, версия игры
@@ -179,6 +201,7 @@ private fun MainActivity.prepareInputs(p: LaunchPlan) {
     log("Папка данных: ${root.path}")
     log("Профиль $profile (игра $baseVer), ник ${nickName()}")
     logPreviousRun(root)
+    logLastNativeExit()
     p.root = root
     p.assetsDir = assetsDir
     p.librariesDir = librariesDir
