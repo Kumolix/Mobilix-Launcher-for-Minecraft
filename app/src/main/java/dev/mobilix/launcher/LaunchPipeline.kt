@@ -192,7 +192,9 @@ private fun MainActivity.prepareInputs(p: LaunchPlan) {
     File(root, "game").mkdirs()
     val assetsDir = File(root, "assets")
     val librariesDir = File(root, "libraries")
+    archiveRunLogs(root)
     logFile = File(root, "launcher.log").also { it.writeText("") }
+    runOnUiThread { logView.text = "" }
     val profFile = File(root, "versions/$profile/$profile.json")
     val child: JSONObject? = if (profFile.exists()) JSONObject(profFile.readText()).takeIf { it.has("inheritsFrom") || (it.has("jar") && it.optString("jar") != profile) } else null
     val baseVer = child?.let { it.optString("inheritsFrom", "").ifEmpty { it.optString("jar", "") } }?.ifEmpty { null } ?: profile
