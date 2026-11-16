@@ -79,11 +79,13 @@ object ZtManager {
     fun joined(ctx: Context, id: String) = ctx.getSharedPreferences("mobilix", Context.MODE_PRIVATE).getString("ztJoined", "").orEmpty().split(',').contains(id)
 
     /** Адрес устройства в сети, когда сеть готова (хозяин разрешил вход и выдан IP). */
-    fun ip(id: String): String? = try {
+    fun ip(id: String): String? {
         val n = node ?: return null
-        val nid = java.lang.Long.parseUnsignedLong(id, 16)
-        if (n.isNetworkTransportReady(nid)) n.getIPv4Address(nid)?.hostAddress else null
-    } catch (_: Throwable) { null }
+        return try {
+            val nid = java.lang.Long.parseUnsignedLong(id, 16)
+            if (n.isNetworkTransportReady(nid)) n.getIPv4Address(nid)?.hostAddress else null
+        } catch (_: Throwable) { null }
+    }
 
     private fun pipe(a: InputStream, b: OutputStream, close: () -> Unit) = Thread {
         val buf = ByteArray(16384)
