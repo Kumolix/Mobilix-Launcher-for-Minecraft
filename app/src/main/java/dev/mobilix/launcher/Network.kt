@@ -198,7 +198,7 @@ internal fun MainActivity.netPage(): View {
 
     if (ZtManager.libOk(this)) {
         fun later() { sv.postDelayed({ refresh() }, 1500) }
-        val running = ZtManager.nodeId() != null || ZtManager.starting
+        val running = ZtManager.enabled
         val st = card()
         val err = ZtManager.error
         st.addView(TextView(this).apply {
@@ -209,6 +209,10 @@ internal fun MainActivity.netPage(): View {
             st.addView(TextView(this).apply { text = id; textSize = 22f; setTextColor(Th.text); typeface = Typeface.create("monospace", Typeface.BOLD); setPadding(0, dp(6), 0, 0) })
             body(st, tr("ID вашего узла (его видно в кабинете ZeroTier в списке участников).", "Your node ID (shown in the ZeroTier dashboard member list)."))
         }
+        if (running) st.addView(TextView(this).apply {
+            text = (if (ZtManager.events.isEmpty()) tr("событий пока нет", "no events yet") else ZtManager.events.joinToString("\n"))
+            textSize = 10.5f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE; setPadding(0, dp(8), 0, 0)
+        })
         if (!running) btn(st, tr("Включить ZeroTier", "Turn ZeroTier on")) { ZtManager.start(this); later() }
         else btn(st, tr("Выключить", "Turn off"), false) { ZtManager.stop(this); refresh() }
         btn(st, tr("Обновить", "Refresh"), false) { refresh() }

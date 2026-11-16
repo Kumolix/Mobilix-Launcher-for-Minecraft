@@ -26,6 +26,15 @@ object ZtManager {
     const val ZT_PORT = 25565
     @Volatile private var node: ZeroTierNode? = null
     @Volatile var starting = false
+    /** «Включён» пользователем. Сам узел после выключения не останавливаем (остановка libzt роняла приложение), он просто простаивает. */
+    @Volatile var enabled = false
+    /** Последние события узла для диагностики (почему не выходит в сеть). */
+    val events = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val names = mapOf(200 to "NODE_UP", 201 to "NODE_ONLINE", 202 to "NODE_OFFLINE", 203 to "NODE_DOWN", 204 to "NODE_FATAL_ERROR", 210 to "NETWORK_NOT_FOUND",
+        211 to "NETWORK_CLIENT_TOO_OLD", 212 to "NETWORK_REQ_CONFIG", 213 to "NETWORK_OK", 214 to "NETWORK_ACCESS_DENIED", 215 to "NETWORK_READY_IP4", 216 to "NETWORK_READY_IP6",
+        217 to "NETWORK_READY_IP4_IP6", 218 to "NETWORK_DOWN", 219 to "NETWORK_UPDATE", 220 to "STACK_UP", 221 to "STACK_DOWN", 230 to "NETIF_UP", 231 to "NETIF_DOWN",
+        240 to "PEER_DIRECT", 241 to "PEER_RELAY", 242 to "PEER_UNREACHABLE", 243 to "PEER_PATH_DISCOVERED", 244 to "PEER_PATH_DEAD")
+    fun note(t: String) { events.add(java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + t); while (events.size > 14) events.removeAt(0) }
     @Volatile var error: String? = null
     @Volatile private var host: ZeroTierServerSocket? = null
     @Volatile private var client: ServerSocket? = null
@@ -33,20 +42,31 @@ object ZtManager {
     @Volatile var clientTarget: String? = null
 
     fun libOk(ctx: Context) = File(ctx.applicationInfo.nativeLibraryDir, "libzt.so").exists()
-    fun online(): Boolean = try { node?.isOnline == true } catch (_: Throwable) { false }
-    fun nodeId(): String? = try { node?.id?.let { java.lang.Long.toHexString(it).padStart(10, '0') } } catch (_: Throwable) { null }
+    fun online(): Boolean = try { enabled && node?.isOnline == true } catch (_: Throwable) { false }
+    fun nodeId(): String? = try { if (!enabled) null else node?.id?.let { java.lang.Long.toHexString(it).padStart(10, '0') } } catch (_: Throwable) { null }
 
     /** Запускает узел (один на процесс) и держит приложение живым сервисом на переднем плане. */
     fun start(ctx: Context) {
-        if (node != null || starting) return
-        starting = true; error = null
-        ZtService.start(ctx)
+        if (starting) return
         val app = ctx.applicationContext
+        enabled = true; error = null
+        ZtService.start(ctx)
+        val existing = node
+        if (existing != null) {   // узел уже запущен в этом процессе: только заново входим в сети
+            val saved = app.getSharedPreferences("mobilix", Context.MODE_PRIVATE).getString("ztJoined", "").orEmpty()
+            for (id in saved.split(',').filter { it.length == 16 }) try { existing.join(java.lang.Long.parseUnsignedLong(id, 16)) } catch (_: Throwable) {}
+            return
+        }
+        starting = true
         Thread {
             try {
                 val n = ZeroTierNode()
                 n.initFromStorage(File(app.filesDir, "zt").apply { mkdirs() }.path)
-                n.start()
+                n.initSetEventHandler(object : com.zerotier.sockets.ZeroTierEventListener {
+                    override fun onZeroTierEvent(id: Long, eventCode: Int) { note((names[eventCode] ?: "event $eventCode") + (if (id != 0L) " " + java.lang.Long.toHexString(id) else "")) }
+                })
+                val rc = n.start()
+                note("start() = $rc")
                 node = n
                 val t0 = System.currentTimeMillis()
                 while (!online() && System.currentTimeMillis() - t0 < 60000) Thread.sleep(200)
@@ -59,8 +79,9 @@ object ZtManager {
 
     fun stop(ctx: Context) {
         stopHost(ctx); stopClient()
-        try { node?.stop() } catch (_: Throwable) {}
-        node = null
+        enabled = false
+        val saved = ctx.getSharedPreferences("mobilix", Context.MODE_PRIVATE).getString("ztJoined", "").orEmpty()
+        for (id in saved.split(',').filter { it.length == 16 }) try { node?.leave(java.lang.Long.parseUnsignedLong(id, 16)) } catch (_: Throwable) {}
         ZtService.stop(ctx)
     }
 
