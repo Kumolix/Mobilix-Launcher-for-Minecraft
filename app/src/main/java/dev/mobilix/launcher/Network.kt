@@ -74,6 +74,110 @@ object ZeroTierNet {
     fun shareText(ip: String, port: Int?) = "[ZeroTier] IP: " + ip + (if (port != null) ":$port" else "")
 }
 
+/** Клиент ZeroTier Central (https://api.zerotier.com): сети, участники, авторизация. Нужен API-токен из my.zerotier.com → Account. */
+internal object ZtCentral {
+    private const val BASE = "https://api.zerotier.com/api/v1"
+    fun call(token: String, method: String, path: String, body: String? = null): String {
+        val c = java.net.URL(BASE + path).openConnection() as java.net.HttpURLConnection
+        c.requestMethod = method; c.connectTimeout = 15000; c.readTimeout = 20000
+        c.setRequestProperty("Authorization", "token $token"); c.setRequestProperty("Accept", "application/json")
+        if (body != null) { c.doOutput = true; c.setRequestProperty("Content-Type", "application/json"); c.outputStream.use { it.write(body.toByteArray()) } }
+        val code = c.responseCode
+        val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        if (code !in 200..299) throw java.io.IOException(if (code == 401 || code == 403) "токен не подходит ($code)" else "ошибка $code")
+        return txt
+    }
+}
+
+private fun MainActivity.ztBg(work: () -> Unit, done: () -> Unit) = Thread {
+    try { work(); runOnUiThread { done() } } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "ZeroTier: ${e.message}", Toast.LENGTH_LONG).show() } }
+}.start()
+
+/** Участники сети: имя, адрес, онлайн, авторизация; можно разрешить или запретить вход. */
+private fun MainActivity.ztMembers(token: String, nid: String, netName: String) {
+    val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(4)) }
+    val scroll = ScrollView(this).apply { addView(box) }
+    val dlg = MobDialog(this).setTitle(netName.ifEmpty { nid }).setView(scroll).setPositiveButton(tr("Закрыть", "Close"), null)
+    fun load() {
+        var arr = JSONArray()
+        ztBg({ arr = JSONArray(ZtCentral.call(token, "GET", "/network/$nid/member")) }) {
+            box.removeAllViews()
+            if (arr.length() == 0) box.addView(TextView(this).apply { text = tr("Пока никого. Пусть друзья добавят сеть по ID в ZeroTier One и включат её: они появятся здесь.", "Nobody yet. Ask friends to add the network ID in ZeroTier One and switch it on: they will show up here."); setTextColor(Th.dim); textSize = 13f; setPadding(0, dp(8), 0, dp(8)) })
+            for (i in 0 until arr.length()) {
+                val m = arr.getJSONObject(i); val cfg = m.optJSONObject("config") ?: JSONObject()
+                val node = m.optString("nodeId"); val ok = cfg.optBoolean("authorized"); val online = m.optBoolean("online")
+                val ip = cfg.optJSONArray("ipAssignments")?.optString(0).orEmpty()
+                val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); background = rr(Th.chip, 12) }
+                row.addView(TextView(this).apply { text = (if (online) "● " else "○ ") + m.optString("name").ifEmpty { node }; setTextColor(if (online) Th.accent else Th.text); textSize = 14f })
+                row.addView(TextView(this).apply { text = node + (if (ip.isNotEmpty()) "  ·  $ip" else ""); setTextColor(Th.dim); textSize = 12f; typeface = Typeface.MONOSPACE })
+                row.addView(TextView(this).apply {
+                    text = if (ok) tr("Запретить вход", "Deauthorize") else tr("Разрешить вход", "Authorize")
+                    setTextColor(if (ok) 0xFFE05555.toInt() else Th.accent); textSize = 13f; setPadding(0, dp(6), 0, dp(2))
+                    setOnClickListener { ztBg({ ZtCentral.call(token, "POST", "/network/$nid/member/$node", """{"config":{"authorized":${!ok}}}""") }) { load() } }
+                })
+                box.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+            }
+        }
+    }
+    dlg.show(); load()
+}
+
+/** Карточка ZeroTier Central: токен, создание сетей, список и участники. */
+private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
+    fun cbtn(label: String, primary: Boolean = true, f: () -> Unit) = c.addView(Button(this).apply {
+        text = label; isAllCaps = false; setTextColor(if (primary) android.graphics.Color.WHITE else Th.chipText); background = sel(if (primary) Th.act else Th.chip); setOnClickListener { f() }
+    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(12) })
+    c.addView(TextView(this).apply { text = "ZeroTier Central"; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
+    val token = prefs.getString("ztToken", "").orEmpty()
+    fun askToken() {
+        val e = EditText(this).apply { hint = "API token"; setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true); typeface = Typeface.MONOSPACE }
+        MobDialog(this).setTitle(tr("API-токен ZeroTier", "ZeroTier API token")).setView(e).setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Сохранить", "Save")) { _, _ -> prefs.edit().putString("ztToken", e.text.toString().trim()).apply(); refresh() }.show()
+    }
+    if (token.isEmpty()) {
+        c.addView(TextView(this).apply { text = tr("Войдите по API-токену, чтобы создавать сети, видеть, кто подключился, и разрешать вход друзьям, не выходя из лаунчера. Токен: my.zerotier.com → Account → API Access Tokens → New Token (бесплатно).", "Sign in with an API token to create networks, see who joined and let friends in without leaving the launcher. Token: my.zerotier.com → Account → API Access Tokens → New Token (free)."); textSize = 13f; setTextColor(Th.dim); setLineSpacing(0f, 1.15f); setPadding(0, dp(6), 0, 0) })
+        cbtn(tr("Вставить токен", "Enter token")) { askToken() }
+        cbtn(tr("Открыть страницу токенов", "Open token page"), false) { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://my.zerotier.com/account"))) } catch (_: Exception) {} }
+        return
+    }
+    val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    c.addView(list)
+    list.addView(TextView(this).apply { text = tr("Загрузка…", "Loading…"); setTextColor(Th.dim); textSize = 13f; setPadding(0, dp(8), 0, 0) })
+    var nets = JSONArray()
+    ztBg({ nets = JSONArray(ZtCentral.call(token, "GET", "/network")) }) {
+        list.removeAllViews()
+        if (nets.length() == 0) list.addView(TextView(this).apply { text = tr("Сетей пока нет, создайте первую.", "No networks yet, create the first one."); setTextColor(Th.dim); textSize = 13f; setPadding(0, dp(8), 0, 0) })
+        for (i in 0 until nets.length()) {
+            val n = nets.getJSONObject(i); val id = n.optString("id"); val name = n.optJSONObject("config")?.optString("name").orEmpty()
+            val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); background = rr(Th.chip, 14) }
+            row.addView(TextView(this).apply { text = name.ifEmpty { tr("Сеть", "Network") }; textSize = 15f; setTextColor(Th.text) })
+            row.addView(TextView(this).apply { text = id + "  ·  " + tr("в сети: ", "online: ") + n.optInt("onlineMemberCount") + " / " + n.optInt("totalMemberCount"); textSize = 12f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE })
+            val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, 0) }
+            fun act(t: String, col: Int, f: () -> Unit) = r2.addView(TextView(this).apply { text = t; setTextColor(col); textSize = 13f; setPadding(0, dp(4), dp(18), dp(4)); setOnClickListener { f() } })
+            act(tr("Участники", "Members"), Th.accent) { ztMembers(token, id, name) }
+            act(tr("Копировать ID", "Copy ID"), Th.accent) {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier network", id))
+                Toast.makeText(this, tr("ID скопирован", "ID copied"), Toast.LENGTH_SHORT).show()
+            }
+            act(tr("Удалить", "Delete"), 0xFFE05555.toInt()) {
+                MobDialog(this).setTitle(tr("Удалить сеть?", "Delete network?")).setMessage(name.ifEmpty { id }).setNegativeButton(tr("Отмена", "Cancel"), null)
+                    .setPositiveButton(tr("Удалить", "Delete")) { _, _ -> ztBg({ ZtCentral.call(token, "DELETE", "/network/$id") }) { refresh() } }.show()
+            }
+            row.addView(r2)
+            list.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        }
+    }
+    cbtn(tr("+ Создать сеть", "+ Create network")) {
+        val e = EditText(this).apply { hint = tr("Название сети", "Network name"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true) }
+        MobDialog(this).setTitle(tr("Новая сеть", "New network")).setView(e).setNegativeButton(tr("Отмена", "Cancel"), null)
+            .setPositiveButton(tr("Создать", "Create")) { _, _ ->
+                val nm = e.text.toString().trim().ifEmpty { "Mobilix" }
+                ztBg({ ZtCentral.call(token, "POST", "/network", JSONObject().put("config", JSONObject().put("name", nm).put("private", true)).toString()) }) { refresh() }
+            }.show()
+    }
+    cbtn(tr("Сменить токен", "Change token"), false) { askToken() }
+}
+
 private fun MainActivity.ztNets(): JSONArray = try { JSONArray(prefs.getString("ztNets", "[]")) } catch (_: Exception) { JSONArray() }
 
 /** Страница «Сеть»: установка ZeroTier One, мой адрес, сохранённые сети. */
@@ -122,10 +226,12 @@ internal fun MainActivity.netPage(): View {
     btn(st, tr("Открыть ZeroTier One", "Open ZeroTier One"), ips.isEmpty()) { ZeroTierNet.openApp(this) }
     btn(st, tr("Обновить", "Refresh"), false) { refresh() }
 
+    ztCentralCard(card(), ::refresh)
+
     // сети
     val nets = ztNets()
     val nc = card()
-    title(nc, tr("Мои сети", "My networks"))
+    title(nc, tr("Сохранённые ID", "Saved IDs"))
     body(nc, tr("Сохраните здесь ID сетей, чтобы быстро копировать и делиться ими. Добавить сеть в ZeroTier One нужно в самом приложении (там же включается переключатель).", "Save network IDs here to copy and share them quickly. Adding a network happens in ZeroTier One itself (that is also where you switch it on)."))
     for (i in 0 until nets.length()) {
         val o = nets.getJSONObject(i)
