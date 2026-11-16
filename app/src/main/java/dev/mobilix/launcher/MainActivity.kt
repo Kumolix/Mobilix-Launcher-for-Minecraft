@@ -660,6 +660,7 @@ class MainActivity : Activity() {
             item("Раскладка управления", "Controls layout", PixelIcon.I_PAD to PixelIcon.MENU_PAL) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
             menuWipe = item("Удалить скачанное", "Delete downloads", PixelIcon.TRASH to PixelIcon.TRASH_PAL) { confirmWipe() }
         }
+        if (BuildConfig.LABS) item("Сеть", "Network", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL) { openPage(tr("Сеть", "Network"), netPage()) }
         ghIdx = menuEntries.size
         ghItem = item("Соцсети", "Social", PixelIcon.I_CHAT to PixelIcon.MENU_PAL) { openPage(tr("Соцсети", "Social"), socialPage()) }
         if (!compact()) item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }

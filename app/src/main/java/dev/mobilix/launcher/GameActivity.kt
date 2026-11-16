@@ -18,6 +18,8 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.widget.Toast
+import android.content.Intent
 import org.json.JSONObject
 import java.io.File
 import java.io.RandomAccessFile
@@ -152,6 +154,16 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             bar,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END)
         )
+        // MobiLabs: кнопка ↘ вверху по центру делится адресом ZeroTier и портом открытого для сети мира
+        if (BuildConfig.LABS) {
+            val d = resources.displayMetrics.density
+            val shareBtn = TextView(this).apply {
+                text = "↘"; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; includeFontPadding = false
+                background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x99000000.toInt()); setStroke((1 * d).toInt(), 0x66FFFFFF) }
+                setOnClickListener { shareIp() }
+            }
+            root.addView(shareBtn, FrameLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt(), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = (6 * d).toInt() })
+        }
         // «Скрыть системные кнопки в игре»: кнопки «Раскладка» и «Лог» прячутся, раскладка открывается удержанием Esc (Bedrock: «II») 5 с
         if (gs().optBoolean("hideSys", false)) bar.visibility = View.GONE
         controls.onHoldEsc = { layoutBtn.performClick() }
@@ -292,6 +304,17 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    private var lastLanPort = -1
+    /** «Поделиться IP»: копирует «[ZeroTier] IP: адрес:порт» и открывает системное окно отправки. */
+    private fun shareIp() {
+        val ips = ZeroTierNet.myIps(this)
+        if (ips.isEmpty()) { Toast.makeText(this, "ZeroTier не подключён: включите сеть в ZeroTier One", Toast.LENGTH_LONG).show(); return }
+        val text = ZeroTierNet.shareText(ips[0].second, ZeroTierNet.lanPort(gameLog))
+        (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", text))
+        Toast.makeText(this, "$text (скопировано)", Toast.LENGTH_LONG).show()
+        try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Поделиться IP").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+    }
+
     /** Показывает последние строки лога игры на экране. */
     private val tailer = object : Runnable {
         override fun run() {
@@ -306,6 +329,18 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
                         raf.readFully(buf)
                         val lines = String(buf).lines().takeLast(45)
                         logView.text = lines.joinToString("\n")
+                        if (BuildConfig.LABS) {
+                            val p = Regex("Started serving on (\\d+)").findAll(String(buf)).lastOrNull()?.groupValues?.get(1)?.toInt()
+                            if (p != null && p != lastLanPort) {
+                                lastLanPort = p
+                                val ips = ZeroTierNet.myIps(this@GameActivity)
+                                if (ips.isNotEmpty()) {
+                                    val t = ZeroTierNet.shareText(ips[0].second, p)
+                                    (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", t))
+                                    Toast.makeText(this@GameActivity, "$t (скопировано)", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
                     }
                 }
             } catch (_: Exception) {
