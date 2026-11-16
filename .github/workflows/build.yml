@@ -71,7 +71,7 @@ jobs:
             ( cmake -S /tmp/libzt -B /tmp/libzt/b-$A -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=$A -DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DBUILD_HOST_SELFTEST=OFF -DBUILD_HOST_EXAMPLES=OFF -DZTS_DISABLE_CENTRAL_API=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5 > /tmp/zt-$A.log 2>&1 \
               && cmake --build /tmp/libzt/b-$A -j4 --target zt-shared >> /tmp/zt-$A.log 2>&1 \
               && mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/$A" && cp "$(find /tmp/libzt/b-$A -name libzt.so | head -1)" "$GITHUB_WORKSPACE/app/src/main/jniLibs/$A/libzt.so" \
-              && echo "OK $A" ) || { echo "FAIL $A"; grep -E "error|Error|undefined" /tmp/zt-$A.log | head -25; }
+              && "$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded "$GITHUB_WORKSPACE/app/src/main/jniLibs/$A/libzt.so" && echo "OK $A" ) || { echo "FAIL $A"; grep -E "error|Error|undefined" /tmp/zt-$A.log | head -25; }
           done
           ls -la "$GITHUB_WORKSPACE"/app/src/main/jniLibs/*/libzt.so || true
 
