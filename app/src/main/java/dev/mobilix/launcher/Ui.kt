@@ -8,6 +8,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.RectF
+import android.graphics.RadialGradient
+import android.graphics.Shader
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
@@ -501,5 +503,32 @@ class ColorWheel(ctx: Context) : View(ctx) {
             return true
         }
         return e.action == android.view.MotionEvent.ACTION_UP
+    }
+}
+
+
+/** Фон «нового интерфейса»: медленно плывущие светящиеся пятна цветов темы (акцент и тёмный акцент). */
+class AuroraView(ctx: Context) : View(ctx) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var t = 0f
+    private val anim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 26000; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.LinearInterpolator()
+        addUpdateListener { t = it.animatedFraction; invalidate() }
+    }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); anim.start() }
+    override fun onDetachedFromWindow() { anim.cancel(); super.onDetachedFromWindow() }
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat(); if (w == 0f) return
+        val a = 2 * Math.PI * t
+        fun blob(cx: Float, cy: Float, r: Float, col: Int, alpha: Int) {
+            val c0 = (col and 0xFFFFFF) or (alpha shl 24)
+            p.shader = RadialGradient(cx, cy, r, intArrayOf(c0, c0 and 0xFFFFFF), floatArrayOf(0f, 1f), Shader.TileMode.CLAMP)
+            c.drawCircle(cx, cy, r, p)
+        }
+        val big = maxOf(w, h)
+        blob((w * (0.25 + 0.2 * Math.sin(a))).toFloat(), (h * (0.2 + 0.1 * Math.cos(a))).toFloat(), big * 0.55f, Th.accent, 70)
+        blob((w * (0.8 + 0.15 * Math.cos(a * 1.0 + 1))).toFloat(), (h * (0.55 + 0.15 * Math.sin(a + 2))).toFloat(), big * 0.6f, Th.act, 85)
+        blob((w * (0.4 + 0.2 * Math.sin(a + 4))).toFloat(), (h * (0.95 + 0.05 * Math.cos(a))).toFloat(), big * 0.5f, Th.accent, 45)
+        p.shader = null
     }
 }
