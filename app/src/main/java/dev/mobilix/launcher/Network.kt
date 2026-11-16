@@ -196,6 +196,90 @@ internal fun MainActivity.netPage(): View {
     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(12) })
     fun refresh() = openPage(tr("Сеть", "Network"), netPage(), animate = false)
 
+    if (ZtManager.libOk(this)) {
+        fun later() { sv.postDelayed({ refresh() }, 1500) }
+        val running = ZtManager.nodeId() != null || ZtManager.starting
+        val st = card()
+        val err = ZtManager.error
+        st.addView(TextView(this).apply {
+            text = when { err != null -> "✕ " + err; ZtManager.online() -> "● " + tr("Узел ZeroTier в сети", "ZeroTier node online"); running -> "… " + tr("Запуск узла", "Starting node"); else -> "○ " + tr("Узел выключен", "Node is off") }
+            textSize = 13f; setTextColor(if (ZtManager.online()) Th.accent else Th.dim); typeface = Typeface.DEFAULT_BOLD
+        })
+        ZtManager.nodeId()?.let { id ->
+            st.addView(TextView(this).apply { text = id; textSize = 22f; setTextColor(Th.text); typeface = Typeface.create("monospace", Typeface.BOLD); setPadding(0, dp(6), 0, 0) })
+            body(st, tr("ID вашего узла (его видно в кабинете ZeroTier в списке участников).", "Your node ID (shown in the ZeroTier dashboard member list)."))
+        }
+        if (!running) btn(st, tr("Включить ZeroTier", "Turn ZeroTier on")) { ZtManager.start(this); later() }
+        else btn(st, tr("Выключить", "Turn off"), false) { ZtManager.stop(this); refresh() }
+        btn(st, tr("Обновить", "Refresh"), false) { refresh() }
+
+        val nets = ztNets()
+        val nc = card()
+        title(nc, tr("Сети", "Networks"))
+        body(nc, tr("Добавьте сеть по ID (его даёт хозяин сети) и подключитесь. Хозяин должен разрешить вам вход (Authorize) во вкладке участников.", "Add a network by its ID (given by the network owner) and join it. The owner has to authorize you in the members list."))
+        var myIp: String? = null
+        for (i in 0 until nets.length()) {
+            val o = nets.getJSONObject(i); val id = o.optString("id")
+            val joined = ZtManager.joined(this, id); val ip = ZtManager.ip(id)
+            if (ip != null && myIp == null) myIp = ip
+            val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); background = rr(Th.chip, 14) }
+            row.addView(TextView(this).apply { text = o.optString("name").ifEmpty { tr("Сеть", "Network") }; textSize = 15f; setTextColor(Th.text) })
+            row.addView(TextView(this).apply { text = id; textSize = 12f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE })
+            row.addView(TextView(this).apply {
+                text = when { ip != null -> "● " + tr("подключено, ваш адрес ", "connected, your address ") + ip; joined -> "… " + tr("ждём разрешения хозяина", "waiting for owner approval"); else -> "○ " + tr("не подключено", "not connected") }
+                textSize = 13f; setTextColor(if (ip != null) Th.accent else Th.dim); setPadding(0, dp(4), 0, 0)
+            })
+            val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, 0) }
+            fun act(t: String, col: Int, f: () -> Unit) = r2.addView(TextView(this).apply { text = t; setTextColor(col); textSize = 13f; setPadding(0, dp(4), dp(18), dp(4)); setOnClickListener { f() } })
+            if (joined) act(tr("Отключить", "Leave"), Th.accent) { ZtManager.leave(this, id); refresh() }
+            else act(tr("Подключить", "Join"), Th.accent) { if (!running) ZtManager.start(this); ZtManager.join(this, id); later() }
+            act(tr("Копировать ID", "Copy ID"), Th.accent) {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier network", id))
+                Toast.makeText(this, tr("ID скопирован", "ID copied"), Toast.LENGTH_SHORT).show()
+            }
+            act(tr("Удалить", "Delete"), 0xFFE05555.toInt()) {
+                ZtManager.leave(this, id)
+                val n2 = JSONArray(); for (k in 0 until nets.length()) if (k != i) n2.put(nets.get(k))
+                prefs.edit().putString("ztNets", n2.toString()).apply(); refresh()
+            }
+            row.addView(r2)
+            nc.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        }
+        btn(nc, tr("+ Войти в сеть по ID", "+ Join a network by ID")) {
+            val idE = EditText(this).apply { hint = tr("Network ID (16 символов)", "Network ID (16 hex chars)"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true); typeface = Typeface.MONOSPACE }
+            val nameE = EditText(this).apply { hint = tr("Название (необязательно)", "Name (optional)"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true) }
+            MobDialog(this).setTitle(tr("Войти в сеть", "Join a network")).setView(LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; addView(idE); addView(nameE) })
+                .setNegativeButton(tr("Отмена", "Cancel"), null)
+                .setPositiveButton(tr("Войти", "Join")) { _, _ ->
+                    val id = idE.text.toString().trim().lowercase()
+                    if (!Regex("[0-9a-f]{16}").matches(id)) { Toast.makeText(this, tr("ID — ровно 16 символов 0-9, a-f", "ID must be exactly 16 hex characters"), Toast.LENGTH_LONG).show(); return@setPositiveButton }
+                    nets.put(JSONObject().put("id", id).put("name", nameE.text.toString().trim()))
+                    prefs.edit().putString("ztNets", nets.toString()).apply()
+                    if (!ZtManager.online() && !ZtManager.starting) ZtManager.start(this)
+                    ZtManager.join(this, id); later()
+                }.show()
+        }
+
+        val gc = card()
+        title(gc, tr("Игра по сети", "Play over the network"))
+        val ip0 = myIp
+        if (ip0 == null) body(gc, tr("Подключитесь к сети и дождитесь адреса, тогда здесь появятся кнопки.", "Join a network and wait for your address, then the buttons appear here."))
+        else {
+            body(gc, tr("Хозяин: откройте мир для сети в игре (Esc → Открыть для сети) и нажмите кнопку ниже. Друзья подключаются к вашему адресу $ip0.", "Host: open your world to LAN in game (Esc → Open to LAN) and tap the button below. Friends connect to your address $ip0."))
+            if (!ZtManager.hostActive) btn(gc, tr("Раздавать мой мир друзьям", "Share my world")) { ZtManager.startHost(this, ip0) { ZeroTierNet.lanPort(java.io.File(dataRoot(), "game.log")) }; refresh() }
+            else btn(gc, "● " + tr("Раздаём: $ip0:${ZtManager.ZT_PORT} (остановить)", "Sharing: $ip0:${ZtManager.ZT_PORT} (stop)"), false) { ZtManager.stopHost(this); refresh() }
+            body(gc, tr("Гость: введите адрес хозяина и подключитесь, затем в игре «Сетевая игра» → добавьте сервер localhost:${ZtManager.ZT_PORT}.", "Guest: enter the host address and connect, then in Multiplayer add the server localhost:${ZtManager.ZT_PORT}."))
+            val hostE = EditText(this).apply { hint = tr("Адрес хозяина, например 10.147.17.5", "Host address, e.g. 10.147.17.5"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true); setText(ZtManager.clientTarget.orEmpty()) }
+            gc.addView(hostE)
+            if (ZtManager.clientTarget == null) btn(gc, tr("Подключиться к другу", "Connect to friend")) {
+                val h = hostE.text.toString().trim()
+                if (h.isEmpty()) Toast.makeText(this, tr("Введите адрес", "Enter the address"), Toast.LENGTH_SHORT).show() else { ZtManager.startClient(h); refresh() }
+            } else btn(gc, "● " + tr("В игре: localhost:${ZtManager.ZT_PORT} (отключить)", "In game: localhost:${ZtManager.ZT_PORT} (disconnect)"), false) { ZtManager.stopClient(); refresh() }
+        }
+        ztCentralCard(card(), ::refresh)
+        return sv
+    }
+
     if (!ZeroTierNet.installed(this)) {
         val c = card()
         title(c, tr("Установите ZeroTier One", "Install ZeroTier One"))

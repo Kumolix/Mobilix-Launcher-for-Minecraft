@@ -307,9 +307,11 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
     private var lastLanPort = -1
     /** «Поделиться IP»: копирует «[ZeroTier] IP: адрес:порт» и открывает системное окно отправки. */
     private fun shareIp() {
+        // встроенный ZeroTier: лаунчер пишет «адрес:порт» в zt-share.txt, когда мир раздаётся друзьям
+        val shared = try { File(getExternalFilesDir(null) ?: filesDir, "zt-share.txt").takeIf { it.exists() }?.readText()?.trim() } catch (_: Exception) { null }
         val ips = ZeroTierNet.myIps(this)
-        if (ips.isEmpty()) { Toast.makeText(this, "ZeroTier не подключён: включите сеть в ZeroTier One", Toast.LENGTH_LONG).show(); return }
-        val text = ZeroTierNet.shareText(ips[0].second, ZeroTierNet.lanPort(gameLog))
+        if (shared.isNullOrEmpty() && ips.isEmpty()) { Toast.makeText(this, "ZeroTier не подключён: включите сеть во вкладке «Сеть» лаунчера", Toast.LENGTH_LONG).show(); return }
+        val text = if (!shared.isNullOrEmpty()) "[ZeroTier] IP: $shared" else ZeroTierNet.shareText(ips[0].second, ZeroTierNet.lanPort(gameLog))
         (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", text))
         Toast.makeText(this, "$text (скопировано)", Toast.LENGTH_LONG).show()
         try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Поделиться IP").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
