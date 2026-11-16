@@ -387,6 +387,8 @@ internal fun MainActivity.ensureAngle() {
             if (!f.exists() || f.length() < 100_000) { log("  скачивание ANGLE: $n"); downloadBig(MIRROR + "angle/arm64-v8a/" + n, f) }
             f.setReadable(true, false)
         }
+        // копия рядом с libmobileglues.so: MobileGlues может искать ANGLE именно там
+        try { ensureMobileGlues()?.let { mg -> File(mg).parentFile?.let { d -> for (n in listOf("libEGL_angle.so", "libGLESv2_angle.so")) File(dir, n).copyTo(File(d, n), true) } } } catch (_: Exception) {}
         log("ANGLE: библиотеки готовы (${dir.path})")
     } catch (e: Exception) {
         File(dir, "libEGL_angle.so").delete(); File(dir, "libGLESv2_angle.so").delete()

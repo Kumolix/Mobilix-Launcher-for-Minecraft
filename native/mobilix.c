@@ -61,6 +61,16 @@ static jint create_jvm(JNIEnv* env, jstring javaHome, jobjectArray opts, JavaVM*
         snprintf(lp, sizeof lp, "%s/lib:%s/lib/server:%s/lib/jli", home, home, home);
         if (upd) { upd(lp); LOG("android_update_LD_LIBRARY_PATH: %s", lp); }
         else LOG("android_update_LD_LIBRARY_PATH недоступна");
+        // ANGLE для MobileGlues: загружаем заранее по полному пути (потом поиск по имени находит уже загруженную библиотеку) и пишем результат в лог
+        const char* ad = getenv("MG_ANGLE_DIR");
+        if (ad && *ad) {
+            const char* an[] = { "libGLESv2_angle.so", "libEGL_angle.so", NULL };
+            for (int i = 0; an[i]; i++) {
+                char ap[1100]; snprintf(ap, sizeof ap, "%s/%s", ad, an[i]);
+                void* ah = dlopen(ap, RTLD_NOW | RTLD_GLOBAL);
+                fprintf(stderr, "[Mobilix] ANGLE: %s -> %s\n", ap, ah ? "загружена" : dlerror()); fflush(stderr);
+            }
+        }
         const char* pre[] = { "libjava.so", "libverify.so", "libzip.so", "libjimage.so",
                               "libnet.so", "libnio.so", "libextnet.so", NULL };
         for (int i = 0; pre[i]; i++) {
