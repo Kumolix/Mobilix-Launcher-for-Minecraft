@@ -113,7 +113,7 @@ internal fun MainActivity.netPage(): View {
         st.addView(TextView(this).apply { text = ips[0].second; textSize = 30f; setTextColor(Th.text); typeface = Typeface.create("monospace", Typeface.BOLD); setPadding(0, dp(6), 0, 0) })
         body(st, tr("Ваш адрес в виртуальной сети (интерфейс ${ips[0].first}). Друзья вводят его в «Сетевая игра» вместе с портом из чата игры.", "Your address in the virtual network (interface ${ips[0].first}). Friends enter it in Multiplayer with the port from the in-game chat."))
         btn(st, tr("Копировать адрес", "Copy address")) {
-            (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", ZeroTierNet.shareText(ips[0].second, null)))
+            (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", ZeroTierNet.shareText(ips[0].second, null)))
             Toast.makeText(this, tr("Скопировано", "Copied"), Toast.LENGTH_SHORT).show()
         }
     } else {
@@ -136,7 +136,7 @@ internal fun MainActivity.netPage(): View {
         r2.addView(TextView(this).apply {
             text = tr("Копировать ID", "Copy ID"); setTextColor(Th.accent); textSize = 13f; setPadding(0, dp(4), dp(18), dp(4))
             setOnClickListener {
-                (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier network", o.optString("id")))
+                (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier network", o.optString("id")))
                 Toast.makeText(this@netPage, tr("ID скопирован", "ID copied"), Toast.LENGTH_SHORT).show()
             }
         })
