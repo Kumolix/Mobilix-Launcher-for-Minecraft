@@ -470,17 +470,19 @@ class MainActivity : Activity() {
         drawerW = resources.displayMetrics.widthPixels - dp(64)
 
         rootFrame = FrameLayout(this).apply { setBackgroundColor(Th.bg); fitsSystemWindows = true }
+        if (newUi()) rootFrame.addView(AuroraView(this), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         rootFrame.addView(root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         // верхняя полоса: название по центру, лог справа (кнопка-меню рисуется поверх всего)
-        val top = FxFrame(this).apply { setBackgroundColor(if (newUi()) Th.bg else Th.bar) }
+        val top = FxFrame(this).apply { setBackgroundColor(if (newUi()) Color.TRANSPARENT else Th.bar) }
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         val titleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         titleRow.addView(TextView(this).apply { text = "Mobilix"; textSize = 22f; setTextColor(Th.accent); gravity = Gravity.CENTER; typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.12f })
         season()?.let { sn ->
             titleRow.addView(seasonIcon(sn), LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginStart = dp(6) })
         }
+        if (newUi()) (titleRow.getChildAt(0) as TextView).apply { post { paint.shader = android.graphics.LinearGradient(0f, 0f, width.toFloat(), 0f, intArrayOf(Th.accent, ThemeMath.mix(Th.accent, Th.text, 0.7f), Th.accent), null, android.graphics.Shader.TileMode.CLAMP); invalidate() } }
         titleBox.addView(titleRow)
         verLabel = TextView(this).apply {
             text = versionLabel(); textSize = 11f; setTextColor(Th.dim); gravity = Gravity.CENTER
@@ -492,7 +494,7 @@ class MainActivity : Activity() {
 
         // область 3D-скина
         val skinBox = FxFrame(this).apply {
-            if (newUi()) { background = rr(Th.skinBg, 22); clipToOutline = true; outlineProvider = android.view.ViewOutlineProvider.BACKGROUND } else setBackgroundColor(Th.skinBg)
+            if (newUi()) { background = GradientDrawable().apply { setColor((Th.skinBg and 0xFFFFFF) or 0xB0000000.toInt()); setStroke(dp(1), (Th.accent and 0xFFFFFF) or 0x66000000); cornerRadius = dp(26).toFloat() }; clipToOutline = true; outlineProvider = android.view.ViewOutlineProvider.BACKGROUND } else setBackgroundColor(Th.skinBg)
         }
         skinView = SkinView(this)
         skinBox.addView(skinView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -583,6 +585,8 @@ class MainActivity : Activity() {
                 }
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); letterSpacing = 0.08f; stateListAnimator = null; elevation = 0f
             }
+            if (newUi()) post { animate().scaleX(1.025f).scaleY(1.025f).setDuration(1400).withEndAction(object : Runnable { var up = false
+                override fun run() { up = !up; val v = if (up) 1f else 1.025f; animate().scaleX(v).scaleY(v).setDuration(1400).withEndAction(this).start() } }).start() }
             setOnClickListener { start() }
         }
         root.addView(playBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (newUi()) 64 else 76)).apply { if (newUi()) { marginStart = dp(12); marginEnd = dp(12); topMargin = dp(10); if (!navBottom()) bottomMargin = dp(12) } })
