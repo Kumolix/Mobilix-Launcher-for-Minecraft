@@ -80,7 +80,7 @@ class MainActivity : Activity() {
     internal val apkAbiDir: String get() = when (abiId) { "arm64" -> "arm64-v8a"; "arm" -> "armeabi-v7a"; else -> abiId }
     /** Zink (Mesa OSMesa → Vulkan) есть только в arm64-сборке с libOSMesa.so. */
     /** Turnip (открытый Vulkan-драйвер Adreno через libadrenotools) — только в MobiLabs и только если хуки есть в сборке. */
-    internal val turnipOk: Boolean by lazy { BuildConfig.LABS && isArm64 && File(applicationInfo.nativeLibraryDir, "libmain_hook.so").exists() }
+    internal val turnipOk: Boolean by lazy { isArm64 && File(applicationInfo.nativeLibraryDir, "libmain_hook.so").exists() }
     internal val zinkOk: Boolean by lazy { isArm64 && File(applicationInfo.nativeLibraryDir, "libOSMesa.so").exists() }
     internal val is32bit: Boolean get() = abiId == "arm" || abiId == "x86"
     /** Копии Android-сборок Java и нативов LWJGL (из релизного APK PojavLauncher) для arm, x86 и x86_64. */
