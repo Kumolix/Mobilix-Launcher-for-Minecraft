@@ -1179,13 +1179,17 @@ class MainActivity : Activity() {
     private fun settingsPage(): View {
         val sv = ScrollView(this)
         val cmp = compact()
+        val modern = newUi()                 // в новом интерфейсе настройки собраны в сворачиваемые группы
+        val tabbed = cmp && !modern
         // в компактном режиме страница делится на вкладки: Оформление, Лаунчер, Игра, Специальное; иначе всё в одной колонке
         fun newCol() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), 0, dp(20), dp(24)) }
         val one = newCol()
-        val colA = if (cmp) newCol() else one; val colL = if (cmp) newCol() else one
-        val colG = if (cmp) newCol() else one; val colS = if (cmp) newCol() else one
+        fun body() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), 0, dp(4), dp(12)) }
+        val colA = if (modern) body() else if (tabbed) newCol() else one; val colL = if (modern) body() else if (tabbed) newCol() else one
+        val colG = if (modern) body() else if (tabbed) newCol() else one; val colS = if (modern) body() else if (tabbed) newCol() else one
+        val colC = if (modern) body() else colG; val colM = if (modern) body() else colG
         var col = colA
-        if (!cmp) col.addView(header(tr("Лаунчер", "Launcher")))
+        if (!cmp && !modern) col.addView(header(tr("Лаунчер", "Launcher")))
         col.addView(TextView(this).apply { text = tr("Оформление", "Appearance"); setTextColor(Th.text); setPadding(0, 0, 0, dp(8)) })
         val cards = listOf(
             Triple(tr("Графит · тёмная", "Graphite · dark"), false, false), Triple(tr("Графит · светлая", "Graphite · light"), true, false),
@@ -1275,7 +1279,7 @@ class MainActivity : Activity() {
             text = tr("Восстановить мир из копии", "Restore a world from backup"); isAllCaps = false; setTextColor(Th.chipText); background = sel(Th.chip)
             setOnClickListener { restoreWorldsDialog() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(10) })
-        col = colG
+        col = colC
         col.addView(TextView(this).apply { text = tr("Управление движением", "Movement control"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Крестовина (WASD)", "D-pad (WASD)"), tr("Джойстик", "Joystick")), if (prefs.getBoolean("joystick", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("joystick", i == 1).apply(); writeGameSettings()
@@ -1301,7 +1305,7 @@ class MainActivity : Activity() {
             btn(tr("Удалить скачанное", "Delete downloads"), red = true) { confirmWipe() }
         }
         col = colG
-        if (!cmp) col.addView(header(tr("Игра", "Game")))
+        if (!cmp && !modern) col.addView(header(tr("Игра", "Game")))
         // быстрые настройки графики: между двумя линиями
         col.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(6); bottomMargin = dp(10) })
         col.addView(TextView(this).apply { text = tr("Быстрые настройки графики", "Quick graphics settings"); setTextColor(Th.text); textSize = 16f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(6)) })
@@ -1358,6 +1362,7 @@ class MainActivity : Activity() {
             prefs.edit().putBoolean("fullscreen", i == 1).apply(); writeGameSettings()
         })
         col.addView(note(tr("Игра рисуется и под вырезом фронтальной камеры. Если появится серая полоса — выключите.", "The game draws under the front camera cutout. If a grey bar appears, turn it off.")))
+        col = colM
         val mi = android.app.ActivityManager.MemoryInfo()
         (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
         val totalMb = (mi.totalMem / 1024 / 1024).toInt()
@@ -1396,12 +1401,13 @@ class MainActivity : Activity() {
             })
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
+        col = colG
         col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (zinkOk) listOf("Zink") else emptyList()) + (if (turnipOk) listOf("Zink + Turnip (Adreno)") else emptyList())
         col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
         col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — скачивается при первом запуске (если не получилось, выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is downloaded on first launch (turns off by itself if that fails). Applies on next launch.")))
         col = colS
-        if (!cmp) col.addView(header(tr("Специальное", "Special")))
+        if (!cmp && !modern) col.addView(header(tr("Специальное", "Special")))
         col.addView(TextView(this).apply { text = tr("Скачивание модов", "Mod downloads"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Вручную", "Manual")), if (prefs.getBoolean("modDlManual", false)) 1 else 0) { i -> prefs.edit().putBoolean("modDlManual", i == 1).apply() })
         col.addView(note(tr("Авто: лаунчер сам берёт свежую версию под вашу игру и загрузчик. Вручную: при скачивании открывается список версий мода (совместимые отмечены ✓), вы выбираете нужную.",
@@ -1435,7 +1441,32 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(180), dp(40)).apply { topMargin = dp(6) })
         col.addView(note(tr("Зеркало Modrinth используется первым, официальный API — запасным. Если зеркало не отвечает, поправьте адрес API здесь. Источник каталога (Modrinth / CurseForge) выбирается в самом каталоге.",
             "The Modrinth mirror is tried first, the official API is the fallback. If the mirror does not respond, fix the API address here. The catalog source (Modrinth / CurseForge) is chosen in the catalog itself.")))
-        if (!cmp) { sv.addView(one); return sv }
+        if (modern) {
+            one.setPadding(dp(14), dp(4), dp(14), dp(24))
+            val openSet = (prefs.getString("setOpen", "0") ?: "0").split(",").toMutableSet()
+            val groups = listOf(
+                Triple("0", tr("Оформление", "Appearance"), colA), Triple("1", tr("Графика", "Graphics"), colG),
+                Triple("2", tr("Управление", "Controls"), colC), Triple("3", tr("Память и Java", "Memory & Java"), colM),
+                Triple("4", tr("Лаунчер", "Launcher"), colL), Triple("5", tr("Данные и файлы", "Data & files"), colS))
+            for ((id, title, bodyV) in groups) {
+                val card = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = rr(Th.chip2, 20); setPadding(dp(14), 0, dp(14), 0) }
+                val arrow = TextView(this).apply { textSize = 18f; setTextColor(Th.accent) }
+                val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; isClickable = true }
+                head.addView(TextView(this).apply { text = title; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                head.addView(arrow)
+                fun apply() { val o = id in openSet; bodyV.visibility = if (o) View.VISIBLE else View.GONE; arrow.text = if (o) "▾" else "▸" }
+                head.setOnClickListener {
+                    if (id in openSet) openSet.remove(id) else openSet.add(id)
+                    prefs.edit().putString("setOpen", openSet.joinToString(",")).apply(); apply()
+                }
+                apply()
+                card.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)))
+                card.addView(bodyV)
+                one.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+            }
+            sv.addView(one); return sv
+        }
+        if (!tabbed) { sv.addView(one); return sv }
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val holder = FrameLayout(this)
         val cols = listOf(colA, colL, colG, colS)
