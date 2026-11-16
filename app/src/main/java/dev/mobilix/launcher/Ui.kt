@@ -58,6 +58,8 @@ object Th {
     var custom: Map<String, Int>? = null
     /** true = старое зелёное оформление; false = новое графитовое. */
     var classic = false
+    /** «Новый интерфейс»: скруглённые окна и карточки. */
+    var modern = false
     private fun c(d: Long, l: Long) = (if (light) l else d).toInt()
     private fun n(cd: Long, cl: Long, nd: Long, nl: Long) = c(if (classic) cd else nd, if (classic) cl else nl)
     val bg get() = custom?.get("bg") ?: n(0xFF0B0F0C, 0xFFF1F6F2, 0xFF0C0D0F, 0xFFF4F5F7)
@@ -170,7 +172,8 @@ class MobDialog(private val ctx: Context) {
         val card = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(14))
-            background = GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.act); cornerRadius = dp(6).toFloat() }
+            background = if (Th.modern) GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(1), (Th.accent and 0xFFFFFF) or 0x80000000.toInt()); cornerRadius = dp(26).toFloat() } else GradientDrawable().apply { setColor(Th.drawer); setStroke(dp(2), Th.act); cornerRadius = dp(6).toFloat() }
+            if (Th.modern) setPadding(dp(24), dp(22), dp(24), dp(18))
         }
         title?.let { t ->
             card.addView(TextView(ctx).apply { text = t; textSize = 19f; setTextColor(Th.accent); typeface = Typeface.DEFAULT_BOLD; setPadding(0, 0, 0, dp(10)) })
@@ -187,14 +190,14 @@ class MobDialog(private val ctx: Context) {
                 // строка, начинающаяся с \u0001, — заголовок раздела: зелёный отчерк и подпись, не нажимается
                 if (label.startsWith("\u0001")) {
                     col.addView(View(ctx).apply { setBackgroundColor(Th.act) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)).apply { topMargin = dp(8) })
-                    col.addView(TextView(ctx).apply { text = label.substring(1); textSize = 13f; setTextColor(0xFF8FD6A3.toInt()); setPadding(dp(10), dp(8), dp(10), dp(2)) })
+                    col.addView(TextView(ctx).apply { text = label.substring(1); textSize = 13f; setTextColor(Th.accent); setPadding(dp(10), dp(8), dp(10), dp(2)) })
                     return@forEachIndexed
                 }
                 if (i > 0 && !arr[i - 1].startsWith("\u0001")) col.addView(View(ctx).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
                 col.addView(TextView(ctx).apply {
                     text = label; textSize = 15f; setTextColor(Th.text); setPadding(dp(10), dp(12), dp(10), dp(12))
                     background = StateListDrawable().apply {
-                        addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(Th.chip))
+                        addState(intArrayOf(android.R.attr.state_pressed), if (Th.modern) GradientDrawable().apply { setColor(Th.chip); cornerRadius = dp(12).toFloat() } else ColorDrawable(Th.chip))
                         addState(intArrayOf(), ColorDrawable(0))
                     }
                     isClickable = true
@@ -209,7 +212,7 @@ class MobDialog(private val ctx: Context) {
                 text = b.text; textSize = 14f; gravity = Gravity.CENTER; isClickable = true
                 setTextColor(if (primary) Color.WHITE else Th.text2)
                 setPadding(dp(16), dp(10), dp(16), dp(10))
-                setBackgroundColor(if (primary) Th.act else Th.chip)
+                if (Th.modern) background = GradientDrawable().apply { setColor(if (primary) Th.act else Th.chip); cornerRadius = dp(14).toFloat() } else setBackgroundColor(if (primary) Th.act else Th.chip)
                 setOnClickListener { d.dismiss(); b.l?.onClick(d, which) }
             }
             neu?.let { row.addView(button(it, DialogInterface.BUTTON_NEUTRAL, false)) }

@@ -465,6 +465,7 @@ class MainActivity : Activity() {
         }
         Th.light = prefs.getString("theme", "dark") == "light"
         Th.classic = prefs.getString("style", "new") == "old"
+        Th.modern = newUi()
         applySavedCustom()
         Fx.kind = season(); Fx.on = prefs.getBoolean("fxOn", true)
         drawerW = resources.displayMetrics.widthPixels - dp(64)
@@ -617,7 +618,8 @@ class MainActivity : Activity() {
         }
         rootFrame.addView(scrim, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         drawer = FxLinear(this).apply {
-            orientation = LinearLayout.VERTICAL; setBackgroundColor(Th.drawer)
+            orientation = LinearLayout.VERTICAL
+            if (newUi()) background = GradientDrawable().apply { setColor(Th.drawer); cornerRadii = floatArrayOf(0f, 0f, dp(28).toFloat(), dp(28).toFloat(), dp(28).toFloat(), dp(28).toFloat(), 0f, 0f) } else setBackgroundColor(Th.drawer)
             translationX = -drawerW.toFloat(); isClickable = true
         }
         drawer.addView(TextView(this).apply {
@@ -631,12 +633,12 @@ class MainActivity : Activity() {
                 setPadding(dp(72), 0, dp(16), 0); isClickable = true; background = selT(Th.drawer)
                 setOnClickListener { onClick() }
             }
-            drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
+            if (!newUi()) drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
             val icon = menuIcon(ico, t)
             val fl = FrameLayout(this)
             fl.addView(t, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             fl.addView(icon, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = dp(28) })
-            if (badge == null) drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+            if (badge == null) drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)).apply { if (newUi()) { marginStart = dp(10); marginEnd = dp(10); topMargin = dp(3); bottomMargin = dp(3) } })
             else {
                 fl.addView(TextView(this).apply {
                     text = badge; textSize = 13f; setTextColor(Th.accent); typeface = Typeface.DEFAULT_BOLD
@@ -644,7 +646,7 @@ class MainActivity : Activity() {
                     background = GradientDrawable().apply { setColor((Th.act and 0xFFFFFF) or 0x33000000); setStroke(dp(1), (Th.act and 0xFFFFFF) or 0x66000000); cornerRadius = dp(6).toFloat() }
                     isClickable = false
                 }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL).apply { marginEnd = dp(20) })
-                drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)))
+                drawer.addView(fl, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)).apply { if (newUi()) { marginStart = dp(10); marginEnd = dp(10); topMargin = dp(3); bottomMargin = dp(3) } })
             }
             return t
         }
@@ -797,15 +799,27 @@ class MainActivity : Activity() {
     internal fun openPage(title: String, content: View, animate: Boolean = true) {
         pageLayer.removeAllViews()
         val pageWrap = FxFrame(this).apply { setBackgroundColor(Th.bg); isClickable = true }
+        if (newUi()) pageWrap.addView(AuroraView(this), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val head = FrameLayout(this).apply { setBackgroundColor(Th.bar) }
-        head.addView(TextView(this).apply {
-            text = "‹"; textSize = 34f; setTextColor(Th.accent); gravity = Gravity.CENTER
-            setOnClickListener { closePage() }
-        }, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.START))
-        head.addView(TextView(this).apply {
-            text = title; textSize = 19f; setTextColor(Th.accent); gravity = Gravity.CENTER
-        }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(56), Gravity.CENTER))
+        val head = FrameLayout(this).apply { setBackgroundColor(if (newUi()) Color.TRANSPARENT else Th.bar) }
+        if (newUi()) {
+            head.addView(TextView(this).apply {
+                text = "‹"; textSize = 26f; setTextColor(Th.accent); gravity = Gravity.CENTER; includeFontPadding = false
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Th.chip); setStroke(dp(1), (Th.accent and 0xFFFFFF) or 0x55000000) }
+                setOnClickListener { closePage() }
+            }, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = dp(14) })
+            head.addView(TextView(this).apply {
+                text = title; textSize = 24f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); gravity = Gravity.CENTER_VERTICAL
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(56), Gravity.START).apply { marginStart = dp(68) })
+        } else {
+            head.addView(TextView(this).apply {
+                text = "‹"; textSize = 34f; setTextColor(Th.accent); gravity = Gravity.CENTER
+                setOnClickListener { closePage() }
+            }, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.START))
+            head.addView(TextView(this).apply {
+                text = title; textSize = 19f; setTextColor(Th.accent); gravity = Gravity.CENTER
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(56), Gravity.CENTER))
+        }
         page.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
         page.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         pageWrap.addView(page, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
