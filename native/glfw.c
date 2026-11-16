@@ -21,6 +21,50 @@
 // диагностика прямо в game.log (LOG пишет только в logcat)
 #define ELOG(...) do { fprintf(stderr, "[Mobilix] " __VA_ARGS__); fputc('\n', stderr); fflush(stderr); } while (0)
 #define EXPORT __attribute__((visibility("default")))
+// EGL через указатели: с ANGLE MobileGlues сам экспортирует eglXxx и пересылает их в ANGLE, окно и контекст надо делать через них
+static __typeof__(&eglGetDisplay) pf_eglGetDisplay = &eglGetDisplay;
+static __typeof__(&eglInitialize) pf_eglInitialize = &eglInitialize;
+static __typeof__(&eglChooseConfig) pf_eglChooseConfig = &eglChooseConfig;
+static __typeof__(&eglCreateWindowSurface) pf_eglCreateWindowSurface = &eglCreateWindowSurface;
+static __typeof__(&eglCreateContext) pf_eglCreateContext = &eglCreateContext;
+static __typeof__(&eglGetError) pf_eglGetError = &eglGetError;
+static __typeof__(&eglMakeCurrent) pf_eglMakeCurrent = &eglMakeCurrent;
+static __typeof__(&eglDestroySurface) pf_eglDestroySurface = &eglDestroySurface;
+static __typeof__(&eglDestroyContext) pf_eglDestroyContext = &eglDestroyContext;
+static __typeof__(&eglGetProcAddress) pf_eglGetProcAddress = &eglGetProcAddress;
+static __typeof__(&eglGetCurrentContext) pf_eglGetCurrentContext = &eglGetCurrentContext;
+static __typeof__(&eglSwapInterval) pf_eglSwapInterval = &eglSwapInterval;
+static __typeof__(&eglSwapBuffers) pf_eglSwapBuffers = &eglSwapBuffers;
+#define eglGetDisplay pf_eglGetDisplay
+#define eglInitialize pf_eglInitialize
+#define eglChooseConfig pf_eglChooseConfig
+#define eglCreateWindowSurface pf_eglCreateWindowSurface
+#define eglCreateContext pf_eglCreateContext
+#define eglGetError pf_eglGetError
+#define eglMakeCurrent pf_eglMakeCurrent
+#define eglDestroySurface pf_eglDestroySurface
+#define eglDestroyContext pf_eglDestroyContext
+#define eglGetProcAddress pf_eglGetProcAddress
+#define eglGetCurrentContext pf_eglGetCurrentContext
+#define eglSwapInterval pf_eglSwapInterval
+#define eglSwapBuffers pf_eglSwapBuffers
+static void egl_use_mg(void* lib) {
+    int n = 0;
+    { void* q = dlsym(lib, "eglGetDisplay"); if (q) { pf_eglGetDisplay = q; n++; } }
+    { void* q = dlsym(lib, "eglInitialize"); if (q) { pf_eglInitialize = q; n++; } }
+    { void* q = dlsym(lib, "eglChooseConfig"); if (q) { pf_eglChooseConfig = q; n++; } }
+    { void* q = dlsym(lib, "eglCreateWindowSurface"); if (q) { pf_eglCreateWindowSurface = q; n++; } }
+    { void* q = dlsym(lib, "eglCreateContext"); if (q) { pf_eglCreateContext = q; n++; } }
+    { void* q = dlsym(lib, "eglGetError"); if (q) { pf_eglGetError = q; n++; } }
+    { void* q = dlsym(lib, "eglMakeCurrent"); if (q) { pf_eglMakeCurrent = q; n++; } }
+    { void* q = dlsym(lib, "eglDestroySurface"); if (q) { pf_eglDestroySurface = q; n++; } }
+    { void* q = dlsym(lib, "eglDestroyContext"); if (q) { pf_eglDestroyContext = q; n++; } }
+    { void* q = dlsym(lib, "eglGetProcAddress"); if (q) { pf_eglGetProcAddress = q; n++; } }
+    { void* q = dlsym(lib, "eglGetCurrentContext"); if (q) { pf_eglGetCurrentContext = q; n++; } }
+    { void* q = dlsym(lib, "eglSwapInterval"); if (q) { pf_eglSwapInterval = q; n++; } }
+    { void* q = dlsym(lib, "eglSwapBuffers"); if (q) { pf_eglSwapBuffers = q; n++; } }
+    fprintf(stderr, "[Mobilix] ANGLE: EGL через MobileGlues, функций %d из 13\n", n); fflush(stderr);
+}
 
 typedef struct { int width, height, redBits, greenBits, blueBits, refreshRate; } VidMode;
 typedef void (*errfun)(int, const char*);
@@ -165,6 +209,7 @@ EXPORT void smc_set_gl_lib(const char* path) {
     G.gl_lib = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
     LOG("gl lib %s -> %p", path, G.gl_lib);
     if (!G.gl_lib) ELOG("не удалось загрузить GL-библиотеку %s: %s", path, dlerror());
+    { const char* ad = getenv("MG_ANGLE_DIR"); if (G.gl_lib && ad && *ad && !strstr(path, "OSMesa")) egl_use_mg(G.gl_lib); }
 #ifdef MOBILIX_OSMESA
     if (G.gl_lib && strstr(path, "OSMesa")) {
         OS.create_attribs = (OSMesaContext (*)(const int*, OSMesaContext)) dlsym(G.gl_lib, "OSMesaCreateContextAttribs");
