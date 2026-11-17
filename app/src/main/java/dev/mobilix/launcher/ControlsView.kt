@@ -366,7 +366,9 @@ class ControlsView(ctx: Context) : View(ctx) {
 
     private fun toggleKeyboard() {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        kbd = !kbd
+        // реальное состояние клавиатуры: после Enter система сама её прячет, и «переключатель» рассинхронизировался (нужно было нажимать дважды)
+        val shown = if (android.os.Build.VERSION.SDK_INT >= 30) rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true else kbd
+        kbd = !shown
         if (kbd) {
             isFocusableInTouchMode = true
             requestFocus()
@@ -402,7 +404,7 @@ class ControlsView(ctx: Context) : View(ctx) {
                     when (e.keyCode) {
                         android.view.KeyEvent.KEYCODE_DEL -> { key(259); if (comp.isNotEmpty()) comp = comp.dropLast(1) }
                         android.view.KeyEvent.KEYCODE_FORWARD_DEL -> key(261)
-                        android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> key(257)
+                        android.view.KeyEvent.KEYCODE_ENTER, android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> { comp = ""; key(257) }
                         android.view.KeyEvent.KEYCODE_TAB -> key(258)
                         android.view.KeyEvent.KEYCODE_DPAD_LEFT -> key(263)
                         android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> key(262)
@@ -411,7 +413,7 @@ class ControlsView(ctx: Context) : View(ctx) {
                 }
                 return true
             }
-            override fun performEditorAction(a: Int): Boolean { key(257); return true }
+            override fun performEditorAction(a: Int): Boolean { comp = ""; key(257); return true }
         }
     }
 
