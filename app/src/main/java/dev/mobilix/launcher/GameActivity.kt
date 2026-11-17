@@ -213,12 +213,12 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         if (probe) { holder.setFixedSize(854, 480); return }
-        // Размер буфера всегда фиксирован: когда открывается клавиатура, меняются системные панели и размер окна на пару пикселей,
-        // игра получала событие «окно изменило размер» и перестраивала экран (например, в поле порта «Открыть для сети» всё сбрасывалось).
         val sc = renderScale()
-        val dm = android.util.DisplayMetrics()
-        if (fullscreen()) windowManager.defaultDisplay.getRealMetrics(dm) else dm.setTo(resources.displayMetrics)
-        holder.setFixedSize(maxOf(dm.widthPixels, dm.heightPixels) * sc / 100, minOf(dm.widthPixels, dm.heightPixels) * sc / 100)
+        if (sc < 100) {
+            val dm = android.util.DisplayMetrics()
+            if (fullscreen()) windowManager.defaultDisplay.getRealMetrics(dm) else dm.setTo(resources.displayMetrics)
+            holder.setFixedSize(maxOf(dm.widthPixels, dm.heightPixels) * sc / 100, minOf(dm.widthPixels, dm.heightPixels) * sc / 100)
+        }
     }
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         if (mode == "game" && started) {

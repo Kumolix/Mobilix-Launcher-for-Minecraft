@@ -437,8 +437,14 @@ EXPORT void glfwPollEvents(void) {
     if (G.size_dirty) {
         G.size_dirty = 0;
         G.vm.width = G.w; G.vm.height = G.h;
-        if (G.fbsize) G.fbsize(&G, G.w, G.h);
-        if (G.size) G.size(&G, G.w, G.h);
+        // Minecraft на каждое такое событие перестраивает открытый экран (поля ввода сбрасываются). Поверхность пересоздаётся и при открытии
+        // клавиатуры, хотя размер тот же, поэтому событие отправляем, только если размер действительно изменился.
+        static int last_w = -1, last_h = -1;
+        if (G.w != last_w || G.h != last_h) {
+            last_w = G.w; last_h = G.h;
+            if (G.fbsize) G.fbsize(&G, G.w, G.h);
+            if (G.size) G.size(&G, G.w, G.h);
+        }
     }
     for (;;) {
         Ev e;
