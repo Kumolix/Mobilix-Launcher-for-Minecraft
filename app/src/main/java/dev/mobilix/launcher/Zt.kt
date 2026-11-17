@@ -23,7 +23,6 @@ import java.net.Socket
  * Мир хозяина пробрасывается на адрес в сети ZeroTier (порт ZT_PORT), а друг подключается к нему через локальный порт 127.0.0.1.
  */
 object ZtManager {
-    const val ZT_PORT = 25565
     @Volatile private var node: ZeroTierNode? = null
     @Volatile var starting = false
     /** «Включён» пользователем. Сам узел после выключения не останавливаем (остановка libzt роняла приложение), он просто простаивает. */
@@ -80,8 +79,6 @@ object ZtManager {
     fun stop(ctx: Context) {
         stopHost(ctx); stopClient()
         enabled = false
-        val saved = ctx.getSharedPreferences("mobilix", Context.MODE_PRIVATE).getString("ztJoined", "").orEmpty()
-        for (id in saved.split(',').filter { it.length == 16 }) try { node?.leave(java.lang.Long.parseUnsignedLong(id, 16)) } catch (_: Throwable) {}
         ZtService.stop(ctx)
     }
 
@@ -114,48 +111,78 @@ object ZtManager {
         close()
     }.also { it.isDaemon = true; it.start() }
 
-    /** Хозяин: всё, что приходит на ZT_PORT из сети ZeroTier, пересылается в открытый для сети мир (порт читается из game.log). */
-    fun startHost(ctx: Context, shareIp: String, localPort: () -> Int?) {
-        if (host != null) return
-        val srv = try { ZeroTierServerSocket(ZT_PORT) } catch (e: Throwable) { error = "хост: $e"; return }
-        host = srv; hostActive = true
-        try { File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "zt-share.txt").writeText("$shareIp:$ZT_PORT") } catch (_: Throwable) {}
+    // ZT-слушатели по портам никогда не закрываем: закрытие сокета libzt, на котором другой поток ждёт accept(), роняло приложение
+    private val hostSockets = java.util.concurrent.ConcurrentHashMap<Int, ZeroTierServerSocket>()
+    @Volatile var hostPort = 0            // порт, который раздаётся сейчас (порт открытого для сети мира)
+    @Volatile var hostWanted = false      // пользователь включил раздачу
+    @Volatile private var hostIp = ""
+    @Volatile private var watcher: Thread? = null
+
+    private fun shareFile(ctx: Context) = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "zt-share.txt")
+
+    private fun listen(ctx: Context, port: Int) {
+        if (hostSockets.containsKey(port)) return
+        val srv = try { ZeroTierServerSocket(port) } catch (e: Throwable) { error = "хост: $e"; return }
+        hostSockets[port] = srv
         Thread {
-            while (host === srv) {
+            while (true) {
                 try {
                     val zs = srv.accept()
+                    if (!hostActive || hostPort != port) { try { zs.close() } catch (_: Throwable) {}; continue }
                     Thread {
                         try {
-                            val p = localPort() ?: throw java.io.IOException("мир не открыт для сети")
-                            val ls = Socket(InetAddress.getByName("127.0.0.1"), p)
-                            val zi = zs.inputStream; val zo = zs.outputStream
+                            val ls = Socket(InetAddress.getByName("127.0.0.1"), port)
                             val done = { try { zs.close() } catch (_: Throwable) {}; try { ls.close() } catch (_: Throwable) {} }
-                            pipe(zi, ls.getOutputStream(), done); pipe(ls.getInputStream(), zo, done)
+                            pipe(zs.inputStream, ls.getOutputStream(), done); pipe(ls.getInputStream(), zs.outputStream, done)
                         } catch (_: Throwable) { try { zs.close() } catch (_: Throwable) {} }
                     }.start()
-                } catch (_: Throwable) { if (host !== srv) break }
+                } catch (_: Throwable) { try { Thread.sleep(500) } catch (_: Throwable) {} }
             }
         }.also { it.isDaemon = true }.start()
     }
 
+    /** Хозяин: следит за game.log; когда мир открыт для сети (порт назначает игра), раздаёт именно этот порт на адрес в ZeroTier. */
+    fun startHost(ctx: Context, shareIp: String, portOf: () -> Int?) {
+        hostIp = shareIp; hostWanted = true; hostActive = true
+        if (watcher != null) return
+        val t = Thread {
+            while (hostWanted) {
+                val p = portOf()
+                if (p != null && p != hostPort) {
+                    listen(ctx, p); hostPort = p
+                    try { shareFile(ctx).writeText("$hostIp:$p") } catch (_: Throwable) {}
+                }
+                try { Thread.sleep(2000) } catch (_: Throwable) {}
+            }
+            watcher = null
+        }
+        t.isDaemon = true; watcher = t; t.start()
+    }
+
     fun stopHost(ctx: Context) {
-        val s = host; host = null; hostActive = false
-        try { s?.close() } catch (_: Throwable) {}
-        try { File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "zt-share.txt").delete() } catch (_: Throwable) {}
+        hostWanted = false; hostActive = false; hostPort = 0
+        try { shareFile(ctx).delete() } catch (_: Throwable) {}
+    }
+
+    /** Свой узел можно авторизовать в сети через Central (работает для своих сетей). */
+    fun authorizeSelf(token: String, nid: String) {
+        val me = nodeId() ?: return
+        try { ZtCentral.call(token, "POST", "/network/$nid/member/$me", """{"config":{"authorized":true},"name":"Mobilix"}""") } catch (_: Throwable) {}
     }
 
     /** Гость: 127.0.0.1:localPort → адрес хозяина в сети ZeroTier. В игре добавьте сервер localhost:localPort. */
-    fun startClient(hostIp: String, localPort: Int = ZT_PORT) {
+    fun startClient(hostIp: String, hostPort: Int) {
+        val localPort = hostPort
         stopClient()
         val srv = try { ServerSocket(localPort, 8, InetAddress.getByName("127.0.0.1")) } catch (e: Throwable) { error = "гость: $e"; return }
-        client = srv; clientTarget = hostIp
+        client = srv; clientTarget = "$hostIp:$hostPort"
         Thread {
             while (client === srv) {
                 try {
                     val ls = srv.accept()
                     Thread {
                         try {
-                            val zs = ZeroTierSocket(hostIp, ZT_PORT)
+                            val zs = ZeroTierSocket(hostIp, hostPort)
                             val done = { try { zs.close() } catch (_: Throwable) {}; try { ls.close() } catch (_: Throwable) {} }
                             pipe(ls.getInputStream(), zs.outputStream, done); pipe(zs.inputStream, ls.getOutputStream(), done)
                         } catch (_: Throwable) { try { ls.close() } catch (_: Throwable) {} }

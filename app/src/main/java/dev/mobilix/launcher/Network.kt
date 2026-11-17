@@ -93,6 +93,13 @@ private fun MainActivity.ztBg(work: () -> Unit, done: () -> Unit) = Thread {
     try { work(); runOnUiThread { done() } } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "ZeroTier: ${e.message}", Toast.LENGTH_LONG).show() } }
 }.start()
 
+/** Участник в сети: Central то отдаёт флаг online, то только время последнего появления. */
+private fun ztOnline(m: JSONObject): Boolean {
+    if (m.optBoolean("online")) return true
+    val last = maxOf(m.optLong("lastSeen"), m.optLong("lastOnline"))
+    return last > 0 && System.currentTimeMillis() - last < 150_000
+}
+
 /** Участники сети: имя, адрес, онлайн, авторизация; можно разрешить или запретить вход. */
 private fun MainActivity.ztMembers(token: String, nid: String, netName: String) {
     val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(4)) }
@@ -105,11 +112,18 @@ private fun MainActivity.ztMembers(token: String, nid: String, netName: String) 
             if (arr.length() == 0) box.addView(TextView(this).apply { text = tr("Пока никого. Пусть друзья добавят сеть по ID в ZeroTier One и включат её: они появятся здесь.", "Nobody yet. Ask friends to add the network ID in ZeroTier One and switch it on: they will show up here."); setTextColor(Th.dim); textSize = 13f; setPadding(0, dp(8), 0, dp(8)) })
             for (i in 0 until arr.length()) {
                 val m = arr.getJSONObject(i); val cfg = m.optJSONObject("config") ?: JSONObject()
-                val node = m.optString("nodeId"); val ok = cfg.optBoolean("authorized"); val online = m.optBoolean("online")
+                val node = m.optString("nodeId"); val ok = cfg.optBoolean("authorized"); val online = ztOnline(m)
                 val ip = cfg.optJSONArray("ipAssignments")?.optString(0).orEmpty()
                 val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); background = rr(Th.chip, 12) }
                 row.addView(TextView(this).apply { text = (if (online) "● " else "○ ") + m.optString("name").ifEmpty { node }; setTextColor(if (online) Th.accent else Th.text); textSize = 14f })
                 row.addView(TextView(this).apply { text = node + (if (ip.isNotEmpty()) "  ·  $ip" else ""); setTextColor(Th.dim); textSize = 12f; typeface = Typeface.MONOSPACE })
+                if (ip.isNotEmpty()) row.addView(TextView(this).apply {
+                    text = tr("Копировать IP", "Copy IP"); setTextColor(Th.accent); textSize = 13f; setPadding(0, dp(6), 0, dp(2))
+                    setOnClickListener {
+                        (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier IP", ip))
+                        Toast.makeText(this@ztMembers, tr("IP скопирован", "IP copied"), Toast.LENGTH_SHORT).show()
+                    }
+                })
                 row.addView(TextView(this).apply {
                     text = if (ok) tr("Запретить вход", "Deauthorize") else tr("Разрешить вход", "Authorize")
                     setTextColor(if (ok) 0xFFE05555.toInt() else Th.accent); textSize = 13f; setPadding(0, dp(6), 0, dp(2))
@@ -123,6 +137,19 @@ private fun MainActivity.ztMembers(token: String, nid: String, netName: String) 
 }
 
 /** Карточка ZeroTier Central: токен, создание сетей, список и участники. */
+/** Сохраняет сеть в список, включает узел, входит в сеть и сам авторизуется (для своих сетей). */
+private fun MainActivity.ztAdopt(token: String, id: String, name: String) {
+    val nets = ztNets()
+    var have = false; for (i in 0 until nets.length()) if (nets.getJSONObject(i).optString("id") == id) have = true
+    if (!have) { nets.put(JSONObject().put("id", id).put("name", name)); prefs.edit().putString("ztNets", nets.toString()).apply() }
+    ZtManager.start(this); ZtManager.join(this, id)
+    Thread {
+        val t0 = System.currentTimeMillis()
+        while (ZtManager.nodeId() == null && System.currentTimeMillis() - t0 < 30000) Thread.sleep(500)
+        ZtManager.authorizeSelf(token, id)
+    }.start()
+}
+
 private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
     fun cbtn(label: String, primary: Boolean = true, f: () -> Unit) = c.addView(Button(this).apply {
         text = label; isAllCaps = false; setTextColor(if (primary) android.graphics.Color.WHITE else Th.chipText); background = sel(if (primary) Th.act else Th.chip); setOnClickListener { f() }
@@ -135,7 +162,7 @@ private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
             .setPositiveButton(tr("Сохранить", "Save")) { _, _ -> prefs.edit().putString("ztToken", e.text.toString().trim()).apply(); refresh() }.show()
     }
     if (token.isEmpty()) {
-        c.addView(TextView(this).apply { text = tr("Войдите по API-токену, чтобы создавать сети, видеть, кто подключился, и разрешать вход друзьям, не выходя из лаунчера. Токен: my.zerotier.com → Account → API Access Tokens → New Token (бесплатно).", "Sign in with an API token to create networks, see who joined and let friends in without leaving the launcher. Token: my.zerotier.com → Account → API Access Tokens → New Token (free)."); textSize = 13f; setTextColor(Th.dim); setLineSpacing(0f, 1.15f); setPadding(0, dp(6), 0, 0) })
+        c.addView(TextView(this).apply { text = tr("Войдите по API-токену, чтобы создавать сети, видеть, кто подключился, и разрешать вход друзьям, не выходя из лаунчера. Токен: my.zerotier.com → Account → API Access Tokens → New Token (бесплатно). Для токена нужен Legacy-аккаунт ZeroTier (создаётся на my.zerotier.com).", "Sign in with an API token to create networks, see who joined and let friends in without leaving the launcher. Token: my.zerotier.com → Account → API Access Tokens → New Token (free). A Legacy ZeroTier account is required for tokens."); textSize = 13f; setTextColor(Th.dim); setLineSpacing(0f, 1.15f); setPadding(0, dp(6), 0, 0) })
         cbtn(tr("Вставить токен", "Enter token")) { askToken() }
         cbtn(tr("Открыть страницу токенов", "Open token page"), false) { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://my.zerotier.com/account"))) } catch (_: Exception) {} }
         return
@@ -151,10 +178,19 @@ private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
             val n = nets.getJSONObject(i); val id = n.optString("id"); val name = n.optJSONObject("config")?.optString("name").orEmpty()
             val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); background = rr(Th.chip, 14) }
             row.addView(TextView(this).apply { text = name.ifEmpty { tr("Сеть", "Network") }; textSize = 15f; setTextColor(Th.text) })
-            row.addView(TextView(this).apply { text = id + "  ·  " + tr("в сети: ", "online: ") + n.optInt("onlineMemberCount") + " / " + n.optInt("totalMemberCount"); textSize = 12f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE })
+            val cnt = TextView(this).apply { text = id; textSize = 12f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE }
+            row.addView(cnt)
+            Thread {   // счётчик считаем по списку участников: поле сети отстаёт
+                try {
+                    val ms = JSONArray(ZtCentral.call(token, "GET", "/network/$id/member"))
+                    var on = 0; for (q in 0 until ms.length()) if (ztOnline(ms.getJSONObject(q))) on++
+                    runOnUiThread { cnt.text = id + "  ·  " + tr("онлайн ", "online ") + on + tr(" из ", " of ") + ms.length() }
+                } catch (_: Exception) {}
+            }.start()
             val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, 0) }
             fun act(t: String, col: Int, f: () -> Unit) = r2.addView(TextView(this).apply { text = t; setTextColor(col); textSize = 13f; setPadding(0, dp(4), dp(18), dp(4)); setOnClickListener { f() } })
             act(tr("Участники", "Members"), Th.accent) { ztMembers(token, id, name) }
+            act(tr("Подключить меня", "Join me"), Th.accent) { ztAdopt(token, id, name); refresh() }
             act(tr("Копировать ID", "Copy ID"), Th.accent) {
                 (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier network", id))
                 Toast.makeText(this, tr("ID скопирован", "ID copied"), Toast.LENGTH_SHORT).show()
@@ -172,7 +208,11 @@ private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
         MobDialog(this).setTitle(tr("Новая сеть", "New network")).setView(e).setNegativeButton(tr("Отмена", "Cancel"), null)
             .setPositiveButton(tr("Создать", "Create")) { _, _ ->
                 val nm = e.text.toString().trim().ifEmpty { "Mobilix" }
-                ztBg({ ZtCentral.call(token, "POST", "/network", JSONObject().put("config", JSONObject().put("name", nm).put("private", true)).toString()) }) { refresh() }
+                var newId = ""
+                ztBg({ newId = JSONObject(ZtCentral.call(token, "POST", "/network", JSONObject().put("config", JSONObject().put("name", nm).put("private", true)).toString())).optString("id") }) {
+                    if (newId.length == 16) ztAdopt(token, newId, nm)
+                    refresh()
+                }
             }.show()
     }
     cbtn(tr("Сменить токен", "Change token"), false) { askToken() }
@@ -269,18 +309,32 @@ internal fun MainActivity.netPage(): View {
         val ip0 = myIp
         if (ip0 == null) body(gc, tr("Подключитесь к сети и дождитесь адреса, тогда здесь появятся кнопки.", "Join a network and wait for your address, then the buttons appear here."))
         else {
-            body(gc, tr("Хозяин: откройте мир для сети в игре (Esc → Открыть для сети) и нажмите кнопку ниже. Друзья подключаются к вашему адресу $ip0.", "Host: open your world to LAN in game (Esc → Open to LAN) and tap the button below. Friends connect to your address $ip0."))
-            if (!ZtManager.hostActive) btn(gc, tr("Раздавать мой мир друзьям", "Share my world")) { ZtManager.startHost(this, ip0) { ZeroTierNet.lanPort(java.io.File(dataRoot(), "game.log")) }; refresh() }
-            else btn(gc, "● " + tr("Раздаём: $ip0:${ZtManager.ZT_PORT} (остановить)", "Sharing: $ip0:${ZtManager.ZT_PORT} (stop)"), false) { ZtManager.stopHost(this); refresh() }
-            body(gc, tr("Гость: введите адрес хозяина и подключитесь, затем в игре «Сетевая игра» → добавьте сервер localhost:${ZtManager.ZT_PORT}.", "Guest: enter the host address and connect, then in Multiplayer add the server localhost:${ZtManager.ZT_PORT}."))
-            val hostE = EditText(this).apply { hint = tr("Адрес хозяина, например 10.147.17.5", "Host address, e.g. 10.147.17.5"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true); setText(ZtManager.clientTarget.orEmpty()) }
+            body(gc, tr("Хозяин: включите раздачу и откройте мир для сети в игре (Esc → Открыть для сети). Порт назначает игра, лаунчер подхватит его сам. Друзьям уйдёт адрес вида $ip0:порт (кнопка ↘ в игре).", "Host: turn sharing on and open the world to LAN in game (Esc → Open to LAN). The game picks the port, the launcher detects it. Friends get an address like $ip0:port (↘ button in game)."))
+            if (!ZtManager.hostWanted) btn(gc, tr("Раздавать мой мир друзьям", "Share my world")) { ZtManager.startHost(this, ip0) { ZeroTierNet.lanPort(java.io.File(dataRoot(), "game.log")) }; later() }
+            else btn(gc, "● " + (if (ZtManager.hostPort > 0) tr("Раздаём: $ip0:${ZtManager.hostPort}", "Sharing: $ip0:${ZtManager.hostPort}") else tr("Ждём открытия мира для сети…", "Waiting for the world to open to LAN…")) + "  (" + tr("остановить", "stop") + ")", false) { ZtManager.stopHost(this); refresh() }
+            if (ZtManager.hostPort > 0) btn(gc, tr("Копировать мой адрес", "Copy my address"), false) {
+                (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", "$ip0:${ZtManager.hostPort}"))
+                Toast.makeText(this, tr("Скопировано", "Copied"), Toast.LENGTH_SHORT).show()
+            }
+            body(gc, tr("Гость: вставьте адрес хозяина вместе с портом (ip:порт) и подключитесь, затем в игре «Сетевая игра» добавьте сервер localhost:порт.", "Guest: paste the host address with port (ip:port) and connect, then in Multiplayer add the server localhost:port."))
+            val hostE = EditText(this).apply { hint = tr("Адрес друга, например 10.147.17.5:43521", "Friend address, e.g. 10.147.17.5:43521"); setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true); setText(ZtManager.clientTarget.orEmpty()) }
             gc.addView(hostE)
             if (ZtManager.clientTarget == null) btn(gc, tr("Подключиться к другу", "Connect to friend")) {
-                val h = hostE.text.toString().trim()
-                if (h.isEmpty()) Toast.makeText(this, tr("Введите адрес", "Enter the address"), Toast.LENGTH_SHORT).show() else { ZtManager.startClient(h); refresh() }
-            } else btn(gc, "● " + tr("В игре: localhost:${ZtManager.ZT_PORT} (отключить)", "In game: localhost:${ZtManager.ZT_PORT} (disconnect)"), false) { ZtManager.stopClient(); refresh() }
+                val raw = hostE.text.toString().trim().removePrefix("[ZeroTier] IP:").trim()
+                val ip = raw.substringBefore(':'); val port = raw.substringAfter(':', "").toIntOrNull()
+                if (ip.isEmpty() || port == null) Toast.makeText(this, tr("Нужен адрес вместе с портом: ip:порт", "Address with port needed: ip:port"), Toast.LENGTH_LONG).show() else { ZtManager.startClient(ip, port); refresh() }
+            } else btn(gc, "● " + tr("В игре: localhost:${ZtManager.clientTarget!!.substringAfter(':')} (отключить)", "In game: localhost:${ZtManager.clientTarget!!.substringAfter(':')} (disconnect)"), false) { ZtManager.stopClient(); refresh() }
         }
         ztCentralCard(card(), ::refresh)
+        // автоматика: раз в 10 секунд обновляем статус; свой узел сам авторизуем в своих сетях (если задан токен)
+        val tok = prefs.getString("ztToken", "").orEmpty()
+        sv.postDelayed(object : Runnable {
+            override fun run() {
+                if (!sv.isAttachedToWindow) return
+                if (ZtManager.enabled && tok.isNotEmpty()) Thread { for (k in 0 until nets.length()) { val id = nets.getJSONObject(k).optString("id"); if (ZtManager.joined(this@netPage, id) && ZtManager.ip(id) == null) ZtManager.authorizeSelf(tok, id) } }.start()
+                if (sv.findFocus() is EditText) sv.postDelayed(this, 10000) else refresh()
+            }
+        }, 10000)
         return sv
     }
 

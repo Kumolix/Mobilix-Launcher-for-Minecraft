@@ -335,9 +335,10 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
                             val p = Regex("Started serving on (\\d+)").findAll(String(buf)).lastOrNull()?.groupValues?.get(1)?.toInt()
                             if (p != null && p != lastLanPort) {
                                 lastLanPort = p
-                                val ips = ZeroTierNet.myIps(this@GameActivity)
-                                if (ips.isNotEmpty()) {
-                                    val t = ZeroTierNet.shareText(ips[0].second, p)
+                                val shared = try { File(getExternalFilesDir(null) ?: filesDir, "zt-share.txt").takeIf { it.exists() }?.readText()?.trim() } catch (_: Exception) { null }
+                                val ip = shared?.substringBefore(':')
+                                if (!ip.isNullOrEmpty()) {
+                                    val t = "[ZeroTier] IP: $ip:$p"
                                     (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", t))
                                     Toast.makeText(this@GameActivity, "$t (скопировано)", Toast.LENGTH_LONG).show()
                                 }
