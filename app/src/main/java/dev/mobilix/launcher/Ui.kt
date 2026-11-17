@@ -283,6 +283,8 @@ class PixelIcon(ctx: Context, private val rows: List<String>, var pal: Map<Char,
         val PUMPKIN_PAL = mapOf('o' to 0xFFF28A1E.toInt(), 'O' to 0xFFC25A0A.toInt(), 'u' to 0xFF4C9A2A.toInt(), 'k' to 0xFF2A1608.toInt())
         val SNOW_PAL = mapOf('w' to 0xFFDCEBFF.toInt())
         val BAT_PAL = mapOf('k' to 0xFF8A6BD6.toInt())
+        /** Сервер-стойка (иконка «Онлайн по LAN»). */
+        val I_LAN = listOf("gggggggggggg", "gGggggGGWGGg", "gGGGGGGGGGGg", "gGggggGGGGGg", "gGGGGGGGGGGg", "gggggggggggg", "gGggggGGWGGg", "gGGGGGGGGGGg", "gGggggGGGGGg", "gGGGGGGGGGGg", "gggggggggggg")
         /** Два изометрических сервера (иконка «Сеть»). */
         val I_NET = listOf(
             "......ggg......", "...ggGGGGGgg...", "ggGGGGGGGGGGGgg", "..ggGGGGGGGgg..", "gGGGGGGgggggggg", "gGWGGGGgggggggg", "..ggggggggggg..",
@@ -537,5 +539,19 @@ class AuroraView(ctx: Context) : View(ctx) {
         blob((w * (0.8 + 0.15 * Math.cos(a * 1.0 + 1))).toFloat(), (h * (0.55 + 0.15 * Math.sin(a + 2))).toFloat(), big * 0.6f, Th.act, 85)
         blob((w * (0.4 + 0.2 * Math.sin(a + 4))).toFloat(), (h * (0.95 + 0.05 * Math.cos(a))).toFloat(), big * 0.5f, Th.accent, 45)
         p.shader = null
+    }
+}
+
+/** Шеврон «назад», нарисованный по центру круга (текстовый символ «‹» сидит не по центру). */
+class ChevronView(ctx: Context, private val col: Int) : View(ctx) {
+    private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+    override fun onDraw(c: android.graphics.Canvas) {
+        val s = minOf(width, height).toFloat(); val cx = width / 2f; val cy = height / 2f
+        p.color = col; p.strokeWidth = s * 0.09f
+        val h = s * 0.2f; val w = s * 0.11f
+        val path = android.graphics.Path().apply { moveTo(cx + w, cy - h); lineTo(cx - w, cy); lineTo(cx + w, cy + h) }
+        c.drawPath(path, p)
     }
 }

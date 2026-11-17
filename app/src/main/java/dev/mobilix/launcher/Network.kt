@@ -228,6 +228,12 @@ internal fun MainActivity.netPage(): View {
     fun card(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(16)); background = rr(Th.chip2, 20)
     }.also { col.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }) }
+    fun titleIcon(c: LinearLayout, t: String, ico: List<String>) {
+        val r = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        r.addView(PixelIcon(this, ico, PixelIcon.MENU_PAL), LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(10) })
+        r.addView(TextView(this).apply { text = t; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
+        c.addView(r)
+    }
     fun title(c: LinearLayout, t: String) = c.addView(TextView(this).apply { text = t; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
     fun body(c: LinearLayout, t: String) = c.addView(TextView(this).apply { text = t; textSize = 13f; setTextColor(Th.dim); setLineSpacing(0f, 1.15f); setPadding(0, dp(6), 0, 0) })
     fun btn(c: LinearLayout, label: String, primary: Boolean = true, onClick: () -> Unit) = c.addView(Button(this).apply {
@@ -305,7 +311,7 @@ internal fun MainActivity.netPage(): View {
         }
 
         val gc = card()
-        title(gc, tr("Игра по сети", "Play over the network"))
+        titleIcon(gc, tr("Онлайн по LAN", "Online over LAN"), PixelIcon.I_LAN)
         val ip0 = myIp
         if (ip0 == null) body(gc, tr("Подключитесь к сети и дождитесь адреса, тогда здесь появятся кнопки.", "Join a network and wait for your address, then the buttons appear here."))
         else {

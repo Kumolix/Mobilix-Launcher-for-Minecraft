@@ -732,17 +732,19 @@ class MainActivity : Activity() {
         // горизонтальный вид: слева скин, справа меню (нижнее) и кнопки; при боковом меню оно стоит слева, а скин и кнопки справа
         if (land) {
             fun lp(w: Int, h: Int, wt: Float = 0f) = LinearLayout.LayoutParams(w, h, wt)
+            val nu = newUi()
+            fun LinearLayout.LayoutParams.mg(s: Int, t: Int, e: Int, b: Int): LinearLayout.LayoutParams { if (nu) { marginStart = dp(s); topMargin = dp(t); marginEnd = dp(e); bottomMargin = dp(b) }; return this }
             val MP = ViewGroup.LayoutParams.MATCH_PARENT; val WC = ViewGroup.LayoutParams.WRAP_CONTENT
             root.removeView(skinBox); root.removeView(logPanel); root.removeView(progress); root.removeView(vrow); root.removeView(playBtn)
             navBoxRef?.let { root.removeView(it) }
             val main = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             if (navBoxRef != null) {
-                main.addView(skinBox, lp(0, MP, 1f))
-                right.addView(navBoxRef, lp(MP, dp(57)))
+                main.addView(skinBox, lp(0, MP, 1f).mg(12, 8, 6, 8))
+                right.addView(navBoxRef, if (nu) lp(MP, dp(56)).mg(6, 8, 12, 4) else lp(MP, dp(57)))
                 val mid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), 0, dp(14), 0) }
                 mid.addView(vrow, lp(MP, dp(52)))
-                mid.addView(playBtn, lp(MP, dp(68)).apply { topMargin = dp(10) })
+                mid.addView(playBtn, lp(MP, dp(if (nu) 64 else 68)).apply { topMargin = dp(10) })
                 right.addView(mid, lp(MP, 0, 1f))
                 right.addView(progress, lp(MP, dp(6)))
                 right.addView(logPanel, lp(MP, WC))
@@ -752,11 +754,11 @@ class MainActivity : Activity() {
                 hamb.visibility = View.GONE
                 drawer.translationX = 0f
                 main.addView(ScrollView(this).apply { addView(drawer, ViewGroup.LayoutParams(MP, WC)) }, lp(dp(250), MP))
-                right.addView(skinBox, lp(MP, 0, 1f))
+                right.addView(skinBox, lp(MP, 0, 1f).mg(8, 8, 12, 6))
                 right.addView(logPanel, lp(MP, WC))
                 right.addView(progress, lp(MP, dp(6)))
                 right.addView(vrow, lp(MP, dp(52)))
-                right.addView(playBtn, lp(MP, dp(64)))
+                right.addView(playBtn, lp(MP, dp(64)).mg(12, 6, 12, 10))
                 main.addView(right, lp(0, MP, 1f))
             }
             root.addView(main, lp(MP, 0, 1f))
@@ -804,8 +806,7 @@ class MainActivity : Activity() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val head = FrameLayout(this).apply { setBackgroundColor(if (newUi()) Color.TRANSPARENT else Th.bar) }
         if (newUi()) {
-            head.addView(TextView(this).apply {
-                text = "‹"; textSize = 26f; setTextColor(Th.accent); gravity = Gravity.CENTER; includeFontPadding = false
+            head.addView(ChevronView(this, Th.accent).apply {
                 background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Th.chip); setStroke(dp(1), (Th.accent and 0xFFFFFF) or 0x55000000) }
                 setOnClickListener { closePage() }
             }, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.START or Gravity.CENTER_VERTICAL).apply { marginStart = dp(14) })
@@ -814,7 +815,7 @@ class MainActivity : Activity() {
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(56), Gravity.START).apply { marginStart = dp(68) })
         } else {
             head.addView(TextView(this).apply {
-                text = "‹"; textSize = 34f; setTextColor(Th.accent); gravity = Gravity.CENTER
+                text = "‹"; textSize = 34f; setTextColor(Th.accent); gravity = Gravity.CENTER; includeFontPadding = false
                 setOnClickListener { closePage() }
             }, FrameLayout.LayoutParams(dp(56), dp(56), Gravity.START))
             head.addView(TextView(this).apply {
