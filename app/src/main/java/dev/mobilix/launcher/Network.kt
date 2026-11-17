@@ -159,7 +159,6 @@ private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
     fun cbtn(label: String, primary: Boolean = true, f: () -> Unit) = c.addView(Button(this).apply {
         text = label; isAllCaps = false; setTextColor(if (primary) android.graphics.Color.WHITE else Th.chipText); background = sel(if (primary) Th.act else Th.chip); setOnClickListener { f() }
     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(12) })
-    c.addView(TextView(this).apply { text = "ZeroTier Central"; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
     val token = prefs.getString("ztToken", "").orEmpty()
     fun askToken() {
         val e = EditText(this).apply { hint = "API token"; setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true); typeface = Typeface.MONOSPACE }
@@ -233,11 +232,22 @@ internal fun MainActivity.netPage(): View {
     fun card(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(16)); background = rr(Th.chip2, 20)
     }.also { col.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) }) }
-    fun titleIcon(c: LinearLayout, t: String, ico: List<String>) {
-        val r = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        r.addView(PixelIcon(this, ico, PixelIcon.MENU_PAL), LinearLayout.LayoutParams(dp(26), dp(26)).apply { marginEnd = dp(10) })
-        r.addView(TextView(this).apply { text = t; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
-        c.addView(r)
+    /** Сворачиваемая карточка как в настройках: состояние запоминается. Возвращает тело карточки. */
+    fun fold(id: String, name: String): LinearLayout {
+        val open = (prefs.getString("netOpen", "0") ?: "0").split(",").toMutableSet()
+        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), 0, dp(18), 0); background = rr(Th.chip2, 20) }
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dp(16)) }
+        val arrow = TextView(this).apply { textSize = 18f; setTextColor(Th.accent) }
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; isClickable = true }
+        head.addView(TextView(this).apply { text = name; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        head.addView(arrow)
+        fun apply() { val o = id in open; body.visibility = if (o) View.VISIBLE else View.GONE; arrow.text = if (o) "▾" else "▸" }
+        head.setOnClickListener { if (id in open) open.remove(id) else open.add(id); prefs.edit().putString("netOpen", open.joinToString(",")).apply(); apply() }
+        apply()
+        outer.addView(head, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54)))
+        outer.addView(body)
+        col.addView(outer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
+        return body
     }
     fun title(c: LinearLayout, t: String) = c.addView(TextView(this).apply { text = t; textSize = 17f; setTextColor(Th.text); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) })
     fun body(c: LinearLayout, t: String) = c.addView(TextView(this).apply { text = t; textSize = 13f; setTextColor(Th.dim); setLineSpacing(0f, 1.15f); setPadding(0, dp(6), 0, 0) })
@@ -245,12 +255,12 @@ internal fun MainActivity.netPage(): View {
         text = label; isAllCaps = false; setTextColor(if (primary) android.graphics.Color.WHITE else Th.chipText); background = sel(if (primary) Th.act else Th.chip)
         setOnClickListener { onClick() }
     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(12) })
-    fun refresh() = openPage(tr("Сеть", "Network"), netPage(), animate = false)
+    fun refresh() = openPage(tr("Онлайн по LAN", "Online over LAN"), netPage(), animate = false)
 
     if (ZtManager.libOk(this)) {
         fun later() { sv.postDelayed({ refresh() }, 1500) }
         val running = ZtManager.enabled
-        val st = card()
+        val st = fold("0", if (running) "ZeroTier" else tr("Включить ZeroTier", "Turn ZeroTier on"))
         val err = ZtManager.error
         st.addView(TextView(this).apply {
             text = when { err != null -> "✕ " + err; ZtManager.online() -> "● " + tr("Узел ZeroTier в сети", "ZeroTier node online"); running -> "… " + tr("Запуск узла", "Starting node"); else -> "○ " + tr("Узел выключен", "Node is off") }
@@ -269,8 +279,7 @@ internal fun MainActivity.netPage(): View {
         btn(st, tr("Обновить", "Refresh"), false) { refresh() }
 
         val nets = ztNets()
-        val nc = card()
-        title(nc, tr("Сети", "Networks"))
+        val nc = fold("1", tr("Подключенные сети", "Connected networks"))
         body(nc, tr("Добавьте сеть по ID (его даёт хозяин сети) и подключитесь. Хозяин должен разрешить вам вход (Authorize) во вкладке участников.", "Add a network by its ID (given by the network owner) and join it. The owner has to authorize you in the members list."))
         var myIp: String? = null
         for (i in 0 until nets.length()) {
@@ -315,8 +324,8 @@ internal fun MainActivity.netPage(): View {
                 }.show()
         }
 
-        val gc = card()
-        titleIcon(gc, tr("Онлайн по LAN", "Online over LAN"), PixelIcon.I_LAN)
+        ztCentralCard(fold("2", tr("Мои сети", "My networks")), ::refresh)
+        val gc = fold("3", tr("Подключение", "Connection"))
         val ip0 = myIp
         if (ip0 == null) body(gc, tr("Подключитесь к сети и дождитесь адреса, тогда здесь появятся кнопки.", "Join a network and wait for your address, then the buttons appear here."))
         else {
@@ -336,7 +345,6 @@ internal fun MainActivity.netPage(): View {
                 if (ip.isEmpty() || port == null) Toast.makeText(this, tr("Нужен адрес вместе с портом: ip:порт", "Address with port needed: ip:port"), Toast.LENGTH_LONG).show() else { ZtManager.startClient(ip, port); refresh() }
             } else btn(gc, "● " + tr("В игре: localhost:${ZtManager.clientTarget!!.substringAfter(':')} (отключить)", "In game: localhost:${ZtManager.clientTarget!!.substringAfter(':')} (disconnect)"), false) { ZtManager.stopClient(); refresh() }
         }
-        ztCentralCard(card(), ::refresh)
         // автоматика: раз в 10 секунд обновляем статус; свой узел сам авторизуем в своих сетях (если задан токен)
         val tok = prefs.getString("ztToken", "").orEmpty()
         sv.postDelayed(object : Runnable {
@@ -379,7 +387,7 @@ internal fun MainActivity.netPage(): View {
     btn(st, tr("Открыть ZeroTier One", "Open ZeroTier One"), ips.isEmpty()) { ZeroTierNet.openApp(this) }
     btn(st, tr("Обновить", "Refresh"), false) { refresh() }
 
-    ztCentralCard(card(), ::refresh)
+    ztCentralCard(card().also { title(it, "ZeroTier Central") }, ::refresh)
 
     // сети
     val nets = ztNets()
