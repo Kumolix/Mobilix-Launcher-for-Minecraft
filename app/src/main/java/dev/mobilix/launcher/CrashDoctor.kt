@@ -25,7 +25,7 @@ object CrashDoctor {
     /** Известные моды, которые на мобильном рендере часто валят игру (и зависящие от них). */
     private val RENDER_MODS = setOf("sodium", "iris", "embeddium", "oculus", "rubidium", "distanthorizons", "nvidium", "indium", "sodium-extra", "reeses-sodium-options", "sodiumextra", "iris-flywheel-compat")
 
-    private fun gameAlive(ctx: Context): Boolean = try {
+    internal fun gameAlive(ctx: Context): Boolean = try {
         (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).runningAppProcesses?.any { it.processName.endsWith(":game") } == true
     } catch (_: Throwable) { false }
 

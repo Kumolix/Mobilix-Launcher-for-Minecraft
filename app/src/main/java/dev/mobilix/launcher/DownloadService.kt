@@ -35,6 +35,14 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
+    /** Пользователь смахнул приложение из списка задач: фоновые дела (подбор модов) прекращаются, уведомлений больше нет. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        swiped = true
+        stopForeground(true)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         try {
             wl?.release()
@@ -44,6 +52,7 @@ class DownloadService : Service() {
     }
 
     companion object {
+        @Volatile var swiped = false
         fun start(c: Context) {
             val i = Intent(c, DownloadService::class.java)
             if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i) else c.startService(i)

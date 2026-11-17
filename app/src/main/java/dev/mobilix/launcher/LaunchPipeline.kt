@@ -156,7 +156,7 @@ internal fun MainActivity.logLastNativeExit() {
     } catch (e: Throwable) { log("Причина прошлого вылета недоступна: $e") }
 }
 
-internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), play: Boolean = true) {
+internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), play: Boolean = true, probe: Boolean = false) {
     val p = LaunchPlan(profile, play)
     prepareInputs(p)        // папки, профиль, версия игры
     loadVersionInfo(p)      // json версии, режим (старая/новая), папка игры, настройки, моды
@@ -179,6 +179,7 @@ internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), pla
 
     log("Открываю окно игры...")
     runOnUiThread {
+        if (probe) { startActivity(Intent(this, ProbeActivity::class.java).putExtra("mode", "game")); return@runOnUiThread }
         if (prefs.getBoolean("worldBackup", true)) WorldBackup.begin(dataRoot(), curGameDir())
         startActivity(Intent(this, GameActivity::class.java).putExtra("mode", "game"))
     }

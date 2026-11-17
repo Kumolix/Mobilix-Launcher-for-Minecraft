@@ -845,8 +845,13 @@ class MainActivity : Activity() {
             .withEndAction { pageLayer.removeAllViews(); pageLayer.visibility = View.GONE }.start()
     }
 
+    @Volatile private var resumedNow = false
+    internal fun isResumedNow() = resumedNow
+    override fun onPause() { resumedNow = false; super.onPause() }
+
     override fun onResume() {
         super.onResume()
+        resumedNow = true
         handleAuthIntent(intent)
         checkLastCrash()
         if (prefs.getBoolean("worldBackup", true)) {
@@ -857,7 +862,7 @@ class MainActivity : Activity() {
     }
 
     /** Подбирает у мода-«требователя» (например, Sodium) более старую версию, совместимую с уже стоящим модом (Iris), и заменяет файл. Возвращает описание или null. */
-    private fun downgradeToMatch(breakerId: String, targetId: String, targetFile: File, gd: File): String? {
+    internal fun downgradeToMatch(breakerId: String, targetId: String, targetFile: File, gd: File): String? {
         val oldBreaker = CrashDoctor.enabledMods(gd).firstOrNull { it.id == breakerId } ?: return null
         val ld = loaderOfProfile(selectedProfile())
         val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") + "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(ld)).toString(), "UTF-8")
@@ -882,7 +887,7 @@ class MainActivity : Activity() {
     }
 
     /** Докачивает недостающие моды-зависимости с Modrinth под текущую версию и загрузчик. Вызывается в фоновом потоке. Возвращает (установлено, не удалось). */
-    private fun installMissingDeps(ids: List<String>, gd: File): Pair<List<String>, List<String>> {
+    internal fun installMissingDeps(ids: List<String>, gd: File): Pair<List<String>, List<String>> {
         val ok = ArrayList<String>(); val bad = ArrayList<String>()
         val ld = loaderOfProfile(selectedProfile())
         for (id in ids.distinct()) {
@@ -986,7 +991,9 @@ class MainActivity : Activity() {
                     if (badDeps.isNotEmpty()) m.append(tr("Не удалось найти под вашу версию:\n", "Not found for your version:\n")).append(badDeps.joinToString("\n") { "• $it" }).append("\n\n")
                     if (m.isEmpty()) m.append(tr("Нечего исправлять автоматически.\n\n", "Nothing to fix automatically.\n\n"))
                     m.append(tr("Отключённые файлы переименованы в .disabled, их можно вернуть в разделе «Вручную». Запустите игру снова.", "Disabled files were renamed to .disabled and can be restored via “Manually”. Launch the game again."))
-                    MobDialog(this).setTitle(tr("Готово", "Done")).setMessage(m.toString()).setPositiveButton("OK", null).show()
+                    MobDialog(this).setTitle(tr("Готово", "Done")).setMessage(m.toString())
+                        .setPositiveButton(tr("Проверить запуском", "Test launch")) { _, _ -> autoFixStart() }
+                        .setNegativeButton("OK", null).show()
                 }
             }.start()
         }
@@ -2651,7 +2658,7 @@ class MainActivity : Activity() {
         for (i in 0 until maxOf(x.size, y.size)) { r = x.getOrElse(i) { 0 }.compareTo(y.getOrElse(i) { 0 }); if (r != 0) break }
         r
     }
-    private fun loaderOfProfile(p: String) = when {
+    internal fun loaderOfProfile(p: String) = when {
         p.startsWith("neoforge-") -> "neoforge"; p.startsWith("quilt-loader-") -> "quilt"; p.contains("forge", true) -> "forge"; else -> "fabric"
     }
     /** Категории Modrinth для загрузчика: Quilt запускает и моды Fabric. */
