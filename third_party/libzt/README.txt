@@ -1,0 +1,1 @@
+libzt (ZeroTier sockets) commit a707ea6ae0910efdc1125d04758c411e2e9ea4f9, https://github.com/zerotier/libzt. Java sources in app/src/main/java/com/zerotier/sockets are unmodified copies. Business Source License 1.1; Change Date 2026-01-01, Change License Apache-2.0 (now in effect).

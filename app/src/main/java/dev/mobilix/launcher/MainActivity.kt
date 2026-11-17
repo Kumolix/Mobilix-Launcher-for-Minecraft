@@ -660,6 +660,7 @@ class MainActivity : Activity() {
             item("Раскладка управления", "Controls layout", PixelIcon.I_PAD to PixelIcon.MENU_PAL) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
             menuWipe = item("Удалить скачанное", "Delete downloads", PixelIcon.TRASH to PixelIcon.TRASH_PAL) { confirmWipe() }
         }
+        item("Онлайн по LAN", "Online over LAN", PixelIcon.I_LAN to PixelIcon.MENU_PAL) { openPage(tr("Онлайн по LAN", "Online over LAN"), netPage()) }
         ghIdx = menuEntries.size
         ghItem = item("Соцсети", "Social", PixelIcon.I_CHAT to PixelIcon.MENU_PAL) { openPage(tr("Соцсети", "Social"), socialPage()) }
         if (!compact()) item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
@@ -1401,17 +1402,19 @@ class MainActivity : Activity() {
             })
         })
         col.addView(note(tr("Сборщик мусора и дополнительные аргументы (через пробел). Неверный аргумент может сломать запуск.", "Garbage collector and extra arguments (space-separated). A wrong argument can break launch.")))
-        col = colG
+        col = if (modern) colM else colG       // новый интерфейс: рендерер лежит в группе «Память и Java»
         col.addView(TextView(this).apply { text = tr("Рендерер (графическая библиотека)", "Renderer (graphics library)"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         val rendNames = listOf(tr("Авто", "Auto"), "MobileGlues", "MG + ANGLE", "gl4es") + (if (zinkOk) listOf("Zink") else emptyList()) + (if (turnipOk) listOf("Zink + Turnip (Adreno)") else emptyList())
         col.addView(chipRow(rendNames, prefs.getInt("renderer", 0).coerceIn(0, rendNames.size - 1)) { i -> prefs.edit().putInt("renderer", i).apply() })
         col.addView(note(tr("Авто: gl4es для версий до 1.17, MobileGlues для новых. Если на Mali/слабом Adreno мало FPS — попробуйте другой. gl4es работает только до 1.16.5, ANGLE — скачивается при первом запуске (если не получилось, выключится сам). Смена действует со следующего запуска.", "Auto: gl4es below 1.17, MobileGlues for newer. If FPS is low on Mali/older Adreno, try another. gl4es only works up to 1.16.5; ANGLE is downloaded on first launch (turns off by itself if that fails). Applies on next launch.")))
         col = colS
         if (!cmp && !modern) col.addView(header(tr("Специальное", "Special")))
+        if (modern) col = colL                  // новый интерфейс: «Лаунчер»
         col.addView(TextView(this).apply { text = tr("Скачивание модов", "Mod downloads"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Вручную", "Manual")), if (prefs.getBoolean("modDlManual", false)) 1 else 0) { i -> prefs.edit().putBoolean("modDlManual", i == 1).apply() })
         col.addView(note(tr("Авто: лаунчер сам берёт свежую версию под вашу игру и загрузчик. Вручную: при скачивании открывается список версий мода (совместимые отмечены ✓), вы выбираете нужную.",
             "Auto: the launcher picks the latest version for your game and loader. Manual: a list of the mod's versions opens when you download (compatible ones marked ✓) and you pick the one you need.")))
+        if (modern) col = colC                  // новый интерфейс: «Управление»
         col.addView(TextView(this).apply { text = tr("Скрыть системные кнопки в игре", "Hide system buttons in game"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("hideSys", false)) 1 else 0) { i ->
             prefs.edit().putBoolean("hideSys", i == 1).apply(); writeGameSettings()
@@ -1425,6 +1428,7 @@ class MainActivity : Activity() {
         col.addView(note(tr("Как в Pocket Edition: касание экрана — удар, удержание — добыча (камера двигается пальцем), крестовина с бегом в центре, хотбар по центру. У режима своя раскладка кнопок, её можно менять отдельно. «Ставить» — отдельная кнопка справа.",
             "Like Pocket Edition: tap the screen to attack, hold to mine (drag to look), a D-pad with sprint in the center, a centered hotbar. This mode has its own button layout that you can edit separately. “Place” is a separate button on the right.")))
 
+        col = colS
         col.addView(TextView(this).apply { text = tr("Адрес API зеркала", "Mirror API address"); setTextColor(Th.text); setPadding(0, dp(14), 0, 0) })
         val mirror = android.widget.EditText(this).apply {
             setText(prefs.getString("mirrorApi", DEFAULT_MIRROR)); setTextColor(Th.text); setSingleLine(true)
