@@ -1,0 +1,40 @@
+Mobilix Attribution License (MAL) 1.0
+
+Copyright (c) 2026 Kumolix
+
+Project: Mobilix Launcher for Minecraft
+Original repository: https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft
+
+Permission is granted, free of charge, to anyone to use, copy, modify, merge,
+publish, distribute and fork this software and its source code, including for
+commercial purposes, under the following conditions.
+
+1. ATTRIBUTION. Every fork, modified version or redistribution (source or binary,
+   including APK builds) must state, in a clearly visible place, that it is based
+   on "Mobilix Launcher for Minecraft by Kumolix" and link to the original
+   repository above. "Clearly visible" means at least BOTH of:
+     a) the top of the project's README (or equivalent landing page / store page), and
+     b) inside the application itself on a screen users normally see (for example
+        the main screen, the About screen or the menu), not hidden in a license
+        file or in small print.
+   A fork may not remove or hide existing attribution.
+
+2. LICENSE NOTICE. This license text must be kept with every copy of the source
+   code and every distribution of it.
+
+3. NO MISLEADING. Forks must not present themselves as the original Mobilix, must
+   not use the Mobilix name or logo as their own product name in a way that could
+   confuse users about who makes the app, and must not imply that Kumolix endorses
+   them. Saying "fork of Mobilix" or "based on Mobilix" is fine and expected.
+
+4. THIRD-PARTY COMPONENTS. The project bundles or downloads other software
+   (for example Minecraft assets, OpenJDK, LWJGL, MobileGlues, ANGLE, Mesa,
+   libadrenotools, libzt and others). They keep their own licenses and are not
+   covered by this license. Minecraft is a trademark of Mojang AB / Microsoft;
+   this project is not affiliated with or endorsed by them.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE
+SOFTWARE.
