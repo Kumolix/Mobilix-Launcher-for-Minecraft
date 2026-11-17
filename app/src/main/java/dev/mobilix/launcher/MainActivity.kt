@@ -333,10 +333,10 @@ class MainActivity : Activity() {
     }
     internal fun navBottom() = prefs.getString("nav", "side") == "bottom"
     /** Тестовый «новый интерфейс»: скруглённые карточки, плавающая панель, градиентная «Играть». Цвета берутся из текущей (в т.ч. своей) темы. */
-    internal fun newUi() = prefs.getBoolean("newUi", false)
+    internal fun newUi() = prefs.getBoolean("newUi", true)
     internal fun rr(color: Int, r: Int = 14) = GradientDrawable().apply { setColor(color); cornerRadius = dp(r).toFloat() }
     /** Компактный интерфейс: Версии, Каталог и Сборки объединены в «Загрузки»; раскладка, язык и удаление скачанного ушли в настройки. */
-    internal fun compact() = prefs.getBoolean("compact", false)
+    internal fun compact() = prefs.getBoolean("compact", true)
     private var ghIdx = -1
     private var settingsTab = 0
     private var updateVer: String? = null
@@ -665,7 +665,7 @@ class MainActivity : Activity() {
         if (BuildConfig.LABS) item("Онлайн по LAN", "Online over LAN", PixelIcon.I_LAN to PixelIcon.MENU_PAL) { openPage(tr("Онлайн по LAN", "Online over LAN"), netPage()) }
         ghIdx = menuEntries.size
         ghItem = item("Соцсети", "Social", PixelIcon.I_CHAT to PixelIcon.MENU_PAL) { openPage(tr("Соцсети", "Social"), socialPage()) }
-        if (!compact()) item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
+        if (!compact() || !navBottom()) item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
         drawer.addView(View(this).apply { setBackgroundColor(Th.line) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
         drawer.addView(TextView(this).apply {
             text = tr("Пользовательское соглашение", "User agreement"); textSize = 13f; setTextColor(Th.dim)
