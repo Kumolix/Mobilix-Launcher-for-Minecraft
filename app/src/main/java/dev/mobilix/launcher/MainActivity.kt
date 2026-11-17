@@ -383,6 +383,7 @@ class MainActivity : Activity() {
 
     /** Сверяет номер версии в репозитории с установленной; при новой показывает метку на главном экране и подсвечивает GitHub в меню. */
     private fun checkUpdate() {
+        if (updateMode() == 0) return
         try {
             // обновление считается только по опубликованному релизу (тег APK-<версия>): тестовые сборки из Actions не в счёт
             val rel = JSONObject(fetchText("https://api.github.com/repos/Kumolix/Mobilix-Launcher-for-Minecraft/releases/latest"))
@@ -398,6 +399,7 @@ class MainActivity : Activity() {
             }
             if (!newer) return
             updateVer = remote
+            if (updateMode() == 2) Thread { try { autoDownloadUpdate(rel, remote) } catch (_: Throwable) {} }.start()
             runOnUiThread {
                 verLabel.text = "v-$cur  ·  ⬆ " + tr("Вышло обновление $remote", "Update $remote available")
                 verLabel.setTextColor(Th.accent); verLabel.typeface = Typeface.DEFAULT_BOLD
@@ -1264,6 +1266,10 @@ class MainActivity : Activity() {
             prefs.edit().putBoolean("multiDl", i == 1).apply()
         })
         col.addView(note(tr("Скачивает файлы игры в 16 потоков вместо 3: намного быстрее. Если интернет нестабилен или появляются ошибки загрузки, выключите.", "Downloads game files in 16 threads instead of 3: much faster. Turn off if your connection is unstable or downloads fail.")))
+        col.addView(TextView(this).apply { text = tr("Обновление лаунчера", "Launcher updates"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
+        col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Сообщать", "Notify"), tr("Скачивать", "Download")), updateMode().coerceIn(0, 2), 3) { i -> prefs.edit().putInt("updMode", i).putString("updAsked", "").apply() })
+        col.addView(note(tr("Выкл: не проверять выход новой версии. Сообщать: показать «Вышло обновление» (как раньше). Скачивать: сразу скачать APK нового релиза и предложить установку; предрелизы не учитываются.",
+            "Off: do not check for new versions. Notify: show “Update available” (as before). Download: fetch the new release APK right away and offer to install it; prereleases are ignored.")))
         col.addView(TextView(this).apply { text = tr("Автообновление модов под загрузчик", "Auto-update mods for the loader"); setTextColor(Th.text); setPadding(0, dp(16), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("modAuto", true)) 1 else 0) { i ->
             prefs.edit().putBoolean("modAuto", i == 1).apply()

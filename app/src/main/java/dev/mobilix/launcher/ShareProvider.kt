@@ -25,7 +25,7 @@ class ShareProvider : ContentProvider() {
         c.addRow(arrayOf<Any>(f.name, f.length()))
         return c
     }
-    override fun getType(uri: Uri) = "application/zip"
+    override fun getType(uri: Uri) = if (uri.lastPathSegment?.endsWith(".apk") == true) "application/vnd.android.package-archive" else "application/zip"
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor = ParcelFileDescriptor.open(file(uri), ParcelFileDescriptor.MODE_READ_ONLY)
     override fun insert(uri: Uri, values: ContentValues?): Uri? = null
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?) = 0
