@@ -6,6 +6,11 @@
 
 Данные не собираются: [политика конфиденциальности](PRIVACY.md).
 
+## Лицензия
+Форки и модификации разрешены при условии заметного указания оригинала: «Основано на Mobilix Launcher for Minecraft, автор Kumolix» со ссылкой на этот репозиторий (в начале README форка и внутри самого приложения). Подробности в [LICENSE](LICENSE).
+
+Forks and modifications are welcome as long as the original is clearly credited: “Based on Mobilix Launcher for Minecraft by Kumolix” with a link to this repository (at the top of the fork's README and inside the app). See [LICENSE](LICENSE).
+
 ## Установка
 Готовые APK лежат в разделе Releases. Либо откройте вкладку Actions, выберите последнюю сборку и скачайте артефакт `Mobilix-launcher-v-<версия>`, распакуйте zip и установите APK.
 
