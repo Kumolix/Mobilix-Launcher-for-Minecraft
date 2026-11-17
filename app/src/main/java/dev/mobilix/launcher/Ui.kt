@@ -535,3 +535,17 @@ class AuroraView(ctx: Context) : View(ctx) {
         p.shader = null
     }
 }
+
+/** Шеврон «назад», нарисованный по центру круга (текстовый символ «‹» сидит не по центру). */
+class ChevronView(ctx: Context, private val col: Int) : View(ctx) {
+    private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE; strokeCap = android.graphics.Paint.Cap.ROUND; strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+    override fun onDraw(c: android.graphics.Canvas) {
+        val s = minOf(width, height).toFloat(); val cx = width / 2f; val cy = height / 2f
+        p.color = col; p.strokeWidth = s * 0.09f
+        val h = s * 0.2f; val w = s * 0.11f
+        val path = android.graphics.Path().apply { moveTo(cx + w, cy - h); lineTo(cx - w, cy); lineTo(cx + w, cy + h) }
+        c.drawPath(path, p)
+    }
+}
