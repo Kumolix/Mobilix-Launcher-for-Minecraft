@@ -2438,7 +2438,7 @@ class MainActivity : Activity() {
         // кнопка Microsoft по их правилам: белый фон, рамка, логотип слева
         val ms = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
-            background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.WHITE); setStroke(dp(1), 0xFF8C8C8C.toInt()) }
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(Color.WHITE); setStroke(dp(1), 0xFF8C8C8C.toInt()); if (newUi()) cornerRadius = dp(14).toFloat() }
             isClickable = true
             alpha = if (MS_APPROVED) 1f else 0.55f
             setOnClickListener {

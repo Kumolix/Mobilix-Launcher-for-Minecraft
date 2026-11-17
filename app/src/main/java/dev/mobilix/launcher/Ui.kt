@@ -284,7 +284,7 @@ class PixelIcon(ctx: Context, private val rows: List<String>, var pal: Map<Char,
         val SNOW_PAL = mapOf('w' to 0xFFDCEBFF.toInt())
         val BAT_PAL = mapOf('k' to 0xFF8A6BD6.toInt())
         /** Сервер-стойка (иконка «Онлайн по LAN»). */
-        val I_LAN = listOf("gggggggggggg", "gGggggGGWGGg", "gGGGGGGGGGGg", "gGggggGGGGGg", "gGGGGGGGGGGg", "gggggggggggg", "gGggggGGWGGg", "gGGGGGGGGGGg", "gGggggGGGGGg", "gGGGGGGGGGGg", "gggggggggggg")
+        val I_LAN = listOf("gggggggggggg", "gWggggGGWGgg", "gGGGGGGGGGgg", "gWggggGGGGgg", "gGGGGGGGGGgg", "gggggggggggg", "gWggggGGWGgg", "gGGGGGGGGGgg", "gWggggGGGGgg", "gGGGGGGGGGgg", "gggggggggggg")
         val I_SHARE = listOf("....G....", "...GGG...", "..G.G.G..", "....G....", "....G....", "g.......g", "g.......g", "ggggggggg")
         val CREEPER = listOf("aaaaaaaa", "aAaaaaAa", "akkaakka", "akkaakka", "aaakkaaa", "aakkkkaa", "aakkkkaa", "aakaakaa")
         val CHICKEN = listOf("...rr...", "..wkwo..", "..wwwo..", ".wwww...", "wwwww...", "wwwww...", ".wwww...", "..o.o...")
