@@ -89,8 +89,13 @@ internal object ZtCentral {
     }
 }
 
+@Volatile private var ztLastErr: String? = null
 private fun MainActivity.ztBg(work: () -> Unit, done: () -> Unit) = Thread {
-    try { work(); runOnUiThread { done() } } catch (e: Exception) { runOnUiThread { Toast.makeText(this, "ZeroTier: ${e.message}", Toast.LENGTH_LONG).show() } }
+    try { work(); ztLastErr = null; runOnUiThread { done() } } catch (e: Exception) {
+        // одну и ту же ошибку (нет интернета, неверный токен) показываем один раз, пока не будет успешного запроса: иначе автообновление спамит
+        val msg = if (e is java.net.UnknownHostException || e is java.net.ConnectException) tr("нет связи с my.zerotier.com", "cannot reach my.zerotier.com") else (e.message ?: e.toString())
+        if (msg != ztLastErr) { ztLastErr = msg; runOnUiThread { Toast.makeText(this, "ZeroTier: $msg", Toast.LENGTH_LONG).show() } }
+    }
 }.start()
 
 /** Участник в сети: Central то отдаёт флаг online, то только время последнего появления. */

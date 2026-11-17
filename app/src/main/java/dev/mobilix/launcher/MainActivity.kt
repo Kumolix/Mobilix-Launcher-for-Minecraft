@@ -744,9 +744,9 @@ class MainActivity : Activity() {
                 right.addView(navBoxRef, if (nu) lp(MP, dp(56)).mg(6, 8, 12, 4) else lp(MP, dp(57)))
                 val mid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), 0, dp(14), 0) }
                 mid.addView(vrow, lp(MP, dp(52)))
+                mid.addView(progress, lp(MP, dp(6)).apply { topMargin = dp(10) })
                 mid.addView(playBtn, lp(MP, dp(if (nu) 64 else 68)).apply { topMargin = dp(10) })
                 right.addView(mid, lp(MP, 0, 1f))
-                right.addView(progress, lp(MP, dp(6)))
                 right.addView(logPanel, lp(MP, WC))
                 main.addView(right, lp(0, MP, 1f))
             } else {
@@ -756,8 +756,8 @@ class MainActivity : Activity() {
                 main.addView(ScrollView(this).apply { addView(drawer, ViewGroup.LayoutParams(MP, WC)) }, lp(dp(250), MP))
                 right.addView(skinBox, lp(MP, 0, 1f).mg(8, 8, 12, 6))
                 right.addView(logPanel, lp(MP, WC))
-                right.addView(progress, lp(MP, dp(6)))
                 right.addView(vrow, lp(MP, dp(52)))
+                right.addView(progress, lp(MP, dp(6)).apply { topMargin = dp(6) })
                 right.addView(playBtn, lp(MP, dp(64)).mg(12, 6, 12, 10))
                 main.addView(right, lp(0, MP, 1f))
             }
