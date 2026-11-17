@@ -19,7 +19,7 @@ import java.net.ServerSocket
 import java.net.Socket
 
 /**
- * MobiLabs: встроенный узел ZeroTier (libzt, userspace-стек lwIP, без системного VPN).
+ * Встроенный узел ZeroTier (libzt, userspace-стек lwIP, без системного VPN).
  * Мир хозяина пробрасывается на адрес в сети ZeroTier (порт ZT_PORT), а друг подключается к нему через локальный порт 127.0.0.1.
  */
 object ZtManager {
