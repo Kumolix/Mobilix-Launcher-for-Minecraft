@@ -1,5 +1,12 @@
-prerelease: 1.9.5.2
+version: 1.9.6
 What's new
+- "New interface" and "Compact mode" are now on by default (switch back in Settings → Appearance); in compact mode the Language item is shown in the side menu
+- Online over LAN: ZeroTier is built into the launcher (no extra app): new menu page with collapsible cards (turn on, connected networks, my networks via ZeroTier Central with a Legacy-account token, connection); auto-join / auto-authorize, 10 s auto-refresh, friends' IPs can be copied, host port is taken from the game's LAN port; in game a ↘ "Share IP" button and the [ZeroTier] IP: line in chat
+- Crash auto-fix: after a crash the launcher tests mod versions one by one by silently launching the game in a hidden window (newest to oldest, missing dependencies are downloaded, the culprit is disabled when versions run out) until the game reaches the main menu, then says "Done"; a copy of the mods is kept and can be restored; nothing is shown if you swiped the app away
+- Settings → Launcher: "Launcher updates" Off / Notify / Download (the release APK is downloaded to the launcher's own folder, only the latest one is kept, install is offered)
+- Fixed: the on-screen keyboard button stopped working after Enter; the Open to LAN screen (port field) reset when the keyboard opened
+- New interface: round back button with a centered arrow, landscape layout margins, loading bar between the version and Play in landscape, rounded Microsoft sign-in button, smoother opening of Downloads
+- Added the Mobilix Attribution License: forks are allowed with a clearly visible credit
 - New renderer "Zink + Turnip (Adreno)": Mesa Turnip Vulkan driver for Adreno GPUs, selectable in Settings → Game → Renderer (experimental, arm64, Adreno only)
 - Fixed: Zink crash on launch (OSMesa context is now made current before its pixel store is set); MobileGlues + ANGLE now draws to the screen (EGL goes through MobileGlues into ANGLE)
 - Experimental "New interface" (Settings → Appearance): rounded cards, animated background in theme colors, floating bottom bar, redesigned pages and dialogs, collapsible settings groups; works with custom themes
@@ -19,6 +26,13 @@ What's new
 - Version list loads in parallel and is cached (shows vanilla immediately); skin preview keeps rotating; low-memory JVM profile for devices under 3.5 GB; LWJGL debug output disabled
 
 Что нового?
+- «Новый интерфейс» и «Компактный режим» теперь включены по умолчанию (вернуть можно в Настройки → Оформление); в компактном режиме пункт «Язык» виден в боковом меню
+- Онлайн по LAN: ZeroTier встроен в лаунчер (отдельное приложение не нужно): новая страница меню со сворачиваемыми карточками (включить, подключённые сети, мои сети через ZeroTier Central по токену Legacy-аккаунта, подключение); автоподключение и авторизация, автообновление раз в 10 с, IP друзей можно скопировать, порт хоста берётся из LAN-порта игры; в игре кнопка ↘ «Поделиться IP» и строка [ZeroTier] IP: в чате
+- Автоисправление вылета: после вылета лаунчер перебирает версии модов по очереди, запуская игру в скрытом окне (от новых к старым, недостающие зависимости докачиваются, виновный мод отключается, когда версии кончились), пока игра не дойдёт до главного меню, и пишет «Готово»; копия модов сохраняется и возвращается кнопкой; если приложение смахнули, уведомлений нет
+- Настройки → Лаунчер: «Обновление лаунчера» Выкл / Сообщать / Скачивать (APK релиза скачивается в папку лаунчера, хранится только последняя версия, предлагается установка)
+- Исправлено: кнопка экранной клавиатуры переставала работать после Enter; экран «Открыть для сети» (поле порта) сбрасывался при открытии клавиатуры
+- Новый интерфейс: круглая кнопка «назад» со стрелкой по центру, отступы в горизонтальном виде, полоса загрузки между версией и «Играть» в горизонтальном виде, скруглённая кнопка входа Microsoft, плавное открытие «Загрузок»
+- Добавлена лицензия Mobilix Attribution License: форки разрешены при заметном указании оригинала
 - Новый рендерер «Zink + Turnip (Adreno)»: Vulkan-драйвер Mesa Turnip для видеочипов Adreno, выбор в Настройки → Игра → Рендерер (экспериментально, arm64, только Adreno)
 - Исправлено: вылет Zink при запуске; MobileGlues + ANGLE теперь выводит картинку на экран
 - Экспериментальный «Новый интерфейс» (Настройки → Оформление): скруглённые карточки, живой фон в цветах темы, плавающая нижняя панель, новые страницы и диалоги, настройки в сворачиваемых группах; работает со своими темами
