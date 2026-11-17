@@ -46,7 +46,9 @@ object Native {
  * mode=test: проверка EGL и запуска Java.
  * mode=game: запуск Minecraft внутри процесса.
  */
-class GameActivity : Activity(), SurfaceHolder.Callback {
+open class GameActivity : Activity(), SurfaceHolder.Callback {
+    /** Тихий пробный запуск (подбор модов): окно 1×1 без управления, игра закрывается сама, когда дошла до меню. */
+    private val probe get() = this is ProbeActivity
     private lateinit var logView: TextView
     private var started = false
     private var mode = "game"
@@ -67,9 +69,13 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             }
             try { started.writeText(System.currentTimeMillis().toString()) } catch (_: Exception) {}
         }
+        if (probe) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+            window.setLayout(1, 1)
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.BLACK))
-        if (fullscreen()) {
+        if (fullscreen() && !probe) {
             // рисуем и под вырезом фронтальной камеры
             window.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
             if (android.os.Build.VERSION.SDK_INT >= 28) {
@@ -204,6 +210,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
     private fun fullscreen(): Boolean = gs().optBoolean("fullscreen", false)
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        if (probe) { holder.setFixedSize(854, 480); return }
         val sc = renderScale()
         if (sc < 100) {
             val dm = android.util.DisplayMetrics()
@@ -234,6 +241,27 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
         started = true
         say("Экран: ${width}x$height")
         Thread(null, { runGame() }, "game-main", 32L * 1024 * 1024).start()
+    }
+
+    private var probeGameDir: File? = null
+
+    /** Следит за логом пробного запуска: дошла до главного меню — пишет OK и закрывает игру; не дошла за 4 минуты — TIMEOUT. */
+    private fun probeWatch(dataDir: File, gd: File?) {
+        val result = File(dataDir, "probe.result")
+        val ok = Regex("Sound engine started|Created: \\d+x\\d+x\\d+ minecraft:textures/atlas/blocks")
+        val t0 = System.currentTimeMillis()
+        var seen = 0L
+        while (System.currentTimeMillis() - t0 < 240_000) {
+            try { Thread.sleep(700) } catch (_: InterruptedException) { return }
+            val text = listOfNotNull(File(dataDir, "game.log"), gd?.let { File(it, "logs/latest.log") }).joinToString("\n") { f ->
+                try { RandomAccessFile(f, "r").use { raf -> val n = minOf(raf.length(), 300_000L).toInt(); raf.seek(raf.length() - n); ByteArray(n).also { raf.readFully(it) }.toString(Charsets.UTF_8) } } catch (_: Exception) { "" }
+            }
+            if (ok.containsMatchIn(text)) { if (seen == 0L) seen = System.currentTimeMillis() else if (System.currentTimeMillis() - seen > 5000) break }
+        }
+        try { result.writeText(if (seen > 0L) "OK" else "TIMEOUT") } catch (_: Exception) {}
+        // JVM в этом процессе второй раз не создать: процесс игры просто завершаем
+        runOnUiThread { finish() }
+        handler.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 1200)
     }
 
     // ---------- игра ----------
@@ -271,6 +299,7 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             for (k in 0 until game.length() - 1) {
                 if (game.getString(k) == "--gameDir") {
                     val gd = File(game.getString(k + 1)).apply { mkdirs() }
+                    probeGameDir = gd
                     opts.add("-Duser.dir=" + gd.path)
                     File(gd, "logs").mkdirs()
                     Native.chdir(gd.path)
@@ -289,9 +318,17 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
             }
             val gl = j.optString("glLib", "")
             if (gl.isNotEmpty()) Native.setGlLib(gl)
+            if (probe) Thread { probeWatch(dataDir, probeGameDir) }.apply { isDaemon = true }.start()
             say("Запуск Minecraft в процессе...")
             val r = Native.runMain(j.getString("javaHome"), opts.toTypedArray(), j.getString("main"), args)
             say(r)
+            if (probe) {
+                val res = File(dataDir, "probe.result")
+                if (!res.exists()) try { res.writeText("EXIT") } catch (_: Exception) {}
+                runOnUiThread { finish() }
+                handler.postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 1200)
+                return
+            }
             if (mode == "game") { try { WorldBackup.endedMarker(getExternalFilesDir(null) ?: filesDir).writeText("1") } catch (_: Exception) {} }
             if (mode == "installer") {
                 try { File(dataDir, "installer.done").writeText(r) } catch (_: Exception) {}
@@ -363,3 +400,6 @@ class GameActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 }
+
+/** Невидимое окно для пробного запуска игры (подбор модов): тот же экран игры, но 1×1 и прозрачный. */
+class ProbeActivity : GameActivity()
