@@ -1,5 +1,8 @@
-version: 1.9.6
+version: 1.9.6.1
 What's new
+- Fixed: the "Open to LAN" screen (port field) was rebuilt and its value reset when the on-screen keyboard opened (the game now gets a resize event only when the window size really changes)
+- Fixed: LWJGL libraries (e.g. for 26.3) were downloaded again after switching versions and the download could break and let the game start half-way: libraries are now cached per version, downloads are retried and checked, the game is not started without them, and only one launch preparation runs at a time
+- The in-game "Share IP" (↘) is now an ordinary control button (same look, movable in the layout editor) placed before the mouse button; the mouse button moved right
 - "New interface" and "Compact mode" are now on by default (switch back in Settings → Appearance); in compact mode the Language item is shown in the side menu
 - Online over LAN: ZeroTier is built into the launcher (no extra app): new menu page with collapsible cards (turn on, connected networks, my networks via ZeroTier Central with a Legacy-account token, connection); auto-join / auto-authorize, 10 s auto-refresh, friends' IPs can be copied, host port is taken from the game's LAN port; in game a ↘ "Share IP" button and the [ZeroTier] IP: line in chat
 - Crash auto-fix: after a crash the launcher tests mod versions one by one by silently launching the game in a hidden window (newest to oldest, missing dependencies are downloaded, the culprit is disabled when versions run out) until the game reaches the main menu, then says "Done"; a copy of the mods is kept and can be restored; nothing is shown if you swiped the app away
@@ -26,6 +29,9 @@ What's new
 - Version list loads in parallel and is cached (shows vanilla immediately); skin preview keeps rotating; low-memory JVM profile for devices under 3.5 GB; LWJGL debug output disabled
 
 Что нового?
+- Исправлено: экран «Открыть для сети» (поле порта) перестраивался и значение сбрасывалось при открытии экранной клавиатуры (игра теперь получает событие изменения размера, только когда размер окна правда изменился)
+- Исправлено: библиотеки LWJGL (например, для 26.3) скачивались заново при переключении версий, загрузка могла оборваться, а игра стартовала посреди скачивания: теперь библиотеки хранятся для каждой версии отдельно, загрузка повторяется и проверяется, без библиотек игра не запускается, а подготовка идёт только одна за раз
+- Кнопка «Поделиться IP» (↘) в игре стала обычной кнопкой управления (тот же вид, двигается в редакторе раскладки) и стоит перед мышью; мышь сдвинута правее
 - «Новый интерфейс» и «Компактный режим» теперь включены по умолчанию (вернуть можно в Настройки → Оформление); в компактном режиме пункт «Язык» виден в боковом меню
 - Онлайн по LAN: ZeroTier встроен в лаунчер (отдельное приложение не нужно): новая страница меню со сворачиваемыми карточками (включить, подключённые сети, мои сети через ZeroTier Central по токену Legacy-аккаунта, подключение); автоподключение и авторизация, автообновление раз в 10 с, IP друзей можно скопировать, порт хоста берётся из LAN-порта игры; в игре кнопка ↘ «Поделиться IP» и строка [ZeroTier] IP: в чате
 - Автоисправление вылета: после вылета лаунчер перебирает версии модов по очереди, запуская игру в скрытом окне (от новых к старым, недостающие зависимости докачиваются, виновный мод отключается, когда версии кончились), пока игра не дойдёт до главного меню, и пишет «Готово»; копия модов сохраняется и возвращается кнопкой; если приложение смахнули, уведомлений нет
