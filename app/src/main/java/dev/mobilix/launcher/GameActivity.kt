@@ -160,16 +160,8 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
             bar,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END)
         )
-        // MobiLabs: кнопка ↘ вверху по центру делится адресом ZeroTier и портом открытого для сети мира
-        if (BuildConfig.LABS) {
-            val d = resources.displayMetrics.density
-            val shareBtn = TextView(this).apply {
-                text = "↘"; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; includeFontPadding = false
-                background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x99000000.toInt()); setStroke((1 * d).toInt(), 0x66FFFFFF) }
-                setOnClickListener { shareIp() }
-            }
-            root.addView(shareBtn, FrameLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt(), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = (6 * d).toInt() })
-        }
+        // кнопка «↘» (в раскладке управления, перед мышью): делится адресом ZeroTier и портом открытого для сети мира
+        controls.onShareIp = { shareIp() }
         // «Скрыть системные кнопки в игре»: кнопки «Раскладка» и «Лог» прячутся, раскладка открывается удержанием Esc (Bedrock: «II») 5 с
         if (gs().optBoolean("hideSys", false)) bar.visibility = View.GONE
         controls.onHoldEsc = { layoutBtn.performClick() }
@@ -366,17 +358,15 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
                         raf.readFully(buf)
                         val lines = String(buf).lines().takeLast(45)
                         logView.text = lines.joinToString("\n")
-                        if (BuildConfig.LABS) {
-                            val p = Regex("Started serving on (\\d+)").findAll(String(buf)).lastOrNull()?.groupValues?.get(1)?.toInt()
-                            if (p != null && p != lastLanPort) {
-                                lastLanPort = p
-                                val shared = try { File(getExternalFilesDir(null) ?: filesDir, "zt-share.txt").takeIf { it.exists() }?.readText()?.trim() } catch (_: Exception) { null }
-                                val ip = shared?.substringBefore(':')
-                                if (!ip.isNullOrEmpty()) {
-                                    val t = "[ZeroTier] IP: $ip:$p"
-                                    (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", t))
-                                    Toast.makeText(this@GameActivity, "$t (скопировано)", Toast.LENGTH_LONG).show()
-                                }
+                        val p = Regex("Started serving on (\\d+)").findAll(String(buf)).lastOrNull()?.groupValues?.get(1)?.toInt()
+                        if (p != null && p != lastLanPort) {
+                            lastLanPort = p
+                            val shared = try { File(getExternalFilesDir(null) ?: filesDir, "zt-share.txt").takeIf { it.exists() }?.readText()?.trim() } catch (_: Exception) { null }
+                            val ip = shared?.substringBefore(':')
+                            if (!ip.isNullOrEmpty()) {
+                                val t = "[ZeroTier] IP: $ip:$p"
+                                (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("ZeroTier", t))
+                                Toast.makeText(this@GameActivity, "$t (скопировано)", Toast.LENGTH_LONG).show()
                             }
                         }
                     }

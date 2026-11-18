@@ -19,7 +19,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.Inet4Address
 
-// MobiLabs: «Игра по сети» поверх приложения ZeroTier One (виртуальная локальная сеть, как Radmin).
+// «Игра по сети» поверх приложения ZeroTier One (виртуальная локальная сеть, как Radmin).
 
 /** Помощники для ZeroTier One: установлен ли он, адрес устройства в его сети, порт открытого для сети мира. */
 object ZeroTierNet {

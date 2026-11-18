@@ -662,7 +662,7 @@ class MainActivity : Activity() {
             item("Раскладка управления", "Controls layout", PixelIcon.I_PAD to PixelIcon.MENU_PAL) { startActivity(Intent(this, ControlsEditorActivity::class.java)) }
             menuWipe = item("Удалить скачанное", "Delete downloads", PixelIcon.TRASH to PixelIcon.TRASH_PAL) { confirmWipe() }
         }
-        if (BuildConfig.LABS) item("Онлайн по LAN", "Online over LAN", PixelIcon.I_LAN to PixelIcon.MENU_PAL) { openPage(tr("Онлайн по LAN", "Online over LAN"), netPage()) }
+        item("Онлайн по LAN", "Online over LAN", PixelIcon.I_LAN to PixelIcon.MENU_PAL) { openPage(tr("Онлайн по LAN", "Online over LAN"), netPage()) }
         ghIdx = menuEntries.size
         ghItem = item("Соцсети", "Social", PixelIcon.I_CHAT to PixelIcon.MENU_PAL) { openPage(tr("Соцсети", "Social"), socialPage()) }
         if (!compact() || !navBottom()) item("Язык", "Language", PixelIcon.I_GLOBE to PixelIcon.MENU_PAL, if (lang() == "zh") "中文" else lang().uppercase()) { chooseLanguage() }
@@ -3080,9 +3080,9 @@ class MainActivity : Activity() {
                     File(root, "natives"), File(root, "launch_command.txt"), File(root, "launch.json"),
                     File(root, "runtime.tar.xz"), File(root, "runtime.tar.gz"), File(root, "forge-installer.jar"),
                     File(root, "launcher_profiles.json"),
-                    runtimeDir(), runtimeDir(25), cacheDir, File(filesDir, "natives"), File(filesDir, "lwjgl"), File(filesDir, "mg"),
+                    runtimeDir(), runtimeDir(25), cacheDir, File(filesDir, "natives"), File(filesDir, "mg"),
                     File(filesDir, "skin_default.png"), File(root, "mg-plugin.apk")
-                ) + (root.listFiles { f -> f.name.startsWith("lwjgl-natives") }?.toList() ?: emptyList())
+                ) + (root.listFiles { f -> f.name.startsWith("lwjgl-natives") }?.toList() ?: emptyList()) + (filesDir.listFiles { f -> f.name.startsWith("lwjgl") }?.toList() ?: emptyList())
                 for (t in targets) {
                     freed += sizeOf(t)
                     t.deleteRecursively()

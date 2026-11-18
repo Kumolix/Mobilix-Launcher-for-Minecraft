@@ -52,8 +52,6 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            // libzt (встроенный ZeroTier) нужен только MobiLabs
-            if (project.findProperty("labs") != "true") excludes += "**/libzt.so"
         }
     }
 
