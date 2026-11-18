@@ -110,16 +110,17 @@ internal fun MainActivity.ensureLwjgl(version: String): String? {
         log("Версия LWJGL не определена, пропуск.")
         return null
     }
-    val dir = File(filesDir, "lwjgl")
+    // у каждой версии LWJGL своя папка: при переключении 1.21.3 ↔ 26.3 библиотеки не скачиваются заново
+    val want = if (isArm64) version else "pojav"
+    val dir = File(filesDir, "lwjgl-$want")
+    File(filesDir, "lwjgl").takeIf { it.exists() }?.let { old ->
+        // папка прежнего формата: переносим, если версия та же, иначе удаляем
+        val oldStamp = try { File(old, ".mobilix-lwjgl").readText().trim() } catch (e: Exception) { "" }
+        if (oldStamp == want && !dir.exists()) old.renameTo(dir) else old.deleteRecursively()
+    }
     fun hasMain() = dir.exists() && dir.walkTopDown().any { it.isFile && it.name == "liblwjgl.so" }
     // нативные библиотеки должны точно совпадать с jar игры (3.2.2 для 1.17–1.18, 3.3.x для остальных)
     val stamp = File(dir, ".mobilix-lwjgl")
-    val want = if (isArm64) version else "pojav"
-    val have = try { stamp.readText().trim() } catch (e: Exception) { "" }
-    if (hasMain() && have != want) {
-        log("LWJGL: установлена другая версия ('" + (have.ifEmpty { "?" }) + "'), нужна '$want', переустановка")
-        dir.deleteRecursively()
-    }
     if (!hasMain()) {
         log("Установка LWJGL $version для Android...")
         val archive = (if (isArm64) downloadLwjgl(version) else downloadPojavLwjgl()) ?: return null
@@ -129,8 +130,10 @@ internal fun MainActivity.ensureLwjgl(version: String): String? {
             if (archive.name.endsWith(".zip")) extractZip(archive, dir) else extractTar(archive, dir)
         } catch (e: Exception) {
             log("  ошибка распаковки: $e")
+            archive.delete(); dir.deleteRecursively()   // битый архив не оставляем: в следующий раз скачается заново
             return null
         }
+        archive.delete()
         try { stamp.writeText(want) } catch (e: Exception) {}
     } else {
         log("LWJGL уже установлен.")
@@ -183,10 +186,22 @@ internal fun MainActivity.downloadLwjgl(version: String): File? {
                 name.endsWith(".tar.gz") -> ".tar.gz"
                 else -> ".tar.xz"
             }
-            val dest = File(dataRoot(), "lwjgl-natives$ext")
+            val dest = File(dataRoot(), "lwjgl-natives-$version$ext")
             log("  скачивание $name (${best.optLong("size") / 1024} КБ)")
-            downloadBig(best.getString("browser_download_url"), dest)
-            return dest
+            // обрыв сети («Software caused connection abort») и битый архив лечатся повтором: до 3 попыток, архив проверяется
+            var last: Exception? = null
+            for (attempt in 1..3) {
+                try {
+                    downloadBig(best.getString("browser_download_url"), dest)
+                    if (ext == ".zip") java.util.zip.ZipFile(dest).use { it.size() }
+                    return dest
+                } catch (e: Exception) {
+                    last = e; dest.delete()
+                    log("  попытка $attempt из 3 не удалась: $e")
+                    Thread.sleep(1500L * attempt)
+                }
+            }
+            throw last ?: RuntimeException("не удалось скачать")
         } catch (e: Exception) {
             log("  ошибка: $e")
         }

@@ -156,7 +156,21 @@ internal fun MainActivity.logLastNativeExit() {
     } catch (e: Throwable) { log("Причина прошлого вылета недоступна: $e") }
 }
 
+private val preparing = java.util.concurrent.locks.ReentrantLock()
+
+/** Подготовка и запуск; одновременно идёт только одна: два потока писали в один файл (LWJGL), он портился, а игра стартовала посреди скачивания. */
 internal fun MainActivity.prepareAndRun(profile: String = selectedProfile(), play: Boolean = true, probe: Boolean = false) {
+    // запуск игры второй раз игнорируется, а докачка файлов (play = false) ждёт своей очереди
+    val got = if (play) preparing.tryLock() else { preparing.lock(); true }
+    if (!got) {
+        log("Подготовка уже идёт, повторный запуск проигнорирован.")
+        runOnUiThread { android.widget.Toast.makeText(this, tr("Подготовка уже идёт, подождите", "Preparing is already in progress, please wait"), android.widget.Toast.LENGTH_SHORT).show() }
+        return
+    }
+    try { prepareAndRunOnce(profile, play, probe) } finally { preparing.unlock() }
+}
+
+private fun MainActivity.prepareAndRunOnce(profile: String, play: Boolean, probe: Boolean) {
     val p = LaunchPlan(profile, play)
     prepareInputs(p)        // папки, профиль, версия игры
     loadVersionInfo(p)      // json версии, режим (старая/новая), папка игры, настройки, моды
@@ -433,6 +447,7 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     val java = ensureRuntime(root, javaMajor)
     val rt = java.parentFile!!.parentFile!!
     val lwjglPath = ensureLwjgl(lwjglVer)
+    if (lwjglPath == null && lwjglVer.isNotEmpty() && isArm64) throw RuntimeException(tr("Не удалось получить библиотеки LWJGL $lwjglVer (нет сети или архив повреждён). Игра не запущена: проверьте интернет и нажмите «Играть» ещё раз.", "Could not get LWJGL $lwjglVer libraries (no network or a damaged archive). The game was not started: check your connection and tap Play again."))
     val gl4es = File(applicationInfo.nativeLibraryDir, "libgl4es.so").takeIf { it.exists() }?.path
     if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
     // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).

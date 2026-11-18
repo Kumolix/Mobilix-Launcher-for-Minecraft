@@ -160,14 +160,8 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
             bar,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.END)
         )
-        // кнопка ↘ вверху по центру делится адресом ZeroTier и портом открытого для сети мира
-        val d = resources.displayMetrics.density
-        val shareBtn = TextView(this).apply {
-            text = "↘"; textSize = 20f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; includeFontPadding = false
-            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x99000000.toInt()); setStroke((1 * d).toInt(), 0x66FFFFFF) }
-            setOnClickListener { shareIp() }
-        }
-        root.addView(shareBtn, FrameLayout.LayoutParams((40 * d).toInt(), (40 * d).toInt(), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = (6 * d).toInt() })
+        // кнопка «↘» (в раскладке управления, перед мышью): делится адресом ZeroTier и портом открытого для сети мира
+        controls.onShareIp = { shareIp() }
         // «Скрыть системные кнопки в игре»: кнопки «Раскладка» и «Лог» прячутся, раскладка открывается удержанием Esc (Bedrock: «II») 5 с
         if (gs().optBoolean("hideSys", false)) bar.visibility = View.GONE
         controls.onHoldEsc = { layoutBtn.performClick() }

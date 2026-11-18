@@ -3080,9 +3080,9 @@ class MainActivity : Activity() {
                     File(root, "natives"), File(root, "launch_command.txt"), File(root, "launch.json"),
                     File(root, "runtime.tar.xz"), File(root, "runtime.tar.gz"), File(root, "forge-installer.jar"),
                     File(root, "launcher_profiles.json"),
-                    runtimeDir(), runtimeDir(25), cacheDir, File(filesDir, "natives"), File(filesDir, "lwjgl"), File(filesDir, "mg"),
+                    runtimeDir(), runtimeDir(25), cacheDir, File(filesDir, "natives"), File(filesDir, "mg"),
                     File(filesDir, "skin_default.png"), File(root, "mg-plugin.apk")
-                ) + (root.listFiles { f -> f.name.startsWith("lwjgl-natives") }?.toList() ?: emptyList())
+                ) + (root.listFiles { f -> f.name.startsWith("lwjgl-natives") }?.toList() ?: emptyList()) + (filesDir.listFiles { f -> f.name.startsWith("lwjgl") }?.toList() ?: emptyList())
                 for (t in targets) {
                     freed += sizeOf(t)
                     t.deleteRecursively()
