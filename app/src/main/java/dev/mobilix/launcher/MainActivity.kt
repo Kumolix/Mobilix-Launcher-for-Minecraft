@@ -1406,6 +1406,12 @@ class MainActivity : Activity() {
         col.addView(TextView(this).apply { text = tr("Настройки JVM", "JVM settings"); setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
         val gcs = listOf("Serial", "Parallel", "G1")
         col.addView(chipRow(gcs, gcs.indexOf(prefs.getString("gc", "Serial")).coerceAtLeast(0)) { i -> prefs.edit().putString("gc", gcs[i]).apply() })
+        if (BuildConfig.LABS) {
+            col.addView(TextView(this).apply { text = "Corelix"; setTextColor(Th.text); setPadding(0, dp(18), 0, dp(6)) })
+            col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("corelix", true)) 1 else 0) { i -> prefs.edit().putBoolean("corelix", i == 1).apply() })
+            col.addView(note(tr("Загрузчик оптимизаций для Minecraft 1.21.3. Последний релиз скачивается сам. Применяется при следующем запуске.",
+                "Optimization loader for Minecraft 1.21.3. The latest release is downloaded automatically. Applied on next launch.")))
+        }
         col.addView(android.widget.EditText(this).apply {
             hint = "-XX:+UseG1GC -Dfoo=bar"; setHintTextColor(Th.hint); setTextColor(Th.text); setSingleLine(true)
             setText(prefs.getString("jvmArgs", ""))
