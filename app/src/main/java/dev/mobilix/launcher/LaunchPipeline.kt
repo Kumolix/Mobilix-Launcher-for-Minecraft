@@ -446,9 +446,9 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     val oldGl = p.oldGl
     val java = ensureRuntime(root, javaMajor)
     val rt = java.parentFile!!.parentFile!!
-    // 26.x (LWJGL 3.4.x): готовых полных нативных наборов 3.4.1 нет (в архиве лишь 2 библиотеки, игра падает без вывода);
-    // 26.3 раньше работала на тех же нативных 3.3.3, что и 1.21, поэтому берём их: без лишней загрузки и надёжно
-    val nativesVer = if (lwjglVer.startsWith("3.4")) NEW_LWJGL else lwjglVer
+    // 26.x (LWJGL 3.4.x): нативные 3.3.3 не годятся (нет ThreadLocalUtil.setupEnvData), а в архиве 3.4.1 лишь 2 библиотеки.
+    // Берём полный набор 3.4.3 (на нём 26.3 уже запускалась): минорные версии 3.4.x совместимы по JNI
+    val nativesVer = if (lwjglVer.startsWith("3.4")) "3.4.3" else lwjglVer
     if (nativesVer != lwjglVer) log("LWJGL: для игры $lwjglVer берём нативные библиотеки $nativesVer")
     val lwjglPath = ensureLwjgl(nativesVer)
     if (lwjglPath == null && lwjglVer.isNotEmpty() && isArm64) throw RuntimeException(tr("Не удалось получить библиотеки LWJGL $nativesVer (нет сети или архив повреждён). Игра не запущена: проверьте интернет и нажмите «Играть» ещё раз.", "Could not get LWJGL $nativesVer libraries (no network or a damaged archive). The game was not started: check your connection and tap Play again."))
