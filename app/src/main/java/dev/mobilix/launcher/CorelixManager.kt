@@ -16,7 +16,7 @@ internal object CorelixManager {
     const val BUNDLE_ASSET = "corelix-bundle.zip"
 }
 
-/** Распакованный релиз: corelix-loader.jar, libs/*.jar, mods/*.jar. */
+// Распакованный релиз: corelix-loader.jar, папки libs и mods
 internal class CorelixBundle(val dir: File, val tag: String) {
     val loader = File(dir, "corelix-loader.jar")
     val libs = File(dir, "libs")
