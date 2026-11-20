@@ -59,6 +59,7 @@ static jint create_jvm(JNIEnv* env, jstring javaHome, jobjectArray opts, JavaVM*
         UpdFn upd = (UpdFn) dlsym(RTLD_DEFAULT, "android_update_LD_LIBRARY_PATH");
         char lp[3200];
         snprintf(lp, sizeof lp, "%s/lib:%s/lib/server:%s/lib/jli", home, home, home);
+        { const char* ex = getenv("MOBILIX_LWJGL_DIRS"); if (ex && *ex) { size_t n = strlen(lp); snprintf(lp + n, sizeof lp - n, ":%s", ex); } }
         if (upd) { upd(lp); LOG("android_update_LD_LIBRARY_PATH: %s", lp); }
         else LOG("android_update_LD_LIBRARY_PATH недоступна");
         // ANGLE для MobileGlues: загружаем заранее по полному пути (потом поиск по имени находит уже загруженную библиотеку) и пишем результат в лог
