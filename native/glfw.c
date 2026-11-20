@@ -482,6 +482,19 @@ SETCB(glfwSetWindowRefreshCallback, closefun, refresh)
 SETCB(glfwSetWindowMaximizeCallback, centerfun, maximize)
 SETCB(glfwSetWindowContentScaleCallback, scalefun, scale)
 
+// GLFW 3.4/3.5 (LWJGL 3.4.x, игры 26.x): IME и прочее. Ввода IME нет, функции нужны лишь чтобы LWJGL нашёл их адреса
+EXPORT void* glfwSetPreeditCallback(void* w, void* f) { return 0; }
+EXPORT void* glfwSetIMEStatusCallback(void* w, void* f) { return 0; }
+EXPORT void* glfwSetPreeditCandidateCallback(void* w, void* f) { return 0; }
+EXPORT void glfwResetPreeditText(void* w) {}
+EXPORT void glfwSetPreeditCursorRectangle(void* w, int x, int y, int cw, int ch) {}
+EXPORT void glfwGetPreeditCursorRectangle(void* w, int* x, int* y, int* cw, int* ch) { if (x) *x = 0; if (y) *y = 0; if (cw) *cw = 0; if (ch) *ch = 0; }
+EXPORT int glfwGetIMEStatus(void* w) { return 0; }
+EXPORT const char* glfwGetPreeditCandidate(void* w, int i) { return 0; }
+EXPORT void glfwInitVulkanLoader(void* f) {}
+EXPORT void glfwSetX11SelectionString(const char* s) {}
+EXPORT const char* glfwGetX11SelectionString(void) { return 0; }
+
 // ---------- состояние окна ----------
 EXPORT int glfwWindowShouldClose(void* w) { return G.should_close; }
 EXPORT void glfwSetWindowShouldClose(void* w, int v) { G.should_close = v; }
