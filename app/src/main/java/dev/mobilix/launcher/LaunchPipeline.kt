@@ -698,6 +698,11 @@ private fun MainActivity.writeLaunchConfig(p: LaunchPlan) {
             launch.put("env", env)
         } catch (e: Throwable) { log("Профиль рендера не записан: $e") }
     }
+    // зависимости библиотек LWJGL (libc++_shared.so для libopenal.so и др.) ищутся динамическим загрузчиком Android по LD_LIBRARY_PATH
+    if (lwjglPath != null) {
+        val e = launch.optJSONObject("env") ?: JSONObject().also { launch.put("env", it) }
+        e.put("MOBILIX_LWJGL_DIRS", lwjglPath)
+    }
     File(root, "launch.json").writeText(launch.toString())
     log("Команда запуска собрана (${cmd.size} аргументов).")
 }
