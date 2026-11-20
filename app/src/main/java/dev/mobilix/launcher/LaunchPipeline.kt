@@ -663,6 +663,11 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
         cmd.add("-Dcorelix.mappings=${p.corelixMappings!!.path}")
         cmd.add("-Dcorelix.cache=${File(filesDir, "corelix/cache").path}")
         cmd.add("-Dcorelix.mainClass=$realMain")
+        // По данным профайлера Corelix: десятки полных сборок «Metadata GC Threshold» при старте (~1 с) и «CodeCache GC Threshold» (до 0,9 с).
+        // Поднимаем начальный порог метаспейса и кэш кода (последний флаг побеждает, лимиты выше остаются в силе).
+        val maxMeta = if (lowMem) 192 else if (totalMb < 5000) 384 else 640
+        cmd.add("-XX:MetaspaceSize=${maxMeta / 2}m")
+        if (!lowMem) cmd.add("-XX:ReservedCodeCacheSize=${if (totalMb < 5000) 128 else 240}m")
     }
     cmd.addAll(jvmArgs)
     val mainName = if (preAwt) "dev.mobilix.OldMain" else if (cx != null) CorelixManager.MAIN else realMain
