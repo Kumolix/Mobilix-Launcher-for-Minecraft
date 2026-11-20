@@ -25,6 +25,8 @@ const val K_HIDE = 4
 const val K_VMOUSE = 5
 /** Поделиться адресом ZeroTier и портом открытого для сети мира (пишет их в чат и копирует). */
 const val K_SHAREIP = 6
+/** Макрос: последовательность нажатий (Macros), код — id макроса. */
+const val K_MACRO = 7
 
 class Btn(
     var label: String, var kind: Int, var code: Int,
@@ -51,6 +53,7 @@ private val KEY_CHOICES: List<Triple<String, Int, Int>> = buildList {
     add(Triple("Скрыть/показать кнопки", K_HIDE, 0))
     add(Triple("Виртуальная мышь вкл/выкл", K_VMOUSE, 0))
     add(Triple("Поделиться IP (ZeroTier)", K_SHAREIP, 0))
+    add(Triple("Макрос…", K_MACRO, 0))
     add(Triple("Колесо вверх", K_SCROLL, 1))
     add(Triple("Колесо вниз", K_SCROLL, -1))
     add(Triple("Пробел", K_KEY, 32)); add(Triple("Esc", K_KEY, 256)); add(Triple("Enter", K_KEY, 257))
@@ -67,7 +70,7 @@ private val KEY_CHOICES: List<Triple<String, Int, Int>> = buildList {
 }
 
 fun keyName(kind: Int, code: Int): String =
-    KEY_CHOICES.firstOrNull { it.second == kind && it.third == code }?.first ?: "?"
+    if (kind == K_MACRO) "Макрос: " + Macros.nameOf(code) else KEY_CHOICES.firstOrNull { it.second == kind && it.third == code }?.first ?: "?"
 
 /** Слой управления поверх игры: кнопки, камера, режим редактирования раскладки. */
 class ControlsView(ctx: Context) : View(ctx) {
@@ -441,11 +444,27 @@ class ControlsView(ctx: Context) : View(ctx) {
         }
     }
 
+    /** Проигрывает макрос: шаги выстраиваются по времени и выполняются на потоке интерфейса. */
+    private fun runMacro(id: Int) {
+        val steps = Macros.parse(Macros.find(context, id)?.text ?: return)
+        var t = 0L
+        for (s in steps) {
+            val kind = s[0]; val code = s[1]
+            when (s[2]) {
+                3 -> t += code
+                0 -> { postDelayed({ fireOne(kind, code, true) }, t); t += 30; postDelayed({ fireOne(kind, code, false) }, t); t += 30 }
+                1 -> { postDelayed({ fireOne(kind, code, true) }, t); t += 20 }
+                2 -> { postDelayed({ fireOne(kind, code, false) }, t); t += 20 }
+            }
+        }
+    }
+
     private fun fire(b: Btn, down: Boolean) {
         if (b.kind == K_HIDE) { if (down && !editing) { hidden = !hidden; invalidate() }; return }
         if (b.kind == K_KEYBOARD) { if (down && !editing) toggleKeyboard(); return }
         if (b.kind == K_VMOUSE) { if (down && !editing) setVm(!vm); return }
         if (b.kind == K_SHAREIP) { if (down && !editing) onShareIp?.invoke(); return }
+        if (b.kind == K_MACRO) { if (down && !editing) runMacro(b.code); return }
         if (b.extra.isEmpty()) { fireOne(b.kind, b.code, down); return }
         // комбинация: нажимаем по порядку, отпускаем в обратном
         val all = listOf(intArrayOf(b.kind, b.code)) + b.extra
@@ -605,6 +624,15 @@ class ControlsView(ctx: Context) : View(ctx) {
         editButton(b)
     }
 
+    private fun pickMacro(onPick: (id: Int, name: String) -> Unit) {
+        val list = Macros.load(context)
+        if (list.isEmpty()) {
+            android.widget.Toast.makeText(context, "Сначала создайте макрос: Настройки → в самом конце, раздел «Макросы»", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        MobDialog(context).setTitle("Макрос").setItems(list.map { it.name }.toTypedArray()) { _, i -> onPick(list[i].id, list[i].name) }.show()
+    }
+
     private fun pickKey(onPick: (kind: Int, code: Int, name: String) -> Unit) {
         val names = KEY_CHOICES.map { it.first }.toTypedArray()
         MobDialog(context).setTitle("Назначить клавишу").setItems(names) { _, i ->
@@ -631,11 +659,22 @@ class ControlsView(ctx: Context) : View(ctx) {
         }
         keyBtn.setOnClickListener {
             pickKey { k, c, n ->
+                if (k == K_MACRO) {
+                    pickMacro { id, nm ->
+                        if (!picked) {
+                            b.kind = K_MACRO; b.code = id; b.extra.clear()
+                            if (b.label == "?" || b.label.isEmpty()) b.label = nm.take(5)
+                            picked = true
+                            refresh(); invalidate(); save()
+                        }
+                    }
+                    return@pickKey
+                }
                 if (!picked) {
                     b.kind = k; b.code = c; b.extra.clear()
                     if (b.label == "?" || b.label.isEmpty()) b.label = if (n.length <= 3) n else n.take(5)
                     picked = true
-                } else if (b.extra.size < 4 && k != K_KEYBOARD && k != K_HIDE && k != K_VMOUSE && k != K_SHAREIP) {
+                } else if (b.extra.size < 4 && k != K_KEYBOARD && k != K_HIDE && k != K_VMOUSE && k != K_SHAREIP && k != K_MACRO) {
                     b.extra.add(intArrayOf(k, c))
                 }
                 refresh(); invalidate(); save()
