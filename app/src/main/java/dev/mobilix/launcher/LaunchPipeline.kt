@@ -667,6 +667,9 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
         // Поднимаем начальный порог метаспейса и кэш кода (последний флаг побеждает, лимиты выше остаются в силе).
         val maxMeta = if (lowMem) 192 else if (totalMb < 5000) 384 else 640
         cmd.add("-XX:MetaspaceSize=${maxMeta / 2}m")
+        // Начальная куча = максимальной: профайлер показал ~40 сборок за первые 10 с при куче 230 МБ (young-область крошечная и растёт ступенями).
+        // Память не занимается заранее (без AlwaysPreTouch), страницы выдаются по мере использования.
+        cmd.add("-Xms${xmx}m")
         if (!lowMem) cmd.add("-XX:ReservedCodeCacheSize=${if (totalMb < 5000) 128 else 240}m")
     }
     cmd.addAll(jvmArgs)
