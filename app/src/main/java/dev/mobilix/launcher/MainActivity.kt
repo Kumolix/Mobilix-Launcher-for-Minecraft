@@ -1459,6 +1459,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(180), dp(40)).apply { topMargin = dp(6) })
         col.addView(note(tr("Зеркало Modrinth используется первым, официальный API — запасным. Если зеркало не отвечает, поправьте адрес API здесь. Источник каталога (Modrinth / CurseForge) выбирается в самом каталоге.",
             "The Modrinth mirror is tried first, the official API is the fallback. If the mirror does not respond, fix the API address here. The catalog source (Modrinth / CurseForge) is chosen in the catalog itself.")))
+        macrosSection(colS)
         if (modern) {
             one.setPadding(dp(14), dp(4), dp(14), dp(24))
             val openSet = (prefs.getString("setOpen", "0") ?: "0").split(",").toMutableSet()
