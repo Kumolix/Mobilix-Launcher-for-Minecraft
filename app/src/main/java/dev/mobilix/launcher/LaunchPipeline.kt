@@ -127,6 +127,8 @@ internal class LaunchPlan(val profile: String, val play: Boolean) {
     lateinit var gameArgs: List<String>
     val cmd = ArrayList<String>()
     lateinit var mainName: String
+    var corelix: CorelixBundle? = null
+    var corelixMappings: File? = null
 }
 
 /** Подготовка и запуск игры: шаги идут по порядку, общее состояние лежит в LaunchPlan. */
@@ -179,6 +181,7 @@ private fun MainActivity.prepareAndRunOnce(profile: String, play: Boolean, probe
     downloadAssets(p)       // ресурсы
     if (!play) { log("Файлы версии скачаны."); return }
     prepareRuntime(p)       // Java, LWJGL, рендерер
+    prepareCorelix(p)       // профиль Corelix (MobiLabs): последний релиз загрузчика
     refreshAccounts(p)      // сессии Ely.by / Microsoft, скин
     buildLaunchArgs(p)      // аргументы JVM и игры из json версии
     buildJvmCommand(p)      // итоговая команда JVM
@@ -562,6 +565,28 @@ private fun MainActivity.buildLaunchArgs(p: LaunchPlan) {
     p.gameArgs = gameArgs
 }
 
+/** Профиль Corelix (только MobiLabs): скачивает последний релиз и маппинги. Если не вышло, игра идёт ванильной и это видно в логе. */
+private fun MainActivity.prepareCorelix(p: LaunchPlan) {
+    p.corelix = null
+    if (!BuildConfig.LABS || !p.profile.startsWith("corelix-")) return
+    if (p.baseVer !in CorelixManager.SUPPORTED || p.legacy || p.oldGl || p.oldForge || p.preAwt) {
+        log(tr("Corelix: версия ${p.baseVer} не поддерживается, запускаю ванильную игру.", "Corelix: version ${p.baseVer} is not supported, launching vanilla."))
+        return
+    }
+    val mapInfo = p.v.getJSONObject("downloads").optJSONObject("client_mappings")
+    if (mapInfo == null) { log(tr("Corelix: у версии нет маппингов, запускаю ванильную игру.", "Corelix: no mappings for this version, launching vanilla.")); return }
+    val mappings = File(p.root, "versions/${p.baseVer}/client_mappings.txt")
+    if (!download(mapInfo.getString("url"), mappings, mapInfo.optString("sha1").ifEmpty { null })) {
+        log(tr("Corelix: не скачались маппинги ($lastDownloadError), запускаю ванильную игру.", "Corelix: mappings download failed ($lastDownloadError), launching vanilla."))
+        return
+    }
+    val bundle = ensureCorelix() ?: return
+    p.classpath.add(bundle.loader.path)
+    p.corelix = bundle
+    p.corelixMappings = mappings
+    log("Corelix ${bundle.tag}: " + tr("включён", "enabled"))
+}
+
 /** Шаг 6в: итоговая команда JVM (память, GC, LWJGL, режимы старых версий и Forge, Ely.by). */
 private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
     val java = p.java
@@ -630,8 +655,22 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
         if (agent != null && agentUsable(rt)) cmd.add("-javaagent:${agent.path}=https://authserver.ely.by/api/authlib-injector")
         else log("ВНИМАНИЕ: в Java-рантайме нет рабочего java.instrument, поэтому authlib-injector не подключён. Игра запустится с ником и UUID из Ely.by, скин взят из Ely.by, но вход на серверы с проверкой Ely.by работать не будет.")
     }
+    val cx = p.corelix
+    if (cx != null) {
+        cmd.add("-Dcorelix.platform=mobile")
+        cmd.add("-Dcorelix.libs=${cx.libs.path}")
+        cmd.add("-Dcorelix.mods=${cx.mods.path}")
+        cmd.add("-Dcorelix.mappings=${p.corelixMappings!!.path}")
+        cmd.add("-Dcorelix.cache=${File(filesDir, "corelix/cache").path}")
+        cmd.add("-Dcorelix.mainClass=$realMain")
+        // По данным профайлера Corelix: десятки полных сборок «Metadata GC Threshold» при старте (~1 с) и «CodeCache GC Threshold» (до 0,9 с).
+        // Поднимаем начальный порог метаспейса и кэш кода (последний флаг побеждает, лимиты выше остаются в силе).
+        val maxMeta = if (lowMem) 192 else if (totalMb < 5000) 384 else 640
+        cmd.add("-XX:MetaspaceSize=${maxMeta / 2}m")
+        if (!lowMem) cmd.add("-XX:ReservedCodeCacheSize=${if (totalMb < 5000) 128 else 240}m")
+    }
     cmd.addAll(jvmArgs)
-    val mainName = if (preAwt) "dev.mobilix.OldMain" else realMain
+    val mainName = if (preAwt) "dev.mobilix.OldMain" else if (cx != null) CorelixManager.MAIN else realMain
     cmd.add(mainName)
     if (preAwt) cmd.add(realMain)
     cmd.addAll(gameArgs)
