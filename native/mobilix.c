@@ -81,6 +81,21 @@ static jint create_jvm(JNIEnv* env, jstring javaHome, jobjectArray opts, JavaVM*
             LOG("preload %s -> %s", pre[i], ph ? "ok" : dlerror());
         }
     }
+    // libopenal.so и др. из набора LWJGL зависят от libc++_shared.so, которой нет в системе: грузим её заранее по полному пути
+    {
+        const char* ex = getenv("MOBILIX_LWJGL_DIRS");
+        if (ex && *ex) {
+            char buf[3200]; snprintf(buf, sizeof buf, "%s", ex);
+            for (char* d = strtok(buf, ":"); d; d = strtok(NULL, ":")) {
+                char pp[3300]; snprintf(pp, sizeof pp, "%s/libc++_shared.so", d);
+                if (access(pp, R_OK) == 0) {
+                    void* ph = dlopen(pp, RTLD_NOW | RTLD_GLOBAL);
+                    LOG("preload %s -> %s", pp, ph ? "ok" : dlerror());
+                    if (ph) break;
+                }
+            }
+        }
+    }
     // libinstrument.so (для -javaagent) зависит от libjli.so: грузим её заранее, иначе линкер Android её не находит.
     {
         const char* jl[] = { "%s/lib/jli/libjli.so", "%s/lib/libjli.so", NULL };
