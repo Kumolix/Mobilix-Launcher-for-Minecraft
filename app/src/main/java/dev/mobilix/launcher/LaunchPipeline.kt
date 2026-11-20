@@ -454,6 +454,14 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     val nativesVer = if (lwjglVer.startsWith("3.4")) "3.4.3" else lwjglVer
     if (nativesVer != lwjglVer) log("LWJGL: для игры $lwjglVer берём нативные библиотеки $nativesVer")
     val lwjglPath = ensureLwjgl(nativesVer)
+    // В наборе 3.4.x свой libopenal.so зависит от libc++_shared.so, которой нет в системе. В APK есть собственный libopenal.so
+    // (c++_static, как и у набора 3.3.3), поэтому лишний убираем: игра подхватит библиотеку из папки приложения
+    if (lwjglPath != null && File(applicationInfo.nativeLibraryDir, "libopenal.so").exists()) {
+        lwjglPath.split(":").forEach { d ->
+            val f = File(d, "libopenal.so")
+            if (f.exists()) { if (f.renameTo(File(d, "libopenal.so.unused"))) log("LWJGL: libopenal.so набора убран, используется встроенная") else f.delete() }
+        }
+    }
     if (lwjglPath == null && lwjglVer.isNotEmpty() && isArm64) throw RuntimeException(tr("Не удалось получить библиотеки LWJGL $nativesVer (нет сети или архив повреждён). Игра не запущена: проверьте интернет и нажмите «Играть» ещё раз.", "Could not get LWJGL $nativesVer libraries (no network or a damaged archive). The game was not started: check your connection and tap Play again."))
     val gl4es = File(applicationInfo.nativeLibraryDir, "libgl4es.so").takeIf { it.exists() }?.path
     if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
