@@ -365,10 +365,12 @@ class MainActivity : Activity() {
             col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
         val upd = if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else null
-        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Launcher-for-Minecraft",
-            "https://kumolix.github.io/Mobilix-Launcher-for-Minecraft/", upd != null)
-        link("github.png", "GitHub", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
+        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Web",
+            "https://kumolix.github.io/Mobilix-Web/", upd != null)
+        link("github.png", "GitHub • Android", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
             "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", upd != null)
+        link("github.png", "GitHub • Windows", upd ?: "Kumolix/Mobilix-Launcher-PC",
+            "https://github.com/Kumolix/Mobilix-Launcher-PC", upd != null)
         link("telegram.png", "Telegram", upd ?: "@mobilix_launcher", "https://t.me/mobilix_launcher", upd != null)
         link("tiktok.png", "TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
         link(null, tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
