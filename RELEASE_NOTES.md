@@ -1,53 +1,11 @@
-version: 1.9.6.1
+version: 1.9.7
 What's new
-- Fixed: the "Open to LAN" screen (port field) was rebuilt and its value reset when the on-screen keyboard opened (the game now gets a resize event only when the window size really changes)
-- Fixed: LWJGL libraries (e.g. for 26.3) were downloaded again after switching versions and the download could break and let the game start half-way: libraries are now cached per version, downloads are retried and checked, the game is not started without them, and only one launch preparation runs at a time
-- The in-game "Share IP" (↘) is now an ordinary control button (same look, movable in the layout editor) placed before the mouse button; the mouse button moved right
-- "New interface" and "Compact mode" are now on by default (switch back in Settings → Appearance); in compact mode the Language item is shown in the side menu
-- Online over LAN: ZeroTier is built into the launcher (no extra app): new menu page with collapsible cards (turn on, connected networks, my networks via ZeroTier Central with a Legacy-account token, connection); auto-join / auto-authorize, 10 s auto-refresh, friends' IPs can be copied, host port is taken from the game's LAN port; in game a ↘ "Share IP" button and the [ZeroTier] IP: line in chat
-- Crash auto-fix: after a crash the launcher tests mod versions one by one by silently launching the game in a hidden window (newest to oldest, missing dependencies are downloaded, the culprit is disabled when versions run out) until the game reaches the main menu, then says "Done"; a copy of the mods is kept and can be restored; nothing is shown if you swiped the app away
-- Settings → Launcher: "Launcher updates" Off / Notify / Download (the release APK is downloaded to the launcher's own folder, only the latest one is kept, install is offered)
-- Fixed: the on-screen keyboard button stopped working after Enter; the Open to LAN screen (port field) reset when the keyboard opened
-- New interface: round back button with a centered arrow, landscape layout margins, loading bar between the version and Play in landscape, rounded Microsoft sign-in button, smoother opening of Downloads
-- Added the Mobilix Attribution License: forks are allowed with a clearly visible credit
-- New renderer "Zink + Turnip (Adreno)": Mesa Turnip Vulkan driver for Adreno GPUs, selectable in Settings → Game → Renderer (experimental, arm64, Adreno only)
-- Fixed: Zink crash on launch (OSMesa context is now made current before its pixel store is set); MobileGlues + ANGLE now draws to the screen (EGL goes through MobileGlues into ANGLE)
-- Experimental "New interface" (Settings → Appearance): rounded cards, animated background in theme colors, floating bottom bar, redesigned pages and dialogs, collapsible settings groups; works with custom themes
-- The log of the previous game run is kept and shown right in the launcher (Latest / Previous / Copy), with the native crash reason; mod auto-update now runs on every launch and finds the conflicting mod by its id; mipmap buttons fit one row
-- Code split into focused files (no behavior change)
-- Settings > Special: "Mod downloads" Auto / Manual (manual lets you pick the exact file version)
-- Settings > Special: "Hide system buttons in game" (the Layout editor opens by holding Esc / "II" in Bedrock for 5 s); on-screen keyboard now accepts input from keyboards that send digits and dots as key presses (typing a server IP); closing the game tab is no longer treated as a crash
-- Settings > Special: "Bedrock controls" mode (tap = attack, hold = mine, Pocket Edition style layout with its own editable buttons)
-- Renderers: Renderlix profiles (Auto / Standard / Sodium+Iris / Custom: OpenGL version, shader errors, compute shaders, shader cache, FSR 1)
-- Settings > Game: renderer choice (Auto / MobileGlues / MobileGlues + ANGLE / gl4es); versions before 1.17 always use gl4es
-- Minecraft 26.1+ (Java 25): a separate Java 25 runtime is installed automatically; rotating the screen no longer interrupts a download
-- Experimental: 32-bit (arm) and x86 / x86_64 devices in the same APK (versions up to 1.16.5, gl4es)
-- 1.17–1.18.2: LWJGL 3.3.3 is used (fixes launch crash after running other versions)
-- Fabric: auto-update now rolls back a mod that breaks another installed one (e.g. Sodium 0.6.13 vs Iris 1.8.1); Renderlix settings removed (Sodium/Iris profile is applied automatically); renderer buttons wrap to a second row
-- Graphics presets also lower simulation and entity distance (and chunk fade-in on 1.21+) on weak presets; the render thread gets a higher priority
-- New renderer Zink (Mesa, OpenGL over Vulkan) for 1.17+ on arm64: Settings → Game → Renderer (experimental, a bit slower than MobileGlues on some devices, can help where the GLES driver is weak)
-- Version list loads in parallel and is cached (shows vanilla immediately); skin preview keeps rotating; low-memory JVM profile for devices under 3.5 GB; LWJGL debug output disabled
-
-Что нового?
-- Исправлено: экран «Открыть для сети» (поле порта) перестраивался и значение сбрасывалось при открытии экранной клавиатуры (игра теперь получает событие изменения размера, только когда размер окна правда изменился)
-- Исправлено: библиотеки LWJGL (например, для 26.3) скачивались заново при переключении версий, загрузка могла оборваться, а игра стартовала посреди скачивания: теперь библиотеки хранятся для каждой версии отдельно, загрузка повторяется и проверяется, без библиотек игра не запускается, а подготовка идёт только одна за раз
-- Кнопка «Поделиться IP» (↘) в игре стала обычной кнопкой управления (тот же вид, двигается в редакторе раскладки) и стоит перед мышью; мышь сдвинута правее
-- «Новый интерфейс» и «Компактный режим» теперь включены по умолчанию (вернуть можно в Настройки → Оформление); в компактном режиме пункт «Язык» виден в боковом меню
-- Онлайн по LAN: ZeroTier встроен в лаунчер (отдельное приложение не нужно): новая страница меню со сворачиваемыми карточками (включить, подключённые сети, мои сети через ZeroTier Central по токену Legacy-аккаунта, подключение); автоподключение и авторизация, автообновление раз в 10 с, IP друзей можно скопировать, порт хоста берётся из LAN-порта игры; в игре кнопка ↘ «Поделиться IP» и строка [ZeroTier] IP: в чате
-- Автоисправление вылета: после вылета лаунчер перебирает версии модов по очереди, запуская игру в скрытом окне (от новых к старым, недостающие зависимости докачиваются, виновный мод отключается, когда версии кончились), пока игра не дойдёт до главного меню, и пишет «Готово»; копия модов сохраняется и возвращается кнопкой; если приложение смахнули, уведомлений нет
-- Настройки → Лаунчер: «Обновление лаунчера» Выкл / Сообщать / Скачивать (APK релиза скачивается в папку лаунчера, хранится только последняя версия, предлагается установка)
-- Исправлено: кнопка экранной клавиатуры переставала работать после Enter; экран «Открыть для сети» (поле порта) сбрасывался при открытии клавиатуры
-- Новый интерфейс: круглая кнопка «назад» со стрелкой по центру, отступы в горизонтальном виде, полоса загрузки между версией и «Играть» в горизонтальном виде, скруглённая кнопка входа Microsoft, плавное открытие «Загрузок»
-- Добавлена лицензия Mobilix Attribution License: форки разрешены при заметном указании оригинала
-- Новый рендерер «Zink + Turnip (Adreno)»: Vulkan-драйвер Mesa Turnip для видеочипов Adreno, выбор в Настройки → Игра → Рендерер (экспериментально, arm64, только Adreno)
-- Исправлено: вылет Zink при запуске; MobileGlues + ANGLE теперь выводит картинку на экран
-- Экспериментальный «Новый интерфейс» (Настройки → Оформление): скруглённые карточки, живой фон в цветах темы, плавающая нижняя панель, новые страницы и диалоги, настройки в сворачиваемых группах; работает со своими темами
-- Лог прошлого запуска сохраняется и виден в самом лаунчере (Последний / Предыдущий / Копировать) вместе с причиной вылета; автообновление модов работает при каждом запуске и находит конфликтующий мод по id; кнопки мипмапов в одну строку
-- Код разбит на отдельные файлы (поведение не менялось)
-- Настройки → Специальное: «Скачивание модов» Авто / Вручную (вручную можно выбрать нужную версию файла)
-- Настройки → Специальное: «Скрыть системные кнопки в игре» (раскладка открывается удержанием Esc / «II» в Bedrock 5 с); экранная клавиатура принимает ввод от клавиатур, которые присылают цифры и точки как нажатия клавиш (ввод IP сервера); закрытие вкладки игры больше не считается вылетом
-- Настройки → Специальное: режим «Управление Bedrock» (касание — удар, удержание — добыча, раскладка как в Pocket Edition со своими настраиваемыми кнопками)
-- Рендеры: профили Renderlix (Авто / Стандарт / Sodium+Iris / Свой: версия OpenGL, ошибки шейдеров, compute-шейдеры, кэш шейдеров, FSR 1)
-- Настройки → Игра: выбор рендерера (Авто / MobileGlues / MobileGlues + ANGLE / gl4es); 1.13–1.16.5 теперь можно запускать на MobileGlues; может помочь на Mali и старых Adreno
-- Экспериментально: 32-битные (arm) и x86 / x86_64 устройства в том же APK (версии до 1.16.5, gl4es)
-- Minecraft 26.1+ (Java 25): отдельная Java 25 ставится сама; поворот экрана больше не прерывает скачивание
+- Fixed: Minecraft 26.x (26.1, 26.3...) did not start: the launcher now uses a full set of LWJGL 3.4.x natives, a newer OpenAL Soft 1.24.3 (sound for 26.x), and supports the new GLFW input calls
+- Macros: new section at the very end of Settings. A macro is a chain of tiles (keys, mouse buttons, pauses); record it by tapping keys on a keypad (pauses are remembered), start from a template (item swap, eat and return to the slot, drop a stack, shield block, double hit), reorder or edit tiles and check the timing with "Test". Assign a macro to any control button: Assign key → Macro
+- Catalog filters: new "Auto-pick the right version" switch (same as Settings → Mod downloads). On: the right file is picked and required dependencies are downloaded automatically (Modrinth and CurseForge). Off: you pick the file and see its dependencies before downloading
+- New app icon
+RU: Что нового
+- Исправлено: Minecraft 26.x (26.1, 26.3...) не запускался: лаунчер теперь берёт полный набор нативных библиотек LWJGL 3.4.x, новый OpenAL Soft 1.24.3 (звук в 26.x) и поддерживает новые вызовы ввода GLFW
+- Макросы: новый раздел в самом конце настроек. Макрос — цепочка плиток (клавиши, кнопки мыши, паузы): запишите его нажатиями на клавиатуре (паузы запоминаются), начните с заготовки (свап предметов, съесть и вернуть слот, бросить стак, блок щитом, двойной удар), меняйте порядок и плитки, проверяйте тайминг кнопкой «Проверить». Макрос назначается любой кнопке управления: Назначить клавишу → Макрос
+- Фильтры каталога: новый переключатель «Автоскачивание нужной версии» (тот же, что Настройки → Скачивание модов). Вкл: нужный файл выбирается сам, обязательные зависимости скачиваются автоматически (Modrinth и CurseForge). Выкл: вы выбираете файл и видите зависимости перед скачиванием
+- Новая иконка приложения
