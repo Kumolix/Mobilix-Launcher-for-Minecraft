@@ -1426,8 +1426,8 @@ class MainActivity : Activity() {
         if (modern) col = colL                  // новый интерфейс: «Лаунчер»
         col.addView(TextView(this).apply { text = tr("Скачивание модов", "Mod downloads"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Авто", "Auto"), tr("Вручную", "Manual")), if (prefs.getBoolean("modDlManual", false)) 1 else 0) { i -> prefs.edit().putBoolean("modDlManual", i == 1).apply() })
-        col.addView(note(tr("Авто: лаунчер сам берёт свежую версию под вашу игру и загрузчик. Вручную: при скачивании открывается список версий мода (совместимые отмечены ✓), вы выбираете нужную.",
-            "Auto: the launcher picks the latest version for your game and loader. Manual: a list of the mod's versions opens when you download (compatible ones marked ✓) and you pick the one you need.")))
+        col.addView(note(tr("Авто: лаунчер сам берёт свежую версию под вашу игру и загрузчик и докачивает обязательные зависимости. Вручную: при скачивании открывается список версий мода (совместимые отмечены ✓), вы выбираете нужную и видите зависимости. Переключатель есть и в фильтрах каталога.",
+            "Auto: the launcher picks the latest version for your game and loader and downloads required dependencies. Manual: a list of the mod's versions opens when you download (compatible ones marked ✓) and you pick the one you need.")))
         if (modern) col = colC                  // новый интерфейс: «Управление»
         col.addView(TextView(this).apply { text = tr("Скрыть системные кнопки в игре", "Hide system buttons in game"); setTextColor(Th.text); setPadding(0, dp(14), 0, dp(6)) })
         col.addView(chipRow(listOf(tr("Выкл", "Off"), tr("Вкл", "On")), if (prefs.getBoolean("hideSys", false)) 1 else 0) { i ->
@@ -2234,6 +2234,10 @@ class MainActivity : Activity() {
                 tr("Скрывает в результатах то, что уже скачано.", "Hides items you have already downloaded."), hideDl) { v ->
                 hideDl = v; prefs.edit().putBoolean("catHideDl", v).apply(); refreshFilt(); search()
             }
+            chip(tr("Автоскачивание нужной версии", "Auto-pick the right version"),
+                tr("Включено: лаунчер сам берёт подходящую версию и сразу докачивает обязательные зависимости. Выключено: вы выбираете файл вручную и перед скачиванием видите зависимости. Это та же настройка, что «Скачивание модов» в настройках.",
+                    "On: the launcher picks the right version and downloads required dependencies automatically. Off: you pick the file manually and see the dependencies before downloading. This is the same setting as “Mod downloads” in Settings."),
+                !prefs.getBoolean("modDlManual", false)) { v -> prefs.edit().putBoolean("modDlManual", !v).apply() }
             MobDialog(this).setTitle(tr("Фильтры", "Filters")).setView(pane)
                 .setPositiveButton(tr("Готово", "Done"), null).show()
         }
@@ -2324,7 +2328,7 @@ class MainActivity : Activity() {
                     }
                     MobDialog(this)
                         .setTitle(title + "\n" + tr("выберите файл (на свой риск)", "pick a file (at your own risk)"))
-                        .setItems(items.toTypedArray()) { _, i -> downloadVersion(id, type, title, sorted[i], onDone) }
+                        .setItems(items.toTypedArray()) { _, i -> mrAskDeps(sorted[i], type) { w -> downloadVersion(id, type, title, sorted[i], onDone, w) } }
                         .setNegativeButton(tr("Отмена", "Cancel"), null).show()
                 }
             } catch (e: Throwable) {
@@ -2333,11 +2337,12 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private fun downloadVersion(id: String, type: String, title: String, v: JSONObject, onDone: () -> Unit) {
+    private fun downloadVersion(id: String, type: String, title: String, v: JSONObject, onDone: () -> Unit, withDeps: Boolean = false) {
         Toast.makeText(this, tr("Скачивание…", "Downloading…"), Toast.LENGTH_SHORT).show()
         Thread {
             var res = ""
             var dl: File? = null
+            var depsN = 0
             try {
                 val files = v.getJSONArray("files")
                 var f = files.getJSONObject(0)
@@ -2351,10 +2356,12 @@ class MainActivity : Activity() {
                 val gvs = v.optJSONArray("game_versions"); var gv = curBase()
                 if (gvs != null && gvs.length() > 0) { var has = false; for (k in 0 until gvs.length()) if (gvs.getString(k) == gv) has = true; if (!has) gv = gvs.getString(gvs.length() - 1) }
                 idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title).put("l", ld).put("v", gv)) })
+                if (withDeps && type == "mod") depsN = mrInstallDeps(v, ld.ifEmpty { null })
                 res = "ok"
             } catch (e: Throwable) { res = e.message ?: e.toString() }
             runOnUiThread {
                 if (res == "ok") {
+                    if (depsN > 0) Toast.makeText(this, tr("Докачано зависимостей: $depsN", "Dependencies downloaded: $depsN"), Toast.LENGTH_LONG).show()
                     if (type == "datapack") dl?.let { offerDatapackWorld(it) }
                     Toast.makeText(this, tr("Скачано: $title. Версия может не подойти к вашей игре.", "Downloaded: $title. The version may not fit your game."), Toast.LENGTH_LONG).show()
                     onDone()

@@ -128,8 +128,8 @@ internal fun MainActivity.cfSearch(query: String, type: String, loader: String, 
 }
 
 /** Скачивает файл CurseForge под текущую версию/загрузчик. Возвращает имя файла или бросает исключение. */
-internal fun MainActivity.cfDownloadFile(modId: Int, type: String, loader: String, chosen: JSONObject? = null): String {
-    if (chosen != null) return cfDownloadChosen(chosen, type, loader)
+internal fun MainActivity.cfDownloadFile(modId: Int, type: String, loader: String, chosen: JSONObject? = null, withDeps: Boolean = true): String {
+    if (chosen != null) return cfDownloadChosen(chosen, type, loader, withDeps)
     var p = "/mods/$modId/files?pageSize=30&gameVersion=" + java.net.URLEncoder.encode(curBase(), "UTF-8")
     if (type == "mod" && cfLoaderType(loader) != 0) p += "&modLoaderType=" + cfLoaderType(loader)
     val files = cfGet(p).getJSONArray("data")
@@ -141,10 +141,10 @@ internal fun MainActivity.cfDownloadFile(modId: Int, type: String, loader: Strin
         val score = (4 - o.optInt("releaseType", 3)) * 1_000_000_000_000L + (o.optString("fileDate").filter { it.isDigit() }.take(14).toLongOrNull() ?: 0L) / 1000
         if (score > best) { best = score; f = o }
     }
-    return cfDownloadChosen(f!!, type, loader)
+    return cfDownloadChosen(f!!, type, loader, withDeps)
 }
 
-internal fun MainActivity.cfDownloadChosen(file: JSONObject, type: String, loader: String): String {
+internal fun MainActivity.cfDownloadChosen(file: JSONObject, type: String, loader: String, withDeps: Boolean = true): String {
     val name = file.getString("fileName")
     val url = if (file.isNull("downloadUrl")) "" else file.optString("downloadUrl")
     if (url.isEmpty()) throw RuntimeException("__cfsite")
@@ -153,7 +153,7 @@ internal fun MainActivity.cfDownloadChosen(file: JSONObject, type: String, loade
     val dest = File(curGameDir(), typeDir(type) + "/" + name)
     if (!download(url, dest, sha)) throw RuntimeException(tr("ошибка загрузки", "download failed"))
     // обязательные зависимости (relationType 3): ставим, что получится
-    if (type == "mod") {
+    if (type == "mod" && withDeps) {
         val deps = file.optJSONArray("dependencies")
         if (deps != null) for (i in 0 until deps.length()) {
             val d = deps.getJSONObject(i)
@@ -187,21 +187,21 @@ internal fun MainActivity.cfPickFile(modId: Int, type: String, loader: String, t
                     (if (fits(o)) "✓ " else "✗ ") + o.optString("displayName", o.optString("fileName")) + "\n" + gs
                 }
                 MobDialog(this).setTitle(title + "\n" + tr("выберите файл (CurseForge)", "pick a file (CurseForge)"))
-                    .setItems(items.toTypedArray()) { _, i -> cfInstall(modId, type, loader, title, btn, onDone, all[i]) }
+                    .setItems(items.toTypedArray()) { _, i -> cfAskDeps(all[i], type) { w -> cfInstall(modId, type, loader, title, btn, onDone, all[i], w) } }
                     .setNegativeButton(tr("Отмена", "Cancel"), null).show()
             }
         } catch (e: Throwable) { runOnUiThread { btn.isEnabled = true; btn.alpha = 1f; Toast.makeText(this, e.message ?: e.toString(), Toast.LENGTH_LONG).show() } }
     }.start()
 }
 
-internal fun MainActivity.cfInstall(modId: Int, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit, chosen: JSONObject? = null) {
+internal fun MainActivity.cfInstall(modId: Int, type: String, loader: String, title: String, btn: Button, onDone: () -> Unit, chosen: JSONObject? = null, withDeps: Boolean = true) {
     btn.isEnabled = false; btn.alpha = 0.6f; btn.text = tr("Скачивание…", "Downloading…")
     Thread {
         var res = ""
         var destFile: File? = null
         var site = ""
         try {
-            val name = cfDownloadFile(modId, type, loader, chosen)
+            val name = cfDownloadFile(modId, type, loader, chosen, withDeps)
             destFile = File(curGameDir(), typeDir(type) + "/" + name)
             idxSave(idx().apply { put("cf:$modId", JSONObject().put("t", type).put("f", name).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase())) })
             res = "ok"
@@ -237,6 +237,7 @@ internal fun MainActivity.installProject(id: String, type: String, loader: Strin
     Thread {
         var res = ""
         var destFile: File? = null
+        var depsN = 0
         try {
             val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") +
                 (if (type == "mod") "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(loader)).toString(), "UTF-8") else "")
@@ -250,9 +251,11 @@ internal fun MainActivity.installProject(id: String, type: String, loader: Strin
             val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
             if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
             idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase())) })
+            if (type == "mod") depsN = mrInstallDeps(vers.getJSONObject(0), loader)
             res = "ok"
         } catch (e: Throwable) { res = e.message ?: e.toString() }
         runOnUiThread {
+            if (res == "ok" && depsN > 0) Toast.makeText(this, tr("Докачано зависимостей: $depsN", "Dependencies downloaded: $depsN"), Toast.LENGTH_LONG).show()
             if (res == "ok") { onDone(); if (type == "mod") suggestRenderlix(title); if (type == "datapack") destFile?.let { offerDatapackWorld(it) } }
             else {
                 btn.isEnabled = true; btn.alpha = 1f; btn.text = tr("Скачать", "Download")
@@ -261,5 +264,89 @@ internal fun MainActivity.installProject(id: String, type: String, loader: Strin
                 else Toast.makeText(this, res, Toast.LENGTH_LONG).show()
             }
         }
+    }.start()
+}
+
+
+// ---------- зависимости модов ----------
+
+/** Показывает обязательные зависимости и спрашивает, качать ли их вместе с модом. */
+private fun MainActivity.depsDialog(names: List<String>, go: (Boolean) -> Unit) {
+    runOnUiThread {
+        MobDialog(this).setTitle(tr("Зависимости мода", "Mod dependencies"))
+            .setMessage(tr("Для работы нужны:\n", "Required to work:\n") + names.joinToString("\n") { "• $it" })
+            .setPositiveButton(tr("Скачать с зависимостями", "Download with dependencies")) { _, _ -> go(true) }
+            .setNeutralButton(tr("Только мод", "Mod only")) { _, _ -> go(false) }
+            .setNegativeButton(tr("Отмена", "Cancel"), null).show()
+    }
+}
+
+/** Modrinth: id обязательных зависимостей версии. */
+internal fun MainActivity.mrRequiredDeps(v: JSONObject): List<String> {
+    val out = ArrayList<String>()
+    val d = v.optJSONArray("dependencies") ?: return out
+    for (i in 0 until d.length()) {
+        val o = d.getJSONObject(i)
+        if (o.optString("dependency_type") == "required" && !o.isNull("project_id")) out.add(o.getString("project_id"))
+    }
+    return out.distinct()
+}
+
+private fun MainActivity.isInstalled(key: String): Boolean {
+    val rec = idx().optJSONObject(key)
+    return rec != null && packFile(rec.optString("t"), rec.optString("f")).exists()
+}
+
+/** Скачивает недостающие обязательные зависимости (до двух уровней вглубь). Возвращает, сколько докачано. */
+internal fun MainActivity.mrInstallDeps(v: JSONObject, loader: String?, seen: MutableSet<String> = HashSet(), depth: Int = 0): Int {
+    var n = 0
+    for (pid in mrRequiredDeps(v)) {
+        if (!seen.add(pid) || isInstalled(pid)) continue
+        try {
+            var g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8")
+            if (!loader.isNullOrEmpty()) g += "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(loader)).toString(), "UTF-8")
+            val vers = JSONArray(apiGet("/project/$pid/version$g"))
+            if (vers.length() == 0) continue
+            val dv = vers.getJSONObject(0)
+            val files = dv.getJSONArray("files")
+            var f = files.getJSONObject(0)
+            for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
+            val dest = File(curGameDir(), typeDir("mod") + "/" + f.getString("filename"))
+            if (!download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) continue
+            val title = try { JSONObject(apiGet("/project/$pid")).optString("title", pid) } catch (_: Throwable) { pid }
+            idxSave(idx().apply { put(pid, JSONObject().put("t", "mod").put("f", f.getString("filename")).put("n", title).put("l", loader ?: "").put("v", curBase())) })
+            n++
+            if (depth < 2) n += mrInstallDeps(dv, loader, seen, depth + 1)
+        } catch (_: Throwable) {}
+    }
+    return n
+}
+
+/**
+ * Modrinth, ручной режим: показывает зависимости выбранной версии и спрашивает, качать ли их.
+ * В автоматическом режиме зависимости качаются сразу, без вопроса.
+ */
+internal fun MainActivity.mrAskDeps(v: JSONObject, type: String, go: (Boolean) -> Unit) {
+    if (type != "mod" || !prefs.getBoolean("modDlManual", false)) { go(type == "mod"); return }
+    Thread {
+        val ids = mrRequiredDeps(v).filter { !isInstalled(it) }
+        if (ids.isEmpty()) { runOnUiThread { go(false) }; return@Thread }
+        val names = try {
+            val arr = JSONArray(apiGet("/projects?ids=" + java.net.URLEncoder.encode(JSONArray(ids).toString(), "UTF-8")))
+            (0 until arr.length()).map { arr.getJSONObject(it).optString("title") }.filter { it.isNotEmpty() }.ifEmpty { ids }
+        } catch (_: Throwable) { ids }
+        depsDialog(names, go)
+    }.start()
+}
+
+/** CurseForge, ручной режим: то же для выбранного файла. */
+internal fun MainActivity.cfAskDeps(file: JSONObject, type: String, go: (Boolean) -> Unit) {
+    if (type != "mod" || !prefs.getBoolean("modDlManual", false)) { go(type == "mod"); return }
+    Thread {
+        val ids = ArrayList<Int>()
+        file.optJSONArray("dependencies")?.let { d -> for (i in 0 until d.length()) { val o = d.getJSONObject(i); if (o.optInt("relationType") == 3 && !isInstalled("cf:" + o.optInt("modId"))) ids.add(o.optInt("modId")) } }
+        if (ids.isEmpty()) { runOnUiThread { go(false) }; return@Thread }
+        val names = ids.distinct().map { id -> try { cfGet("/mods/$id").getJSONObject("data").optString("name", "CF $id") } catch (_: Throwable) { "CF $id" } }
+        depsDialog(names, go)
     }.start()
 }
