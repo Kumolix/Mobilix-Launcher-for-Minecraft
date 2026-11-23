@@ -75,6 +75,7 @@ public final class Display {
 		GL.createCapabilities();
 		GLContext.reset();
 		readSize();
+		System.err.println("[Mobilix] Display.create: запрошено " + mode.getWidth() + "x" + mode.getHeight() + ", реальный размер " + width + "x" + height);
 		installCallbacks();
 		GLFW.glfwSwapInterval(vsync ? 1 : 0);
 		created = true;
@@ -106,7 +107,7 @@ public final class Display {
 		GLFW.glfwSetCursorPosCallback(window, (win, x, y) -> Mouse.onMove(x, y, height));
 		GLFW.glfwSetScrollCallback(window, (win, dx, dy) -> Mouse.onScroll(dy));
 		GLFW.glfwSetFramebufferSizeCallback(window, (win, w, h) -> {
-			if (w > 0 && h > 0 && (w != width || h != height)) { width = w; height = h; resizedPending = true; }
+			if (w > 0 && h > 0 && (w != width || h != height)) { System.err.println("[Mobilix] Display: размер изменился " + width + "x" + height + " -> " + w + "x" + h); width = w; height = h; resizedPending = true; }
 		});
 		GLFW.glfwSetWindowCloseCallback(window, win -> closeRequested = true);
 		GLFW.glfwSetWindowFocusCallback(window, (win, focused) -> active = focused);

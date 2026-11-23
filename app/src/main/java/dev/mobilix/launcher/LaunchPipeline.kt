@@ -558,6 +558,7 @@ private fun MainActivity.buildLaunchArgs(p: LaunchPlan) {
         val dm = if (prefs.getBoolean("fullscreen", false)) android.util.DisplayMetrics().also { windowManager.defaultDisplay.getRealMetrics(it) } else resources.displayMetrics
         val rsc = effectiveScale().coerceIn(30, 100)
         val sw = maxOf(dm.widthPixels, dm.heightPixels) * rsc / 100; val sh = minOf(dm.widthPixels, dm.heightPixels) * rsc / 100
+        log("Размер окна для игры: ${sw}x$sh (экран ${maxOf(dm.widthPixels, dm.heightPixels)}x${minOf(dm.widthPixels, dm.heightPixels)}, разрешение рендера $rsc%)")
         val base = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
         val g0 = if (base.contains("--width")) base else base + listOf("--width", sw.toString(), "--height", sh.toString())
         gameArgs = if (oldForge) g0 + listOf("--tweakClass", "dev.mobilix.loader.MobilixTweaker") else g0
