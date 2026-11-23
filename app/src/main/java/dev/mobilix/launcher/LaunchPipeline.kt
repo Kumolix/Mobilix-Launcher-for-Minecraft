@@ -553,8 +553,11 @@ private fun MainActivity.buildLaunchArgs(p: LaunchPlan) {
     val gameArgs: List<String>
     if (legacy) {
         jvmArgs = listOf("-Djava.library.path=${natives.path}", "-cp", p.classpath.joinToString(":"))
-        val dm = resources.displayMetrics
-        val sw = maxOf(dm.widthPixels, dm.heightPixels); val sh = minOf(dm.widthPixels, dm.heightPixels)
+        // размер окна для игры = размер поверхности в GameActivity (с учётом «разрешения рендера» и полного экрана),
+        // иначе 1.12.2 строит интерфейс под полный экран и рисует в меньшую поверхность: меню уезжает вправо вверх
+        val dm = if (prefs.getBoolean("fullscreen", false)) android.util.DisplayMetrics().also { windowManager.defaultDisplay.getRealMetrics(it) } else resources.displayMetrics
+        val rsc = effectiveScale().coerceIn(30, 100)
+        val sw = maxOf(dm.widthPixels, dm.heightPixels) * rsc / 100; val sh = minOf(dm.widthPixels, dm.heightPixels) * rsc / 100
         val base = v.getString("minecraftArguments").trim().split(Regex("\\s+")).map(sub)
         val g0 = if (base.contains("--width")) base else base + listOf("--width", sw.toString(), "--height", sh.toString())
         gameArgs = if (oldForge) g0 + listOf("--tweakClass", "dev.mobilix.loader.MobilixTweaker") else g0
