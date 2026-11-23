@@ -612,6 +612,8 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
     cmd.add("-Djava.awt.headless=true")
     val libPath = (if (lwjglPath != null) "$lwjglPath:" else "") + applicationInfo.nativeLibraryDir
     cmd.add("-Dorg.lwjgl.librarypath=$libPath")
+    // 26.3+ грузит STB через jemalloc, а в наборе LWJGL для Android libjemalloc.so нет: просим системный аллокатор (malloc из libc)
+    cmd.add("-Dorg.lwjgl.system.allocator=system")
     if (lwjglPath != null) {
         cmd.add("-Djna.boot.library.path=$lwjglPath")
         cmd.add("-Djna.nosys=true")
