@@ -114,6 +114,7 @@ internal class LaunchPlan(val profile: String, val play: Boolean) {
     lateinit var clientJar: File
     var lwjglVer = ""
     var jnaVer = ""
+    var jnaOrig = ""
     var jnaPath: String? = null
     val classpath = ArrayList<String>()
     lateinit var indexId: String
@@ -303,6 +304,8 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
     val clientJar = p.clientJar
     val newLwjgl = NEW_LWJGL
     var lwjglVer = ""
+    var jnaVer = ""
+    var jnaOrig = ""
     val libTasks = ArrayList<Task>()
     val cpMap = LinkedHashMap<String, String>()
     val libs = v.getJSONArray("libraries")
@@ -316,7 +319,7 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
         if (!allowed(lib)) continue
         val name = lib.optString("name")
         val art = lib.optJSONObject("downloads")?.optJSONObject("artifact")
-        if (name.startsWith("net.java.dev.jna:jna:") && name.split(":").size == 3) jnaVer = name.split(":")[2]
+        if (name.startsWith("net.java.dev.jna:jna:") && name.split(":").size == 3) { jnaVer = name.split(":")[2]; jnaOrig = jnaVer }
         if (oldGl) {
             // нативные jar и LWJGL 2 нам не нужны: LWJGL 3.3.3 ставится отдельно
             if (name.startsWith("org.lwjgl.lwjgl:lwjgl:") || name.startsWith("org.lwjgl.lwjgl:lwjgl-platform:") ||
@@ -334,7 +337,7 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
             continue
         }
         if (name.startsWith("org.lwjgl:lwjgl:")) lwjglVer = name.split(":")[2]
-        val path: String; var url: String?; var sha: String? = null
+        var path: String; var url: String?; var sha: String? = null
         if (art != null) {
             path = art.getString("path"); url = art.optString("url", ""); sha = art.optString("sha1", "").ifEmpty { null }
         } else if (name.isNotEmpty()) {
@@ -342,6 +345,13 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
             url = lib.optString("url", "https://libraries.minecraft.net/").trimEnd('/')
                 .replace("http://", "https://").replace("files.minecraftforge.net/maven", "maven.minecraftforge.net") + "/" + path
         } else continue
+        // тихая подмена JNA: прошлый запуск с этой версией JNA упал из-за неё (см. CrashDoctor.jnaFailure) — берём 5.13.0, как Amethyst/Pojav
+        if (name == "net.java.dev.jna:jna:$jnaOrig" && jnaOrig.isNotEmpty() && jnaOrig != "5.13.0" && prefs.getString("jnaSwap", "") == jnaOrig) {
+            path = "net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar"
+            url = "https://repo1.maven.org/maven2/$path"; sha = "1200e7ebeedbe0d10062093f32925a912020e747"
+            jnaVer = "5.13.0"
+            log("JNA: $jnaOrig заменена на 5.13.0 (прошлый запуск упал из-за JNA)")
+        }
         val dest = File(librariesDir, path)
         if (!url.isNullOrEmpty() && !(oldForge && art == null && dest.exists())) libTasks.add(Task(url, dest, sha)) else if (!dest.exists()) continue
         val parts = name.split(":")
@@ -383,6 +393,7 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
     downloadAll("Библиотеки", libTasks)
     p.lwjglVer = lwjglVer
     p.jnaVer = jnaVer
+    p.jnaOrig = jnaOrig
 }
 
 /** Шаг 4: ресурсы (звуки, языки), копирование для старых версий. */
@@ -466,6 +477,8 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     // JNA из jar игры содержит только glibc-библиотеку, на Android (bionic) она не грузится: oshi и системная информация падают
     // с «Could not initialize class com.sun.jna.Native». Как в Amethyst/Pojav, берём libjnidispatch.so из AAR той же версии
     p.jnaPath = ensureJna(p.jnaVer)
+    // что запускали: по этим данным checkLastCrash решает, нужна ли подмена, и не крутится по кругу, если подмена уже была
+    prefs.edit().putString("jnaVerLast", p.jnaOrig).putBoolean("jnaRunSwapped", p.jnaVer != p.jnaOrig).apply()
     p.useGl4es = useGl4es
     p.zink = zink
     p.turnipLib = turnipLib

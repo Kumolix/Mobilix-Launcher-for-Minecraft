@@ -924,6 +924,17 @@ class MainActivity : Activity() {
     private fun checkLastCrash() {
         CrashDoctor.trFn = { ru, en -> tr(ru, en) }
         val det = try { CrashDoctor.detect(this, dataRoot()) } catch (_: Throwable) { null } ?: return
+        if (prefs.getLong("jnaSeen", 0L) != det.start) {
+            // тихая подмена JNA: если вылет вызван JNA и подмены ещё не было, следующий запуск возьмёт JNA 5.13.0 без диалогов
+            prefs.edit().putLong("jnaSeen", det.start).apply()
+            Thread {
+                try {
+                    val last = prefs.getString("jnaVerLast", "") ?: ""
+                    if (last.isNotEmpty() && last != "5.13.0" && !prefs.getBoolean("jnaRunSwapped", false) && CrashDoctor.jnaFailure(det))
+                        prefs.edit().putString("jnaSwap", last).apply()
+                } catch (_: Throwable) {}
+            }.start()
+        }
         if (prefs.getLong("crashSeen", 0L) == det.start) return
         prefs.edit().putLong("crashSeen", det.start).apply()
         Thread {
