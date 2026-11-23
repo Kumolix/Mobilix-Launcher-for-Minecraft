@@ -195,6 +195,36 @@ internal fun MainActivity.downloadLwjgl(version: String): File? {
     return null
 }
 
+/**
+ * Нативная часть JNA для Android: libjnidispatch.so лежит в AAR (jni/arm64-v8a) на Maven Central, версия должна совпадать с jar игры
+ * (JNA сверяет версии). Версии до 5.x и не-arm64 не трогаем. Ошибка не мешает запуску: игра стартует и без системной информации.
+ */
+internal fun MainActivity.ensureJna(ver: String): String? {
+    if (!isArm64 || ver.isEmpty()) return null
+    val major = ver.substringBefore('.').toIntOrNull() ?: return null
+    if (major < 5) { log("JNA $ver: версии до 5.x не поддерживаются, нативная часть не подставляется."); return null }
+    val dir = File(filesDir, "jna/$ver")
+    val so = File(dir, "libjnidispatch.so")
+    if (so.exists() && so.length() > 10_000) { log("JNA $ver: libjnidispatch.so уже установлена."); return dir.path }
+    return try {
+        dir.mkdirs()
+        val aar = File(dataRoot(), "jna-$ver.aar")
+        log("JNA $ver: скачивание libjnidispatch.so (AAR)")
+        downloadBig("https://repo1.maven.org/maven2/net/java/dev/jna/jna/$ver/jna-$ver.aar", aar)
+        java.util.zip.ZipFile(aar).use { z ->
+            val e = z.getEntry("jni/arm64-v8a/libjnidispatch.so") ?: throw RuntimeException("в AAR нет jni/arm64-v8a/libjnidispatch.so")
+            z.getInputStream(e).use { i -> so.outputStream().use { o -> i.copyTo(o) } }
+        }
+        aar.delete()
+        so.setReadable(true, false); so.setExecutable(true, false)
+        dir.path
+    } catch (e: Exception) {
+        so.delete()
+        log("JNA $ver: не удалось получить libjnidispatch.so ($e)")
+        null
+    }
+}
+
 internal fun MainActivity.extractZip(archive: File, dest: File) {
     val destPath = dest.canonicalPath
     ZipInputStream(BufferedInputStream(archive.inputStream())).use { zin ->
