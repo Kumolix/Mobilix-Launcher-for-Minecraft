@@ -6,11 +6,12 @@
 
 | Что | Версия | Для чего | Лицензия | Где копия |
 |---|---|---|---|---|
-| LWJGL (core, glfw, opengl, openal) | 3.3.3 | графика, окно и звук игры | BSD-3-Clause | `maven/` |
+| LWJGL (core, glfw, opengl, openal) | 3.3.3 (старые версии), для 26.x jar берётся из описания игры, нативы 3.4.3 | графика, окно и звук игры | BSD-3-Clause | `maven/` |
 | ASM | 9.7 | слой совместимости LWJGL 2 | BSD-3-Clause | `maven/` |
 | Apache Commons Compress | 1.26.2 | распаковка Java-рантайма | Apache-2.0 | `maven/` |
 | XZ for Java | 1.9 | распаковка `.tar.xz` | Public Domain | `maven/` |
-| OpenAL Soft | 1.23.1 | звук (собирается в CI) | LGPL-2.1 | `sources/` |
+| OpenAL Soft | 1.24.3 (основная сборка), 1.23.1 (extra-abi) | звук (собирается в CI) | LGPL-2.1 | `sources/` |
+| JNA (libjnidispatch.so для Android) | та же, что в jar игры (5.x) | нативная часть из AAR на Maven Central, jar остаётся из описания игры | Apache-2.0 / LGPL-2.1 | загружается при запуске |
 | gl4es | последний коммит | OpenGL для версий 1.8–1.16.5 | MIT | `sources/` |
 | MobileGlues (плагин) | последний релиз | OpenGL для 1.17 и новее | LGPL-2.1 | релиз `libraries` |
 | OpenJDK 21 для Android arm64 | из 4 сторонних репозиториев | Java-рантайм | GPLv2 + Classpath Exception | релиз `libraries` |

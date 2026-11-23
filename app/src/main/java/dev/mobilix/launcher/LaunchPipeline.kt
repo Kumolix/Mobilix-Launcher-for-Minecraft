@@ -113,6 +113,8 @@ internal class LaunchPlan(val profile: String, val play: Boolean) {
     var oldGl = false
     lateinit var clientJar: File
     var lwjglVer = ""
+    var jnaVer = ""
+    var jnaPath: String? = null
     val classpath = ArrayList<String>()
     lateinit var indexId: String
     lateinit var assetsForGame: File
@@ -329,6 +331,7 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
         if (!allowed(lib)) continue
         val name = lib.optString("name")
         val art = lib.optJSONObject("downloads")?.optJSONObject("artifact")
+        if (name.startsWith("net.java.dev.jna:jna:") && name.split(":").size == 3) jnaVer = name.split(":")[2]
         if (oldGl) {
             // нативные jar и LWJGL 2 нам не нужны: LWJGL 3.3.3 ставится отдельно
             if (name.startsWith("org.lwjgl.lwjgl:lwjgl:") || name.startsWith("org.lwjgl.lwjgl:lwjgl-platform:") ||
@@ -394,6 +397,7 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
     classpath.add(clientJar.path)
     downloadAll("Библиотеки", libTasks)
     p.lwjglVer = lwjglVer
+    p.jnaVer = jnaVer
 }
 
 /** Шаг 4: ресурсы (звуки, языки), копирование для старых версий. */
@@ -487,6 +491,9 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     p.java = java
     p.rt = rt
     p.lwjglPath = lwjglPath
+    // JNA из jar игры содержит только glibc-библиотеку, на Android (bionic) она не грузится: oshi и системная информация падают
+    // с «Could not initialize class com.sun.jna.Native». Как в Amethyst/Pojav, берём libjnidispatch.so из AAR той же версии
+    p.jnaPath = ensureJna(p.jnaVer)
     p.useGl4es = useGl4es
     p.zink = zink
     p.turnipLib = turnipLib
@@ -615,7 +622,7 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
     // 26.3+ грузит STB через jemalloc, а в наборе LWJGL для Android libjemalloc.so нет: просим системный аллокатор (malloc из libc)
     cmd.add("-Dorg.lwjgl.system.allocator=system")
     if (lwjglPath != null) {
-        cmd.add("-Djna.boot.library.path=$lwjglPath")
+        cmd.add("-Djna.boot.library.path=" + (p.jnaPath?.let { "$it:" } ?: "") + lwjglPath)
         cmd.add("-Djna.nosys=true")
     }
     // для Zink функции GL ищутся через glXGetProcAddress из нашей libglfw.so (она перенаправляет в OSMesaGetProcAddress)
