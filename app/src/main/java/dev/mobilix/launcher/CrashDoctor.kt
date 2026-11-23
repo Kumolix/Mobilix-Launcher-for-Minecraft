@@ -121,6 +121,15 @@ object CrashDoctor {
         }
     } catch (_: Throwable) { "" }
 
+    /** Вылет из-за JNA: нативная часть не загрузилась или не подошла по версии (видно в отчёте о вылете и latest.log). */
+    fun jnaFailure(d: Detected): Boolean {
+        val txt = StringBuilder()
+        latestCrashReport(d.gameDir, d.start)?.let { txt.append(tail(it, 200_000)) }
+        File(d.gameDir, "logs/latest.log").takeIf { it.exists() && it.lastModified() >= d.start - 5000 }?.let { txt.append(tail(it, 200_000)) }
+        return Regex("(NoClassDefFoundError|UnsatisfiedLinkError|ExceptionInInitializerError|incompatible JNA)[^\\n]*(com\\.sun\\.jna|jnidispatch)|(com\\.sun\\.jna|jnidispatch)[^\\n]*(UnsatisfiedLinkError|incompatible)")
+            .containsMatchIn(txt)
+    }
+
     fun analyze(d: Detected): Report {
         val gd = d.gameDir
         val mods = enabledMods(gd)
