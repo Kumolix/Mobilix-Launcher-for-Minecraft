@@ -951,6 +951,7 @@ class MainActivity : Activity() {
             sb.append(tr("Подозрительные моды:", "Suspect mods:")).append('\n')
             rep.suspects.forEach { sb.append("• ").append(it.mod.name).append(" — ").append(it.why).append('\n') }
         } else sb.append(tr("Виновный мод не определён.", "No culprit mod was identified.")).append('\n')
+        rep.replace.forEach { (did, pred, req) -> sb.append('\n').append(tr("Несовместимые версии: ", "Incompatible versions: ")).append(rep.mods.firstOrNull { it.id == req }?.name ?: req.ifEmpty { "?" }).append(tr(" требует ", " requires ")).append(rep.mods.firstOrNull { it.id == did }?.name ?: did).append(" ").append(pred).append('\n') }
         if (rep.missing.isNotEmpty()) sb.append('\n').append(tr("Не хватает модов-зависимостей: ", "Missing dependency mods: ")).append(rep.missing.joinToString(", ")).append('\n')
         rep.notes.forEach { sb.append('\n').append(it) }
         if (rep.hasRenderMod && prefs.getInt("renderPreset", 2) == 0)
@@ -958,7 +959,7 @@ class MainActivity : Activity() {
         val d = MobDialog(this).setTitle(tr("Вылет игры", "Game crash")).setMessage(sb.toString())
             .setNegativeButton(tr("Закрыть", "Close"), null)
             .setNeutralButton(tr("Вручную", "Manually")) { _, _ -> crashManual(rep, rep.suspects.map { it.mod.id }.toMutableSet()) }
-        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
+        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty() || rep.replace.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
             val off = if (rep.suspects.isNotEmpty()) CrashDoctor.disable(rep, rep.suspects.map { it.mod }) else emptyList()
             Toast.makeText(this, tr("Исправляю…", "Fixing…"), Toast.LENGTH_SHORT).show()
             Thread {
@@ -982,6 +983,12 @@ class MainActivity : Activity() {
                             upBad.add(old.name + " (" + tr("нужна версия ≥ $need, для вашей версии игры её нет, а подходящую старую версию $breaker подобрать не удалось", "need version ≥ $need, none for your game version, and no matching older $breaker was found") + ")")
                         }
                     }
+                }
+                // версия мода не подходит тому, кто её требует (Iris просит Sodium 0.9.x): ставим нужную версию, иначе отключаем «требующего»
+                for ((did, pred, req) in rep.replace) {
+                    val r = try { replaceByRule(rep, did, pred, req) } catch (_: Throwable) { null }
+                    if (r != null) upOk.add(r)
+                    else upBad.add((rep.mods.firstOrNull { it.id == did }?.name ?: did) + " (" + tr("нужна версия $pred, подобрать не удалось", "need version $pred, could not find one") + ")")
                 }
                 // зависимости считаем заново, уже без отключённых модов
                 val need = (CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)) + rep.missing.filter { m -> off.isEmpty() || CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)).contains(m) }).distinct()
