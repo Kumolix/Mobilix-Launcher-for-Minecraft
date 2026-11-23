@@ -1115,7 +1115,7 @@ class MainActivity : Activity() {
     private fun autoScale(): Int = GpuTier.tier(prefs.getString("gpu", "") ?: "")?.let { GpuTier.scale(it) } ?: 100
 
     /** Разрешение рендера: 0 в настройках = авто. */
-    private fun effectiveScale(): Int = prefs.getInt("renderScale", 0).let { if (it <= 0) autoScale() else it.coerceIn(30, 100) }
+    internal fun effectiveScale(): Int = prefs.getInt("renderScale", 0).let { if (it <= 0) autoScale() else it.coerceIn(30, 100) }
 
     /** Узнаёт видеочип (один раз) коротким офскрин-контекстом EGL, чтобы «Авто» работало уже с первого запуска. */
     internal fun ensureGpu() {
