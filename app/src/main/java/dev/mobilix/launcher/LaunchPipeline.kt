@@ -567,7 +567,9 @@ private fun MainActivity.buildLaunchArgs(p: LaunchPlan) {
     try {
         val lc = v.optJSONObject("logging")?.optJSONObject("client")
         val lf = lc?.optJSONObject("file")
-        if (lc != null && lf != null && jvmArgs.none { it.startsWith("-Dlog4j.configurationFile") }) {
+        // только 1.7–1.16.5: у них нет встроенной защиты, а конфиги Mojang пишут консоль в XML (в 1.17+ родной текстовый лог лучше)
+        val minor = baseVer.split(".").getOrNull(1)?.toIntOrNull() ?: 99
+        if (lc != null && lf != null && baseVer.startsWith("1.") && minor <= 16 && jvmArgs.none { it.startsWith("-Dlog4j.configurationFile") }) {
             val f = File(assetsDir, "log_configs/" + lf.getString("id"))
             if (!f.exists() && !download(lf.getString("url"), f, lf.optString("sha1").ifEmpty { null })) log("log4j: конфиг не скачался, продолжаю без него")
             if (f.exists()) logArgs.add(lc.optString("argument", "-Dlog4j.configurationFile=\${path}").replace("\${path}", f.path))
