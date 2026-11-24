@@ -116,6 +116,8 @@ internal class LaunchPlan(val profile: String, val play: Boolean) {
     var jnaVer = ""
     var jnaOrig = ""
     var jnaPath: String? = null
+    var usesSdl = false          // 26.3+: в списке библиотек есть org.lwjgl:lwjgl-sdl (SDL3 вместо GLFW)
+    var sdl3Dir: String? = null
     val classpath = ArrayList<String>()
     lateinit var indexId: String
     lateinit var assetsForGame: File
@@ -355,6 +357,7 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
             continue
         }
         if (name.startsWith("org.lwjgl:lwjgl:")) lwjglVer = name.split(":")[2]
+        if (name.startsWith("org.lwjgl:lwjgl-sdl:")) p.usesSdl = true
         var path: String; var url: String?; var sha: String? = null
         if (art != null) {
             path = art.getString("path"); url = art.optString("url", ""); sha = art.optString("sha1", "").ifEmpty { null }
@@ -508,6 +511,8 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     // JNA из jar игры содержит только glibc-библиотеку, на Android (bionic) она не грузится: oshi и системная информация падают
     // с «Could not initialize class com.sun.jna.Native». Как в Amethyst/Pojav, берём libjnidispatch.so из AAR той же версии
     p.jnaPath = ensureJna(p.jnaVer)
+    // 26.3+: SDL3 (libSDL3.so грузится в процесс приложения, дальше LWJGL найдёт её по имени)
+    if (p.usesSdl) p.sdl3Dir = ensureSdl3()
     // что запускали: по этим данным checkLastCrash решает, нужна ли подмена, и не крутится по кругу, если подмена уже была
     prefs.edit().putString("jnaVerLast", p.jnaOrig).putBoolean("jnaRunSwapped", p.jnaVer != p.jnaOrig).apply()
     p.useGl4es = useGl4es
@@ -677,7 +682,7 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
     cmd.add("-Djdk.lang.Process.launchMechanism=FORK")
     cmd.add("-XX:ActiveProcessorCount=" + Runtime.getRuntime().availableProcessors())
     cmd.add("-Dlog4j2.formatMsgNoLookups=true")
-    val libPath = (if (lwjglPath != null) "$lwjglPath:" else "") + applicationInfo.nativeLibraryDir
+    val libPath = (p.sdl3Dir?.let { "$it:" } ?: "") + (if (lwjglPath != null) "$lwjglPath:" else "") + applicationInfo.nativeLibraryDir
     cmd.add("-Dorg.lwjgl.librarypath=$libPath")
     // 26.3+ грузит STB через jemalloc, а в наборе LWJGL для Android libjemalloc.so нет: просим системный аллокатор (malloc из libc)
     cmd.add("-Dorg.lwjgl.system.allocator=system")
