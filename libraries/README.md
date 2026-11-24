@@ -12,6 +12,7 @@
 | XZ for Java | 1.9 | распаковка `.tar.xz` | Public Domain | `maven/` |
 | OpenAL Soft | 1.24.3 (основная сборка), 1.23.1 (extra-abi) | звук (собирается в CI) | LGPL-2.1 | `sources/` |
 | JNA (libjnidispatch.so для Android) | та же, что в jar игры (5.x) | нативная часть из AAR на Maven Central, jar остаётся из описания игры | Apache-2.0 / LGPL-2.1 | загружается при запуске |
+| liblwjgl_tinyfd.so (arm64) | из PojavLauncher | в наборах нативов её нет, а Minecraft 26.2+ грузит её при старте | LGPL-3.0 (PojavLauncher), LWJGL BSD-3-Clause, tinyfiledialogs zlib | `app/src/main/assets/natives/` |
 | gl4es | последний коммит | OpenGL для версий 1.8–1.16.5 | MIT | `sources/` |
 | MobileGlues (плагин) | последний релиз | OpenGL для 1.17 и новее | LGPL-2.1 | релиз `libraries` |
 | OpenJDK 21 для Android arm64 | из 4 сторонних репозиториев | Java-рантайм | GPLv2 + Classpath Exception | релиз `libraries` |
