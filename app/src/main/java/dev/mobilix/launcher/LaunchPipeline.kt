@@ -593,7 +593,19 @@ private fun MainActivity.buildLaunchArgs(p: LaunchPlan) {
         }
         gameArgs = collectArgs(args.optJSONArray("game"), sub)
     }
-    p.jvmArgs = jvmArgs
+    // конфиг log4j из описания версии (как в официальном лаунчере): для 1.7–1.12 без него в консоль идут только ошибки,
+    // а конфиги Mojang закрывают уязвимость Log4Shell (в 1.7–1.11 её закрывает только этот конфиг)
+    val logArgs = ArrayList<String>()
+    try {
+        val lc = v.optJSONObject("logging")?.optJSONObject("client")
+        val lf = lc?.optJSONObject("file")
+        if (lc != null && lf != null && jvmArgs.none { it.startsWith("-Dlog4j.configurationFile") }) {
+            val f = File(assetsDir, "log_configs/" + lf.getString("id"))
+            if (!f.exists() && !download(lf.getString("url"), f, lf.optString("sha1").ifEmpty { null })) log("log4j: конфиг не скачался, продолжаю без него")
+            if (f.exists()) logArgs.add(lc.optString("argument", "-Dlog4j.configurationFile=\${path}").replace("\${path}", f.path))
+        }
+    } catch (e: Exception) { log("log4j: конфиг пропущен ($e)") }
+    p.jvmArgs = logArgs + jvmArgs
     p.gameArgs = gameArgs
 }
 
@@ -655,6 +667,14 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
     cmd.add("-Djava.io.tmpdir=${cacheDir.path}")
     cmd.add("-Duser.home=${gameDir.path}")
     cmd.add("-Djava.awt.headless=true")
+    // как в Amethyst/Pojav: Forge 1.14+ открывает раннее окно через GLFW (у нас его нет), Fabric/Quilt при ошибке запускают отдельный
+    // процесс с окном, posix_spawn на Android не работает (нет jspawnhelper), число ядер берём у системы
+    cmd.add("-XX:+IgnoreUnrecognizedVMOptions")   // на случай старого Java 8 без -XX:ActiveProcessorCount
+    cmd.add("-Dfml.earlyprogresswindow=false")
+    cmd.add("-Dloader.disable_forked_guis=true")
+    cmd.add("-Djdk.lang.Process.launchMechanism=FORK")
+    cmd.add("-XX:ActiveProcessorCount=" + Runtime.getRuntime().availableProcessors())
+    cmd.add("-Dlog4j2.formatMsgNoLookups=true")
     val libPath = (if (lwjglPath != null) "$lwjglPath:" else "") + applicationInfo.nativeLibraryDir
     cmd.add("-Dorg.lwjgl.librarypath=$libPath")
     // 26.3+ грузит STB через jemalloc, а в наборе LWJGL для Android libjemalloc.so нет: просим системный аллокатор (malloc из libc)
@@ -666,7 +686,6 @@ private fun MainActivity.buildJvmCommand(p: LaunchPlan) {
     // для Zink функции GL ищутся через glXGetProcAddress из нашей libglfw.so (она перенаправляет в OSMesaGetProcAddress)
     if (mgPath != null) cmd.add("-Dorg.lwjgl.opengl.libname=" + (if (zink) File(applicationInfo.nativeLibraryDir, "libglfw.so").path else mgPath))
     if (oldGl) {
-        cmd.add("-Dlog4j2.formatMsgNoLookups=true")
         for (p in listOf("java.lang", "java.util", "java.io", "java.net", "java.nio", "sun.nio.ch")) { cmd.add("--add-opens"); cmd.add("java.base/$p=ALL-UNNAMED") }
     }
     if (oldForge) {
