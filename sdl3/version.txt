@@ -1,0 +1,1 @@
+SDL release-3.4.20, android arm64, built by build-sdl3.yml
