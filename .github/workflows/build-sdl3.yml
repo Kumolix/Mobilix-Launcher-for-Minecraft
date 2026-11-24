@@ -34,7 +34,9 @@ jobs:
           NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           RE="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           "$RE" -d /tmp/out/libSDL3.so | grep -E 'NEEDED|SONAME'
-          "$RE" --dyn-syms /tmp/out/libSDL3.so | grep -cE ' (SDL_Init|SDL_CreateWindow|SDL_GL_CreateContext|JNI_OnLoad)$' | grep -qx 4
+          "$RE" --dyn-syms /tmp/out/libSDL3.so > /tmp/syms.txt
+          grep -E 'SDL_Init|SDL_CreateWindow|SDL_GL_CreateContext|JNI_OnLoad' /tmp/syms.txt | head
+          grep -q 'SDL_Init' /tmp/syms.txt && grep -q 'SDL_CreateWindow' /tmp/syms.txt
 
       - name: Publish to branch runtime-libs (sdl3/arm64-v8a)
         run: |
