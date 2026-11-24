@@ -94,6 +94,23 @@ private fun MainActivity.rotateVersion(mod: CrashDoctor.Mod, tried: MutableMap<S
     return null
 }
 
+/**
+ * Fabric: «Mod X requires any 0.9.x version of mod Y, but only the wrong version is present».
+ * Ставит версию Y, подходящую под условие. Если такой версии под вашу игру нет, отключает мод X, который её требует.
+ */
+internal fun MainActivity.replaceByRule(rep: CrashDoctor.Report, depId: String, pred: String, requirerId: String): String? {
+    val old = rep.mods.firstOrNull { it.id == depId } ?: return null
+    // номер версии в Modrinth бывает «0.9.0+mc26.1.2» или «mc26.1.2-0.9.0-fabric»: подходит, если условию отвечает любая числовая часть
+    rotateVersion(old, mutableMapOf()) { v ->
+        val vn = v.optString("version_number")
+        CrashDoctor.satisfies(vn, pred) || Regex("\\d+(?:\\.\\d+)+").findAll(vn).any { CrashDoctor.satisfies(it.value, pred) }
+    }?.let { return it }
+    val req = rep.mods.firstOrNull { it.id == requirerId } ?: return null
+    val off = CrashDoctor.disable(rep, listOf(req))
+    return if (off.isEmpty()) null
+    else tr("Отключён: ", "Disabled: ") + off.joinToString(", ") + tr(" (для вашей игры нет ${old.name} версии $pred)", " (no ${old.name} $pred exists for your game version)")
+}
+
 /** Один шаг исправления по отчёту разбора лога. null — больше делать нечего. Возвращает описание шага. */
 private fun MainActivity.nextFixStep(rep: CrashDoctor.Report, gd: File, tried: MutableMap<String, MutableSet<String>>, triedDeps: MutableSet<String>): String? {
     // 1. не хватает модов-зависимостей: докачиваем (каждую один раз)
@@ -111,6 +128,8 @@ private fun MainActivity.nextFixStep(rep: CrashDoctor.Report, gd: File, tried: M
         val off = CrashDoctor.disable(rep, listOf(old))
         if (off.isNotEmpty()) return tr("Отключён (нет подходящей версии): ", "Disabled (no suitable version): ") + off.joinToString(", ")
     }
+    // 2б. Fabric: «мод X требует версию Y другого мода, но стоит неподходящая» (Iris просит Sodium 0.9.x): ставим нужную версию Y
+    for ((did, pred, req) in rep.replace) replaceByRule(rep, did, pred, req)?.let { return it }
     // 3. подозреваемые: следующая версия, а когда версии кончились — отключение
     for (s in rep.suspects) {
         rotateVersion(s.mod, tried)?.let { return it }

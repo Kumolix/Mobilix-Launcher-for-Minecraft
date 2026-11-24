@@ -399,6 +399,25 @@ EXPORT void glfwSwapBuffers(void* w) {
         if (wait > 0 && wait < 0.2) usleep((useconds_t) (wait * 1e6));
         g_lastFrame = now();
     }
+    // диагностика размера: в первые 15 секунд игры пишем, какой размер видит каждый слой (игра, EGL, окно Android, viewport GL)
+    {
+        static double d0 = 0, dl = -10; static int dn = 0;
+        double t = now();
+        if (d0 == 0) d0 = t;
+        if (t - d0 <= 15.0 && t - dl >= 1.5 && dn < 12) {
+            dl = t; dn++;
+            EGLint ew = -1, eh = -1; int vp[4] = {-1, -1, -1, -1}, sc[4] = {-1, -1, -1, -1};
+            if (!OS_ON) {
+                eglQuerySurface(G.dpy, G.surf, EGL_WIDTH, &ew); eglQuerySurface(G.dpy, G.surf, EGL_HEIGHT, &eh);
+                void (*gi)(unsigned int, int*) = (void (*)(unsigned int, int*)) eglGetProcAddress("glGetIntegerv");
+                if (gi) { gi(0x0BA2, vp); gi(0x0C10, sc); }
+            }
+            fprintf(stderr, "[Mobilix] Размер (%.1f с): окно для игры %dx%d | EGL %dx%d | Android-окно %dx%d | viewport %d,%d %dx%d | scissor %d,%d %dx%d\n",
+                    t - d0, G.w, G.h, ew, eh, G.win ? ANativeWindow_getWidth(G.win) : -1, G.win ? ANativeWindow_getHeight(G.win) : -1,
+                    vp[0], vp[1], vp[2], vp[3], sc[0], sc[1], sc[2], sc[3]);
+            fflush(stderr);
+        }
+    }
     // диагностика: FPS и видеочип раз в 5 секунд пишем в game.log
     {
         static int frames = 0, info = 0; static double t5 = 0;

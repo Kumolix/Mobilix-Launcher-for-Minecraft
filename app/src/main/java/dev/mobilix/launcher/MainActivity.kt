@@ -365,10 +365,12 @@ class MainActivity : Activity() {
             col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
         val upd = if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else null
-        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Launcher-for-Minecraft",
-            "https://kumolix.github.io/Mobilix-Launcher-for-Minecraft/", upd != null)
-        link("github.png", "GitHub", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
+        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Web",
+            "https://kumolix.github.io/Mobilix-Web/", upd != null)
+        link("github.png", "GitHub • Android", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
             "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", upd != null)
+        link("github.png", "GitHub • Windows", upd ?: "Kumolix/Mobilix-Launcher-PC",
+            "https://github.com/Kumolix/Mobilix-Launcher-PC", upd != null)
         link("telegram.png", "Telegram", upd ?: "@mobilix_launcher", "https://t.me/mobilix_launcher", upd != null)
         link("tiktok.png", "TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
         link(null, tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
@@ -930,6 +932,17 @@ class MainActivity : Activity() {
     private fun checkLastCrash() {
         CrashDoctor.trFn = { ru, en -> tr(ru, en) }
         val det = try { CrashDoctor.detect(this, dataRoot()) } catch (_: Throwable) { null } ?: return
+        if (prefs.getLong("jnaSeen", 0L) != det.start) {
+            // тихая подмена JNA: если вылет вызван JNA и подмены ещё не было, следующий запуск возьмёт JNA 5.13.0 без диалогов
+            prefs.edit().putLong("jnaSeen", det.start).apply()
+            Thread {
+                try {
+                    val last = prefs.getString("jnaVerLast", "") ?: ""
+                    if (last.isNotEmpty() && last != "5.13.0" && !prefs.getBoolean("jnaRunSwapped", false) && CrashDoctor.jnaFailure(det))
+                        prefs.edit().putString("jnaSwap", last).apply()
+                } catch (_: Throwable) {}
+            }.start()
+        }
         if (prefs.getLong("crashSeen", 0L) == det.start) return
         prefs.edit().putLong("crashSeen", det.start).apply()
         Thread {
@@ -949,6 +962,7 @@ class MainActivity : Activity() {
             sb.append(tr("Подозрительные моды:", "Suspect mods:")).append('\n')
             rep.suspects.forEach { sb.append("• ").append(it.mod.name).append(" — ").append(it.why).append('\n') }
         } else sb.append(tr("Виновный мод не определён.", "No culprit mod was identified.")).append('\n')
+        rep.replace.forEach { (did, pred, req) -> sb.append('\n').append(tr("Несовместимые версии: ", "Incompatible versions: ")).append(rep.mods.firstOrNull { it.id == req }?.name ?: req.ifEmpty { "?" }).append(tr(" требует ", " requires ")).append(rep.mods.firstOrNull { it.id == did }?.name ?: did).append(" ").append(pred).append('\n') }
         if (rep.missing.isNotEmpty()) sb.append('\n').append(tr("Не хватает модов-зависимостей: ", "Missing dependency mods: ")).append(rep.missing.joinToString(", ")).append('\n')
         rep.notes.forEach { sb.append('\n').append(it) }
         if (rep.hasRenderMod && prefs.getInt("renderPreset", 2) == 0)
@@ -956,7 +970,7 @@ class MainActivity : Activity() {
         val d = MobDialog(this).setTitle(tr("Вылет игры", "Game crash")).setMessage(sb.toString())
             .setNegativeButton(tr("Закрыть", "Close"), null)
             .setNeutralButton(tr("Вручную", "Manually")) { _, _ -> crashManual(rep, rep.suspects.map { it.mod.id }.toMutableSet()) }
-        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
+        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty() || rep.replace.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
             val off = if (rep.suspects.isNotEmpty()) CrashDoctor.disable(rep, rep.suspects.map { it.mod }) else emptyList()
             Toast.makeText(this, tr("Исправляю…", "Fixing…"), Toast.LENGTH_SHORT).show()
             Thread {
@@ -980,6 +994,12 @@ class MainActivity : Activity() {
                             upBad.add(old.name + " (" + tr("нужна версия ≥ $need, для вашей версии игры её нет, а подходящую старую версию $breaker подобрать не удалось", "need version ≥ $need, none for your game version, and no matching older $breaker was found") + ")")
                         }
                     }
+                }
+                // версия мода не подходит тому, кто её требует (Iris просит Sodium 0.9.x): ставим нужную версию, иначе отключаем «требующего»
+                for ((did, pred, req) in rep.replace) {
+                    val r = try { replaceByRule(rep, did, pred, req) } catch (_: Throwable) { null }
+                    if (r != null) upOk.add(r)
+                    else upBad.add((rep.mods.firstOrNull { it.id == did }?.name ?: did) + " (" + tr("нужна версия $pred, подобрать не удалось", "need version $pred, could not find one") + ")")
                 }
                 // зависимости считаем заново, уже без отключённых модов
                 val need = (CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)) + rep.missing.filter { m -> off.isEmpty() || CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)).contains(m) }).distinct()
@@ -1123,7 +1143,7 @@ class MainActivity : Activity() {
     private fun autoScale(): Int = GpuTier.tier(prefs.getString("gpu", "") ?: "")?.let { GpuTier.scale(it) } ?: 100
 
     /** Разрешение рендера: 0 в настройках = авто. */
-    private fun effectiveScale(): Int = prefs.getInt("renderScale", 0).let { if (it <= 0) autoScale() else it.coerceIn(30, 100) }
+    internal fun effectiveScale(): Int = prefs.getInt("renderScale", 0).let { if (it <= 0) autoScale() else it.coerceIn(30, 100) }
 
     /** Узнаёт видеочип (один раз) коротким офскрин-контекстом EGL, чтобы «Авто» работало уже с первого запуска. */
     internal fun ensureGpu() {

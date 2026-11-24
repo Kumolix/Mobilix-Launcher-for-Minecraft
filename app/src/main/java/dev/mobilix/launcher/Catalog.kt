@@ -250,7 +250,7 @@ internal fun MainActivity.installProject(id: String, type: String, loader: Strin
             destFile = dest
             val ok = download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })
             if (!ok) throw RuntimeException(tr("ошибка загрузки", "download failed"))
-            idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase())) })
+            idxSave(idx().apply { put(id, JSONObject().put("t", type).put("f", f.getString("filename")).put("n", title).put("l", if (type == "mod") loader else "").put("v", curBase()).put("vid", vers.getJSONObject(0).optString("id"))) })
             if (type == "mod") depsN = mrInstallDeps(vers.getJSONObject(0), loader)
             res = "ok"
         } catch (e: Throwable) { res = e.message ?: e.toString() }
@@ -281,16 +281,26 @@ private fun MainActivity.depsDialog(names: List<String>, go: (Boolean) -> Unit) 
     }
 }
 
-/** Modrinth: id обязательных зависимостей версии. */
-internal fun MainActivity.mrRequiredDeps(v: JSONObject): List<String> {
-    val out = ArrayList<String>()
+/** Modrinth: обязательные зависимости версии как пары (id проекта, id нужной версии или null, если версия не закреплена). */
+internal fun MainActivity.mrRequiredDepPairs(v: JSONObject): List<Pair<String, String?>> {
+    val out = ArrayList<Pair<String, String?>>()
     val d = v.optJSONArray("dependencies") ?: return out
     for (i in 0 until d.length()) {
         val o = d.getJSONObject(i)
-        if (o.optString("dependency_type") == "required" && !o.isNull("project_id")) out.add(o.getString("project_id"))
+        if (o.optString("dependency_type") == "required" && !o.isNull("project_id")) {
+            val vid = if (o.isNull("version_id")) null else o.optString("version_id").ifEmpty { null }
+            out.add(o.getString("project_id") to vid)
+        }
     }
-    return out.distinct()
+    return out.distinctBy { it.first }
 }
+
+/** Modrinth: id обязательных зависимостей версии. */
+internal fun MainActivity.mrRequiredDeps(v: JSONObject): List<String> = mrRequiredDepPairs(v).map { it.first }
+
+/** Зависимость нужно докачать: её нет, либо мод просит конкретную версию, а стоит другая (например, Iris просит свой Sodium). */
+private fun MainActivity.depNeeded(pid: String, vid: String?): Boolean =
+    !isInstalled(pid) || (vid != null && idx().optJSONObject(pid)?.optString("vid") != vid)
 
 private fun MainActivity.isInstalled(key: String): Boolean {
     val rec = idx().optJSONObject(key)
@@ -300,21 +310,30 @@ private fun MainActivity.isInstalled(key: String): Boolean {
 /** Скачивает недостающие обязательные зависимости (до двух уровней вглубь). Возвращает, сколько докачано. */
 internal fun MainActivity.mrInstallDeps(v: JSONObject, loader: String?, seen: MutableSet<String> = HashSet(), depth: Int = 0): Int {
     var n = 0
-    for (pid in mrRequiredDeps(v)) {
-        if (!seen.add(pid) || isInstalled(pid)) continue
+    for ((pid, vid) in mrRequiredDepPairs(v)) {
+        if (!seen.add(pid) || !depNeeded(pid, vid)) continue
         try {
-            var g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8")
-            if (!loader.isNullOrEmpty()) g += "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(loader)).toString(), "UTF-8")
-            val vers = JSONArray(apiGet("/project/$pid/version$g"))
-            if (vers.length() == 0) continue
-            val dv = vers.getJSONObject(0)
+            // закреплённая версия берётся как есть, иначе самая новая под текущую игру и загрузчик
+            val dv: JSONObject
+            if (vid != null) dv = JSONObject(apiGet("/version/$vid"))
+            else {
+                var g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8")
+                if (!loader.isNullOrEmpty()) g += "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(loader)).toString(), "UTF-8")
+                val vers = JSONArray(apiGet("/project/$pid/version$g"))
+                if (vers.length() == 0) continue
+                dv = vers.getJSONObject(0)
+            }
             val files = dv.getJSONArray("files")
             var f = files.getJSONObject(0)
             for (i in 0 until files.length()) if (files.getJSONObject(i).optBoolean("primary")) f = files.getJSONObject(i)
             val dest = File(curGameDir(), typeDir("mod") + "/" + f.getString("filename"))
             if (!download(f.getString("url"), dest, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) continue
+            // старая версия этой зависимости (другой файл) заменяется, иначе Fabric увидит два одинаковых мода
+            idx().optJSONObject(pid)?.let { old ->
+                if (old.optString("f") != f.getString("filename")) try { packFile(old.optString("t"), old.optString("f")).delete() } catch (_: Throwable) {}
+            }
             val title = try { JSONObject(apiGet("/project/$pid")).optString("title", pid) } catch (_: Throwable) { pid }
-            idxSave(idx().apply { put(pid, JSONObject().put("t", "mod").put("f", f.getString("filename")).put("n", title).put("l", loader ?: "").put("v", curBase())) })
+            idxSave(idx().apply { put(pid, JSONObject().put("t", "mod").put("f", f.getString("filename")).put("n", title).put("l", loader ?: "").put("v", curBase()).put("vid", dv.optString("id"))) })
             n++
             if (depth < 2) n += mrInstallDeps(dv, loader, seen, depth + 1)
         } catch (_: Throwable) {}
@@ -329,7 +348,7 @@ internal fun MainActivity.mrInstallDeps(v: JSONObject, loader: String?, seen: Mu
 internal fun MainActivity.mrAskDeps(v: JSONObject, type: String, go: (Boolean) -> Unit) {
     if (type != "mod" || !prefs.getBoolean("modDlManual", false)) { go(type == "mod"); return }
     Thread {
-        val ids = mrRequiredDeps(v).filter { !isInstalled(it) }
+        val ids = mrRequiredDepPairs(v).filter { depNeeded(it.first, it.second) }.map { it.first }
         if (ids.isEmpty()) { runOnUiThread { go(false) }; return@Thread }
         val names = try {
             val arr = JSONArray(apiGet("/projects?ids=" + java.net.URLEncoder.encode(JSONArray(ids).toString(), "UTF-8")))
