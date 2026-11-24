@@ -140,6 +140,15 @@ internal fun MainActivity.ensureLwjgl(version: String): String? {
         dir.walkTopDown().maxDepth(5).forEach { log("  " + it.relativeTo(dir).path) }
         return null
     }
+    // в готовых наборах нативов нет liblwjgl_tinyfd.so, а 26.2+ грузит её на старте (без неё «Loading library tinyfd»).
+    // Берём из PojavLauncher (библиотека-обёртка: символы Java_org_lwjgl_util_tinyfd_TinyFileDialogs_*, от версии LWJGL не зависит)
+    if (isArm64 && dir.walkTopDown().none { it.isFile && it.name == "liblwjgl_tinyfd.so" }) {
+        try {
+            val target = File(dir.walkTopDown().first { it.isFile && it.name == "liblwjgl.so" }.parentFile!!, "liblwjgl_tinyfd.so")
+            assets.open("natives/arm64-v8a/liblwjgl_tinyfd.so").use { i -> target.outputStream().use { o -> i.copyTo(o) } }
+            log("LWJGL: добавлена liblwjgl_tinyfd.so (из PojavLauncher)")
+        } catch (e: Exception) { log("LWJGL: не удалось добавить liblwjgl_tinyfd.so ($e)") }
+    }
     val libs = dir.walkTopDown().filter { it.isFile && it.name.endsWith(".so") }.toList()
     libs.forEach { it.setReadable(true, false); it.setExecutable(true, false) }
     log("LWJGL: библиотек ${libs.size}: " + libs.joinToString(", ") { it.name })
