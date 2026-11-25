@@ -753,6 +753,7 @@ private fun MainActivity.writeLaunchConfig(p: LaunchPlan) {
     launch.put("javaHome", rt.path)
     launch.put("main", mainName)
     launch.put("jvm", JSONArray(cmd.subList(1, mainIdx)))
+    p.sdl3Dir?.let { launch.put("sdl3", it) }
     launch.put("game", JSONArray(cmd.subList(mainIdx + 1, cmd.size)))
     launch.put("glLib", mgPath ?: "")
     if (useGl4es) {

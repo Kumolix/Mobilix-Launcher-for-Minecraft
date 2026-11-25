@@ -308,6 +308,10 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
                 val it2 = e.keys()
                 while (it2.hasNext()) { val k = it2.next(); try { android.system.Os.setenv(k, e.getString(k), true) } catch (_: Throwable) {} }
             }
+            j.optString("sdl3", "").takeIf { it.isNotEmpty() }?.let { d ->
+                val err = loadSdl3(d)
+                say(if (err == null) "SDL3: libSDL3.so загружена" else "ОШИБКА SDL3: $err")
+            }
             val gl = j.optString("glLib", "")
             if (gl.isNotEmpty()) Native.setGlLib(gl)
             if (probe) Thread { probeWatch(dataDir, probeGameDir) }.apply { isDaemon = true }.start()
