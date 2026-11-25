@@ -1231,6 +1231,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
      */
     public static boolean supportsRelativeMouse()
     {
+        if (mSingleton == null) return true;   // Mobilix: input comes from the launcher's own controls
         // DeX mode in Samsung Experience 9.0 and earlier doesn't support relative mice properly under
         // Android 7 APIs, and simply returns no data under Android 8 APIs.
         //
@@ -1250,6 +1251,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
      */
     public static boolean setRelativeMouseEnabled(boolean enabled)
     {
+        if (mSingleton == null) { SdlBridge.relative = enabled; return true; }   // Mobilix: remember the mode, GameActivity reads it
         if (enabled && !supportsRelativeMouse()) {
             return false;
         }

@@ -127,7 +127,7 @@ class ControlsView(ctx: Context) : View(ctx) {
 
     private fun centerCursor() {
         vx = width * gameScale / 2.0; vy = height * gameScale / 2.0
-        try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
+        try { Input.push(3, vx, vy, 0) } catch (_: Throwable) {}
     }
 
     private fun setVm(on: Boolean) {
@@ -342,13 +342,13 @@ class ControlsView(ctx: Context) : View(ctx) {
     }
 
     // ---------- события ----------
-    private fun cursorDisabled() = try { Native.cursorMode() == 0x34003 } catch (_: Throwable) { false }
+    private fun cursorDisabled() = try { Input.cursorGrabbed() } catch (_: Throwable) { false }
 
     private fun setJoyKey(i: Int, on: Boolean) {
         if (joyKeys[i] == on) return
         joyKeys[i] = on
         val code = intArrayOf('W'.code, 'A'.code, 'S'.code, 'D'.code, 341)[i]
-        try { Native.pushEvent(1, code.toDouble(), 0.0, if (on) 1 else 0) } catch (_: Throwable) {}
+        try { Input.push(1, code.toDouble(), 0.0, if (on) 1 else 0) } catch (_: Throwable) {}
     }
 
     private fun joyUpdate(x: Float, y: Float) {
@@ -377,9 +377,9 @@ class ControlsView(ctx: Context) : View(ctx) {
     private fun hitMain(x: Float, y: Float): Btn? = buttons.lastOrNull { (!hidden || editing || it.kind == K_HIDE) && !isDpad(it) && rect(it).contains(x, y) }
 
     private var kbd = false
-    private fun pk(type: Int, a: Int) { try { Native.pushEvent(type, a.toDouble(), 0.0, 0) } catch (_: Throwable) {} }
+    private fun pk(type: Int, a: Int) { try { Input.push(type, a.toDouble(), 0.0, 0) } catch (_: Throwable) {} }
     private fun key(code: Int) {
-        try { Native.pushEvent(1, code.toDouble(), 0.0, 1); Native.pushEvent(1, code.toDouble(), 0.0, 0) } catch (_: Throwable) {}
+        try { Input.push(1, code.toDouble(), 0.0, 1); Input.push(1, code.toDouble(), 0.0, 0) } catch (_: Throwable) {}
     }
 
     private fun toggleKeyboard() {
@@ -438,9 +438,9 @@ class ControlsView(ctx: Context) : View(ctx) {
     private fun fireOne(kind: Int, code: Int, down: Boolean) {
         try {
             when (kind) {
-                K_KEY -> Native.pushEvent(1, code.toDouble(), 0.0, if (down) 1 else 0)
-                K_MOUSE -> Native.pushEvent(4, code.toDouble(), 0.0, if (down) 1 else 0)
-                K_SCROLL -> if (down) Native.pushEvent(5, 0.0, code.toDouble(), 0)
+                K_KEY -> Input.push(1, code.toDouble(), 0.0, if (down) 1 else 0)
+                K_MOUSE -> Input.push(4, code.toDouble(), 0.0, if (down) 1 else 0)
+                K_SCROLL -> if (down) Input.push(5, 0.0, code.toDouble(), 0)
             }
         } catch (_: Throwable) {
         }
@@ -516,13 +516,13 @@ class ControlsView(ctx: Context) : View(ctx) {
                     owners[id] = cam
                     if (bedrock) {
                         // удержание без движения = добыча (ЛКМ зажата)
-                        val r = Runnable { if (owners[id] === cam && !cam.moved && !cam.held) { cam.held = true; try { Native.pushEvent(4, 0.0, 0.0, 1) } catch (_: Throwable) {} } }
+                        val r = Runnable { if (owners[id] === cam && !cam.moved && !cam.held) { cam.held = true; try { Input.push(4, 0.0, 0.0, 1) } catch (_: Throwable) {} } }
                         cam.hold = r; postDelayed(r, 300)
                     }
                 } else {
                     owners[id] = Owner.Gui
                     vx = x.toDouble() * gameScale; vy = y.toDouble() * gameScale
-                    try { Native.pushEvent(3, vx, vy, 0); Native.pushEvent(4, 0.0, 0.0, 1) } catch (_: Throwable) {}
+                    try { Input.push(3, vx, vy, 0); Input.push(4, 0.0, 0.0, 1) } catch (_: Throwable) {}
                 }
             }
             MotionEvent.ACTION_MOVE -> {
@@ -542,7 +542,7 @@ class ControlsView(ctx: Context) : View(ctx) {
                             if (bedrock && !o.held && !o.moved && (Math.abs(x - o.sx) > 10 * d || Math.abs(y - o.sy) > 10 * d)) { o.moved = true; o.hold?.let { removeCallbacks(it) } }
                             vx += (x - o.lx) * sens; vy += (y - o.ly) * sens
                             o.lx = x; o.ly = y
-                            try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
+                            try { Input.push(3, vx, vy, 0) } catch (_: Throwable) {}
                         }
                         is Owner.Pad -> {
                             val dx = x - o.lx; val dy = y - o.ly
@@ -552,16 +552,16 @@ class ControlsView(ctx: Context) : View(ctx) {
                                 // два пальца: прокрутка списков и настроек
                                 scrollAcc += dy
                                 val step = 28f * d
-                                while (scrollAcc >= step) { scrollAcc -= step; try { Native.pushEvent(5, 0.0, 1.0, 0) } catch (_: Throwable) {} }
-                                while (scrollAcc <= -step) { scrollAcc += step; try { Native.pushEvent(5, 0.0, -1.0, 0) } catch (_: Throwable) {} }
+                                while (scrollAcc >= step) { scrollAcc -= step; try { Input.push(5, 0.0, 1.0, 0) } catch (_: Throwable) {} }
+                                while (scrollAcc <= -step) { scrollAcc += step; try { Input.push(5, 0.0, -1.0, 0) } catch (_: Throwable) {} }
                             } else {
                                 vx = (vx + dx * gameScale * 1.4).coerceIn(0.0, (width * gameScale).toDouble())
                                 vy = (vy + dy * gameScale * 1.4).coerceIn(0.0, (height * gameScale).toDouble())
-                                try { Native.pushEvent(3, vx, vy, 0) } catch (_: Throwable) {}
+                                try { Input.push(3, vx, vy, 0) } catch (_: Throwable) {}
                             }
                         }
                         is Owner.Gui -> if (!editing) {
-                            try { Native.pushEvent(3, x.toDouble() * gameScale, y.toDouble() * gameScale, 0) } catch (_: Throwable) {}
+                            try { Input.push(3, x.toDouble() * gameScale, y.toDouble() * gameScale, 0) } catch (_: Throwable) {}
                         }
                     }
                 }
@@ -573,20 +573,20 @@ class ControlsView(ctx: Context) : View(ctx) {
                 when (o) {
                     is Owner.B -> if (editing) { if (!o.moved) editButton(o.b) else save() } else if (!o.b.toggle) press(o.b, false)
                     is Owner.Gui -> if (!editing) {
-                        try { Native.pushEvent(3, x.toDouble() * gameScale, y.toDouble() * gameScale, 0); Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
+                        try { Input.push(3, x.toDouble() * gameScale, y.toDouble() * gameScale, 0); Input.push(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
                     }
                     is Owner.Pad -> if (!o.moved && e.actionMasked != MotionEvent.ACTION_CANCEL &&
                         android.os.SystemClock.uptimeMillis() - o.t0 < 350) {
                         // короткое касание = левый клик в позиции курсора
-                        try { Native.pushEvent(4, 0.0, 0.0, 1); Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
+                        try { Input.push(4, 0.0, 0.0, 1); Input.push(4, 0.0, 0.0, 0) } catch (_: Throwable) {}
                     }
                     is Owner.Cam -> if (bedrock) {
                         o.hold?.let { removeCallbacks(it) }
-                        if (o.held) { try { Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {} }
+                        if (o.held) { try { Input.push(4, 0.0, 0.0, 0) } catch (_: Throwable) {} }
                         else if (!o.moved && e.actionMasked != MotionEvent.ACTION_CANCEL && android.os.SystemClock.uptimeMillis() - o.t0 < 300) {
                             // короткое касание = удар
-                            try { Native.pushEvent(4, 0.0, 0.0, 1) } catch (_: Throwable) {}
-                            postDelayed({ try { Native.pushEvent(4, 0.0, 0.0, 0) } catch (_: Throwable) {} }, 70)
+                            try { Input.push(4, 0.0, 0.0, 1) } catch (_: Throwable) {}
+                            postDelayed({ try { Input.push(4, 0.0, 0.0, 0) } catch (_: Throwable) {} }, 70)
                         }
                     }
                     else -> {}

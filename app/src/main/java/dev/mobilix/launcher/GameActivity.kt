@@ -220,7 +220,7 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
         if (dir.isEmpty()) return false
         val err = loadSdl3(dir)
         if (err != null) { say("ОШИБКА SDL3: $err"); return false }
-        try { org.libsdl.app.SdlBridge.attach(this); sdlOn = true; say("SDL3: libSDL3.so загружена") } catch (e: Throwable) { say("ОШИБКА SDL3 (attach): $e") }
+        try { org.libsdl.app.SdlBridge.attach(this); sdlOn = true; say("SDL3: libSDL3.so загружена, сборка " + (try { File(dir, "rev").readText() } catch (_: Throwable) { "?" })) } catch (e: Throwable) { say("ОШИБКА SDL3 (attach): $e") }
         return sdlOn
     }
 
@@ -407,8 +407,8 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
             return
         }
         try {
-            Native.pushEvent(1, 256.0, 0.0, 1) // Esc нажата
-            Native.pushEvent(1, 256.0, 0.0, 0) // Esc отпущена
+            Input.push(1, 256.0, 0.0, 1) // Esc нажата
+            Input.push(1, 256.0, 0.0, 0) // Esc отпущена
         } catch (_: Throwable) {
         }
     }
