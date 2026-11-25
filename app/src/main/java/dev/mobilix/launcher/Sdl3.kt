@@ -7,7 +7,7 @@ import java.io.File
  * (.github/workflows/build-sdl3.yml) и лежит в runtime-libs. Здесь она только скачивается (процесс лаунчера); грузится в процессе игры, см. loadSdl3.
  */
 /** Номер сборки libSDL3.so в runtime-libs: увеличить при пересборке (патчи SDL), чтобы телефоны скачали новую копию. */
-private const val SDL3_REV = "2"
+private const val SDL3_REV = "3"
 private var sdl3Loaded: String? = null
 
 /** Каталог с libSDL3.so или null, если библиотеку получить не удалось (тогда игра, вероятно, упадёт на «Loading library SDL»). */

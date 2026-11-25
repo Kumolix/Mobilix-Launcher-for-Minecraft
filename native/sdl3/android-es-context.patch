@@ -1,30 +1,56 @@
 diff --git a/src/video/SDL_egl.c b/src/video/SDL_egl.c
-index e26d31c..fa987c4 100644
+index e26d31c..ef4c85a 100644
 --- a/src/video/SDL_egl.c
 +++ b/src/video/SDL_egl.c
-@@ -40,6 +40,21 @@
+@@ -40,6 +40,47 @@
  #include "SDL_egl_c.h"
  #include "../SDL_hints_c.h"
  
 +#ifdef SDL_VIDEO_DRIVER_ANDROID
 +/* Mobilix patch: Android has no desktop OpenGL, only OpenGL ES. Minecraft asks for a desktop core profile, but the game's GL calls
-+ * go through MobileGlues, which translates them to GLES, so SDL has to create an ES 3.x context for any request. */
++ * go through MobileGlues, which translates them to GLES, so SDL has to create an ES 3.x context for any request.
++ * While the context is being made, gl_config says "ES 3.0"; afterwards the values the game asked for are put back, so that
++ * SDL_GL_GetAttribute() tells the game what it requested (it checks the version it gets). */
++static struct { bool forced; int profile, major, minor, flags; } mobilix_req;
++
 +static void Mobilix_ForceES(SDL_VideoDevice *_this)
 +{
++    if (_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) {
++        return;
++    }
++    mobilix_req.forced = true;
++    mobilix_req.profile = _this->gl_config.profile_mask;
++    mobilix_req.major = _this->gl_config.major_version;
++    mobilix_req.minor = _this->gl_config.minor_version;
++    mobilix_req.flags = _this->gl_config.flags;
 +    _this->gl_config.profile_mask = SDL_GL_CONTEXT_PROFILE_ES;
 +    _this->gl_config.major_version = 3;
 +    _this->gl_config.minor_version = 0;
 +    _this->gl_config.flags &= ~SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
 +}
++
++static void Mobilix_RestoreRequested(SDL_VideoDevice *_this)
++{
++    if (!mobilix_req.forced) {
++        return;
++    }
++    mobilix_req.forced = false;
++    _this->gl_config.profile_mask = mobilix_req.profile;
++    _this->gl_config.major_version = mobilix_req.major;
++    _this->gl_config.minor_version = mobilix_req.minor;
++    _this->gl_config.flags = mobilix_req.flags;
++}
 +#define MOBILIX_FORCE_ES(t) Mobilix_ForceES(t)
++#define MOBILIX_RESTORE(t) Mobilix_RestoreRequested(t)
 +#else
 +#define MOBILIX_FORCE_ES(t) ((void)0)
++#define MOBILIX_RESTORE(t) ((void)0)
 +#endif
 +
  #ifdef EGL_KHR_create_context
  // EGL_OPENGL_ES3_BIT_KHR was added in version 13 of the extension.
  #ifndef EGL_OPENGL_ES3_BIT_KHR
-@@ -500,6 +515,7 @@ static bool SDL_EGL_LoadLibraryInternal(SDL_VideoDevice *_this, const char *egl_
+@@ -500,6 +541,7 @@ static bool SDL_EGL_LoadLibraryInternal(SDL_VideoDevice *_this, const char *egl_
  
  bool SDL_EGL_LoadLibraryOnly(SDL_VideoDevice *_this, const char *egl_path)
  {
@@ -32,7 +58,7 @@ index e26d31c..fa987c4 100644
      if (_this->egl_data) {
          return SDL_SetError("EGL context already created");
      }
-@@ -955,6 +971,7 @@ static bool SDL_EGL_PrivateChooseConfig(SDL_VideoDevice *_this, bool set_config_
+@@ -955,6 +997,7 @@ static bool SDL_EGL_PrivateChooseConfig(SDL_VideoDevice *_this, bool set_config_
  
  bool SDL_EGL_ChooseConfig(SDL_VideoDevice *_this)
  {
@@ -40,10 +66,21 @@ index e26d31c..fa987c4 100644
      if (!_this->egl_data) {
          return SDL_SetError("EGL not initialized");
      }
-@@ -975,6 +992,7 @@ bool SDL_EGL_ChooseConfig(SDL_VideoDevice *_this)
+@@ -973,8 +1016,18 @@ bool SDL_EGL_ChooseConfig(SDL_VideoDevice *_this)
+     return SDL_EGL_SetError("Couldn't find matching EGL config", "eglChooseConfig");
+ }
  
++static SDL_GLContext SDL_EGL_CreateContextInner(SDL_VideoDevice *_this, EGLSurface egl_surface);
++
  SDL_GLContext SDL_EGL_CreateContext(SDL_VideoDevice *_this, EGLSurface egl_surface)
  {
++    SDL_GLContext ctx = SDL_EGL_CreateContextInner(_this, egl_surface);
++    MOBILIX_RESTORE(_this);
++    return ctx;
++}
++
++static SDL_GLContext SDL_EGL_CreateContextInner(SDL_VideoDevice *_this, EGLSurface egl_surface)
++{
 +    MOBILIX_FORCE_ES(_this);
      // max 16 key+value pairs plus terminator.
      EGLint attribs[33];
