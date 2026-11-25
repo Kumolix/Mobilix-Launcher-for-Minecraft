@@ -1,0 +1,33 @@
+diff --git a/src/video/android/SDL_androidwindow.c b/src/video/android/SDL_androidwindow.c
+index 4652b5f..c09aa98 100644
+--- a/src/video/android/SDL_androidwindow.c
++++ b/src/video/android/SDL_androidwindow.c
+@@ -46,8 +46,26 @@ bool Android_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
+     }
+ 
+     if (Android_Window) {
+-        result = SDL_SetError("Android only supports one window");
+-        goto endfunction;
++        /* Mobilix patch: the game makes a temporary window first and then the real one while the first still exists, but
++         * Android has a single surface. The new window takes the surface over: the old one is left as an empty shell. */
++        SDL_Window *old = Android_Window;
++        SDL_WindowData *od = old->internal;
++        Android_Window = NULL;
++        if (od) {
++#ifdef SDL_VIDEO_OPENGL_EGL
++            if (_this->egl_data) {
++                SDL_EGL_MakeCurrent(_this, EGL_NO_SURFACE, EGL_NO_CONTEXT);
++            }
++            if (od->egl_surface != EGL_NO_SURFACE) {
++                SDL_EGL_DestroySurface(_this, od->egl_surface);
++                od->egl_surface = EGL_NO_SURFACE;
++            }
++#endif
++            if (od->native_window) {
++                ANativeWindow_release(od->native_window);
++                od->native_window = NULL;
++            }
++        }
+     }
+ 
+     // Set orientation

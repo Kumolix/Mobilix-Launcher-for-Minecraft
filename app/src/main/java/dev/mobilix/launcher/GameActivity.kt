@@ -224,6 +224,13 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
         return sdlOn
     }
 
+    /** SDL3 зовёт этот метод (по имени, через JNI) для окна сообщения: без него игра падала при любой ошибке. Пишем в лог, кнопку берём первую. */
+    @Suppress("UNUSED_PARAMETER")
+    fun messageboxShowMessageBox(flags: Int, title: String?, message: String?, buttonFlags: IntArray?, buttonIds: IntArray?, buttonTexts: Array<String?>?, colors: IntArray?): Int {
+        say("SDL: окно сообщения «${title ?: ""}»: ${message ?: ""}")
+        return buttonIds?.firstOrNull() ?: -1
+    }
+
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         if (sdlOn) try { org.libsdl.app.SdlBridge.surfaceDestroyed() } catch (_: Throwable) {}
         if (mode == "game" && started) {
