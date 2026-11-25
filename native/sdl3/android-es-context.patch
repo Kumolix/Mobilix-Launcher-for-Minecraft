@@ -1,0 +1,50 @@
+diff --git a/src/video/SDL_egl.c b/src/video/SDL_egl.c
+index e26d31c..fa987c4 100644
+--- a/src/video/SDL_egl.c
++++ b/src/video/SDL_egl.c
+@@ -40,6 +40,21 @@
+ #include "SDL_egl_c.h"
+ #include "../SDL_hints_c.h"
+ 
++#ifdef SDL_VIDEO_DRIVER_ANDROID
++/* Mobilix patch: Android has no desktop OpenGL, only OpenGL ES. Minecraft asks for a desktop core profile, but the game's GL calls
++ * go through MobileGlues, which translates them to GLES, so SDL has to create an ES 3.x context for any request. */
++static void Mobilix_ForceES(SDL_VideoDevice *_this)
++{
++    _this->gl_config.profile_mask = SDL_GL_CONTEXT_PROFILE_ES;
++    _this->gl_config.major_version = 3;
++    _this->gl_config.minor_version = 0;
++    _this->gl_config.flags &= ~SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
++}
++#define MOBILIX_FORCE_ES(t) Mobilix_ForceES(t)
++#else
++#define MOBILIX_FORCE_ES(t) ((void)0)
++#endif
++
+ #ifdef EGL_KHR_create_context
+ // EGL_OPENGL_ES3_BIT_KHR was added in version 13 of the extension.
+ #ifndef EGL_OPENGL_ES3_BIT_KHR
+@@ -500,6 +515,7 @@ static bool SDL_EGL_LoadLibraryInternal(SDL_VideoDevice *_this, const char *egl_
+ 
+ bool SDL_EGL_LoadLibraryOnly(SDL_VideoDevice *_this, const char *egl_path)
+ {
++    MOBILIX_FORCE_ES(_this);
+     if (_this->egl_data) {
+         return SDL_SetError("EGL context already created");
+     }
+@@ -955,6 +971,7 @@ static bool SDL_EGL_PrivateChooseConfig(SDL_VideoDevice *_this, bool set_config_
+ 
+ bool SDL_EGL_ChooseConfig(SDL_VideoDevice *_this)
+ {
++    MOBILIX_FORCE_ES(_this);
+     if (!_this->egl_data) {
+         return SDL_SetError("EGL not initialized");
+     }
+@@ -975,6 +992,7 @@ bool SDL_EGL_ChooseConfig(SDL_VideoDevice *_this)
+ 
+ SDL_GLContext SDL_EGL_CreateContext(SDL_VideoDevice *_this, EGLSurface egl_surface)
+ {
++    MOBILIX_FORCE_ES(_this);
+     // max 16 key+value pairs plus terminator.
+     EGLint attribs[33];
+     int attr = 0;

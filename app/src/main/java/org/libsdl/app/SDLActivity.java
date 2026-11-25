@@ -1,5 +1,7 @@
 package org.libsdl.app;
 
+// Modified for Mobilix (zlib license: altered source version): static callbacks are null-safe when there is no SDLActivity instance.
+
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
@@ -779,6 +781,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
     // Called by JNI from SDL.
     public static void manualBackButton() {
+        if (mSingleton == null) return;   // Mobilix: no Activity instance
         mSingleton.pressBackButton();
     }
 
@@ -1105,6 +1108,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
      */
     public static boolean setActivityTitle(String title) {
         // Called from SDLMain() thread and can't directly affect the view
+        if (mSingleton == null) return true;   // Mobilix: no Activity instance
         return mSingleton.sendCommand(COMMAND_CHANGE_TITLE, title);
     }
 
@@ -1113,6 +1117,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
      */
     public static void setWindowStyle(boolean fullscreen) {
         // Called from SDLMain() thread and can't directly affect the view
+        if (mSingleton == null) return;   // Mobilix: no Activity instance
         mSingleton.sendCommand(COMMAND_CHANGE_WINDOW_STYLE, fullscreen ? 1 : 0);
     }
 
@@ -1451,6 +1456,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
      */
     public static boolean showTextInput(int input_type, int x, int y, int w, int h) {
         // Transfer the task to the main thread as a Runnable
+        if (mSingleton == null) return false;   // Mobilix: no Activity instance
         return mSingleton.commandHandler.post(new ShowTextInputTask(input_type, x, y, w, h));
     }
 

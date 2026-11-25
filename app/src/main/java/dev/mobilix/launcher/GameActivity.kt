@@ -212,7 +212,20 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
             holder.setFixedSize(maxOf(dm.widthPixels, dm.heightPixels) * sc / 100, minOf(dm.widthPixels, dm.heightPixels) * sc / 100)
         }
     }
+    /** 26.3+: SDL3 вместо GLFW. libSDL3.so грузим здесь, до первого кадра, чтобы SDL сразу получил поверхность и размер. */
+    private var sdlOn = false
+    private fun sdlInit(): Boolean {
+        if (sdlOn) return true
+        val dir = try { JSONObject(File(getExternalFilesDir(null) ?: filesDir, "launch.json").readText()).optString("sdl3", "") } catch (_: Throwable) { "" }
+        if (dir.isEmpty()) return false
+        val err = loadSdl3(dir)
+        if (err != null) { say("ОШИБКА SDL3: $err"); return false }
+        try { org.libsdl.app.SdlBridge.attach(this); sdlOn = true; say("SDL3: libSDL3.so загружена") } catch (e: Throwable) { say("ОШИБКА SDL3 (attach): $e") }
+        return sdlOn
+    }
+
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        if (sdlOn) try { org.libsdl.app.SdlBridge.surfaceDestroyed() } catch (_: Throwable) {}
         if (mode == "game" && started) {
             try {
                 Native.surfaceLost()
@@ -224,6 +237,7 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         if (mode == "game") {
             try {
+                if (!probe && sdlInit()) org.libsdl.app.SdlBridge.surfaceChanged(this, holder.surface, width, height)
                 Native.setSurface(holder.surface, width, height)
             } catch (e: Throwable) {
                 say("ОШИБКА setSurface: $e")
@@ -307,10 +321,6 @@ open class GameActivity : Activity(), SurfaceHolder.Callback {
             j.optJSONObject("env")?.let { e ->
                 val it2 = e.keys()
                 while (it2.hasNext()) { val k = it2.next(); try { android.system.Os.setenv(k, e.getString(k), true) } catch (_: Throwable) {} }
-            }
-            j.optString("sdl3", "").takeIf { it.isNotEmpty() }?.let { d ->
-                val err = loadSdl3(d)
-                say(if (err == null) "SDL3: libSDL3.so загружена" else "ОШИБКА SDL3: $err")
             }
             val gl = j.optString("glLib", "")
             if (gl.isNotEmpty()) Native.setGlLib(gl)
