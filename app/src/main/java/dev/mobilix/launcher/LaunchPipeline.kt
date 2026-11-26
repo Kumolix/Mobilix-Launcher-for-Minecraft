@@ -281,6 +281,12 @@ private fun MainActivity.loadVersionInfo(p: LaunchPlan) {
     val preAwt = legacy && child == null && !realMain.startsWith("net.minecraft.client.main.")   // у 1.0–1.5.2 и Classic главный класс — launchwrapper, он на Java 9+ не работает
     val oldGl = legacy || javaMajor < 16
     if (is32bit && !oldGl && javaMajor >= 21) throw RuntimeException(tr("На 32-битных устройствах работают версии до 1.20.4: для новее не хватает адресного пространства (память).", "32-bit devices run versions up to 1.20.4: newer ones need more address space than a 32-bit process has."))
+    // Игра пишет в options.txt startedCleanly:false при старте и true при нормальном выходе. Наши выход и сбои оставляют false, и каждый запуск
+    // считался «после неожиданного завершения»: сбрасывался полный экран и принудительно ставился OpenGL. Возвращаем true перед стартом.
+    try {
+        val o = File(gameDir, "options.txt")
+        if (o.exists()) { val t = o.readText(); if (t.contains("startedCleanly:false")) o.writeText(t.replace("startedCleanly:false", "startedCleanly:true")) }
+    } catch (_: Exception) {}
     applyMipmap(gameDir, oldGl)
     applyPreset(gameDir, baseVer)
     val modLoader = when { profile.startsWith("fabric-loader-") -> "fabric"; profile.startsWith("quilt-loader-") -> "quilt"; profile.startsWith("neoforge-") -> "neoforge"; profile.contains("forge", true) -> "forge"; else -> null }

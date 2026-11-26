@@ -1,18 +1,28 @@
 diff --git a/src/video/android/SDL_androidwindow.c b/src/video/android/SDL_androidwindow.c
-index 4652b5f..c09aa98 100644
+index 4652b5f..20dc3c8 100644
 --- a/src/video/android/SDL_androidwindow.c
 +++ b/src/video/android/SDL_androidwindow.c
-@@ -46,8 +46,26 @@ bool Android_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
+@@ -45,9 +45,36 @@ bool Android_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
+         return false;
      }
  
++    SDL_Window *mobilix_prev_window = NULL;
++    SDL_GLContext mobilix_prev_ctx = NULL;
      if (Android_Window) {
 -        result = SDL_SetError("Android only supports one window");
 -        goto endfunction;
 +        /* Mobilix patch: the game makes a temporary window first and then the real one while the first still exists, but
-+         * Android has a single surface. The new window takes the surface over: the old one is left as an empty shell. */
++         * Android has a single surface. The new window takes the surface over: the old one is left as an empty shell,
++         * and the GL context that was current on it is made current again on the new window (the game does not redo that). */
 +        SDL_Window *old = Android_Window;
 +        SDL_WindowData *od = old->internal;
 +        Android_Window = NULL;
++#ifdef SDL_VIDEO_OPENGL_EGL
++        if (SDL_GL_GetCurrentWindow() == old) {
++            mobilix_prev_window = old;
++            mobilix_prev_ctx = SDL_GL_GetCurrentContext();
++        }
++#endif
 +        if (od) {
 +#ifdef SDL_VIDEO_OPENGL_EGL
 +            if (_this->egl_data) {
@@ -31,3 +41,17 @@ index 4652b5f..c09aa98 100644
      }
  
      // Set orientation
+@@ -98,6 +125,13 @@ bool Android_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
+     window->internal = data;
+     Android_Window = window;
+ 
++#ifdef SDL_VIDEO_OPENGL_EGL
++    if (mobilix_prev_ctx && (window->flags & SDL_WINDOW_OPENGL)) {
++        (void)mobilix_prev_window;
++        SDL_GL_MakeCurrent(window, mobilix_prev_ctx);
++    }
++#endif
++
+ endfunction:
+ 
+     Android_UnlockActivityMutex();
