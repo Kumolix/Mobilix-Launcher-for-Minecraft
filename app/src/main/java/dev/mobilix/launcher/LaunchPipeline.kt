@@ -785,6 +785,11 @@ private fun MainActivity.writeLaunchConfig(p: LaunchPlan) {
         val e = launch.optJSONObject("env") ?: JSONObject().also { launch.put("env", it) }
         e.put("MOBILIX_LWJGL_DIRS", p.lwjglPath)
     }
+    // SDL3: внутренние сообщения SDL (окно, EGL, события) через лог игры (Minecraft сам выводит их как «SDL [КАТЕГОРИЯ]»)
+    if (p.sdl3Dir != null) {
+        val e = launch.optJSONObject("env") ?: JSONObject().also { launch.put("env", it) }
+        e.put("SDL_LOGGING", "video=debug,render=debug,system=debug,error=debug,assert=debug")
+    }
     File(root, "launch.json").writeText(launch.toString())
     log("Команда запуска собрана (${cmd.size} аргументов).")
 }
