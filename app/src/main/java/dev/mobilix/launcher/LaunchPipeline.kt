@@ -309,11 +309,12 @@ private fun MainActivity.collectLibraries(p: LaunchPlan) {
     val libTasks = ArrayList<Task>()
     val cpMap = LinkedHashMap<String, String>()
     val libs = v.getJSONArray("libraries")
-    // Игры с LWJGL 3.2.x (1.17–1.18.2) тоже получают jar 3.3.3: готовых нативных библиотек 3.2.2 под Android нет,
+    // Игры с LWJGL 3.1–3.3.x (1.17–1.20.x, Forge) тоже получают jar 3.3.3: готовых нативных библиотек 3.2.2 под Android нет,
     // а 3.3.3 совпадает с тем, что уже работает для 1.13–1.16.5
     val gameLwjgl = (0 until libs.length()).map { libs.getJSONObject(it).optString("name") }
         .firstOrNull { it.startsWith("org.lwjgl:lwjgl:") }?.split(":")?.getOrNull(2) ?: ""
-    val swap3 = oldGl || gameLwjgl.startsWith("3.2") || gameLwjgl.startsWith("3.1")
+    val swap3 = oldGl || gameLwjgl.startsWith("3.2") || gameLwjgl.startsWith("3.1") ||
+        gameLwjgl.startsWith("3.3")   // 3.3.1 (1.20.x, Forge): полного набора нативных библиотек нет, подходит 3.3.3
     for (i in 0 until libs.length()) {
         val lib = libs.getJSONObject(i)
         if (!allowed(lib)) continue
