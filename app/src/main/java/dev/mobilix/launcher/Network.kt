@@ -351,9 +351,17 @@ internal fun MainActivity.netPage(): View {
             override fun run() {
                 if (!sv.isAttachedToWindow) return
                 if (ZtManager.enabled && tok.isNotEmpty()) Thread { for (k in 0 until nets.length()) { val id = nets.getJSONObject(k).optString("id"); if (ZtManager.joined(this@netPage, id) && ZtManager.ip(id) == null) ZtManager.authorizeSelf(tok, id) } }.start()
-                if (sv.findFocus() is EditText) sv.postDelayed(this, 10000) else refresh()
+                // страница перерисовывается только если изменился показанный текст (статус, адреса, события), положение прокрутки сохраняется:
+                // раньше она пересобиралась каждые 10 секунд целиком, и меню «дёргалось»
+                if (sv.findFocus() is EditText) { sv.postDelayed(this, 5000); return }
+                val fresh = netPage()
+                if (fresh is ScrollView && ztSig(fresh) != ztSig(sv)) {
+                    val y = sv.scrollY
+                    fresh.post { fresh.scrollTo(0, y) }
+                    openPage(tr("Онлайн по LAN", "Online over LAN"), fresh, animate = false)
+                } else sv.postDelayed(this, 5000)
             }
-        }, 10000)
+        }, 5000)
         return sv
     }
 
@@ -439,4 +447,16 @@ internal fun MainActivity.netPage(): View {
     body(hc, tr("1. В кабинете создайте сеть и скопируйте её ID.\n2. В ZeroTier One добавьте сеть по ID и включите её; в кабинете отметьте устройство галочкой Auth.\n3. Друзья делают то же самое.\n4. В Minecraft откройте мир для сети. В игре кнопка ↘ вверху по центру делится вашим адресом и портом.",
         "1. Create a network in the dashboard and copy its ID.\n2. Add the network by ID in ZeroTier One and switch it on; tick Auth for the device in the dashboard.\n3. Friends do the same.\n4. In Minecraft open the world to LAN. The ↘ button at the top centre of the game shares your address and port."))
     return sv
+}
+
+/** Подпись видимого текста страницы (без полей ввода): по ней понимаем, изменилось ли что-то на экране. */
+private fun ztSig(v: View): String {
+    val b = StringBuilder()
+    fun walk(x: View) {
+        if (x is EditText) return
+        if (x is TextView) b.append(x.text).append('\u0001')
+        if (x is ViewGroup) for (i in 0 until x.childCount) walk(x.getChildAt(i))
+    }
+    walk(v)
+    return b.toString()
 }
