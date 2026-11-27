@@ -446,7 +446,19 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     val oldGl = p.oldGl
     val java = ensureRuntime(root, javaMajor)
     val rt = java.parentFile!!.parentFile!!
-    val lwjglPath = ensureLwjgl(lwjglVer)
+    // 26.x (LWJGL 3.4.x): нативные 3.3.3 не годятся (нет ThreadLocalUtil.setupEnvData), а в архиве 3.4.1 лишь 2 библиотеки.
+    // Берём полный набор 3.4.3: минорные версии 3.4.x совместимы по JNI
+    val nativesVer = if (lwjglVer.startsWith("3.4")) "3.4.3" else lwjglVer
+    if (nativesVer != lwjglVer) log("LWJGL: для игры $lwjglVer берём нативные библиотеки $nativesVer")
+    val lwjglPath = ensureLwjgl(nativesVer)
+    // В наборе 3.4.x свой libopenal.so зависит от libc++_shared.so, которой нет в системе. В APK есть собственный libopenal.so
+    // (c++_static), поэтому лишний убираем: игра подхватит библиотеку из папки приложения
+    if (lwjglPath != null && File(applicationInfo.nativeLibraryDir, "libopenal.so").exists()) {
+        lwjglPath.split(":").forEach { d ->
+            val f = File(d, "libopenal.so")
+            if (f.exists()) { if (f.renameTo(File(d, "libopenal.so.unused"))) log("LWJGL: libopenal.so набора убран, используется встроенная") else f.delete() }
+        }
+    }
     val gl4es = File(applicationInfo.nativeLibraryDir, "libgl4es.so").takeIf { it.exists() }?.path
     if (oldGl && gl4es == null) log("ВНИМАНИЕ: gl4es нет в этой сборке, для старой версии используется MobileGlues (скорее всего не заработает).")
     // Рендерер: 0 авто, 1 MobileGlues, 2 MobileGlues + ANGLE, 3 gl4es. Для 1.17+ gl4es не подходит (нужен GL 3.2 core), для <1.13 нужен gl4es (слой LWJGL 2).

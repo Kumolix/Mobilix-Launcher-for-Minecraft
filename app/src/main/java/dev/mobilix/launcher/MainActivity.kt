@@ -365,10 +365,12 @@ class MainActivity : Activity() {
             col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
         val upd = if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else null
-        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Launcher-for-Minecraft",
-            "https://kumolix.github.io/Mobilix-Launcher-for-Minecraft/", upd != null)
-        link("github.png", "GitHub", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
+        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Web",
+            "https://kumolix.github.io/Mobilix-Web/", upd != null)
+        link("github.png", "GitHub • Android", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
             "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", upd != null)
+        link("github.png", "GitHub • Windows", upd ?: "Kumolix/Mobilix-Launcher-PC",
+            "https://github.com/Kumolix/Mobilix-Launcher-PC", upd != null)
         link("telegram.png", "Telegram", upd ?: "@mobilix_launcher", "https://t.me/mobilix_launcher", upd != null)
         link("tiktok.png", "TikTok", "@mobilix_launcher", "https://www.tiktok.com/@mobilix_launcher")
         link(null, tr("Политика конфиденциальности", "Privacy Policy"), tr("Данные не собираются", "No data is collected"), "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft/blob/main/PRIVACY.md")
@@ -2724,7 +2726,7 @@ class MainActivity : Activity() {
             val q = filter.text.toString().trim()
             fun section(name: String, items: List<String>, key: String) {
                 if (loader == "downloaded" || (loader != "all" && loader != key)) return
-                val f = items.filter { q.isEmpty() || it.contains(q) }
+                val f = items.filter { (q.isEmpty() || it.contains(q)) && !mcTooNew(it) }
                 if (f.isEmpty()) return
                 list.addView(TextView(this).apply { text = name; textSize = 20f; setTextColor(Th.accent); setPadding(0, dp(18), 0, dp(6)) })
                 list.addView(View(this).apply { setBackgroundColor(Th.act) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(2)))
@@ -3215,4 +3217,11 @@ class MainActivity : Activity() {
     @Volatile
     internal var lastDownloadError = ""
 
+}
+
+/** Версии Minecraft 26.3 и новее (SDL3 вместо GLFW) лаунчер пока не поддерживает: в списках версий их не показываем. */
+internal fun mcTooNew(id: String): Boolean {
+    val m = Regex("^(\\d{2})\\.(\\d+)").find(id) ?: return false
+    val major = m.groupValues[1].toInt(); val minor = m.groupValues[2].toInt()
+    return major > 26 || (major == 26 && minor >= 3)
 }
