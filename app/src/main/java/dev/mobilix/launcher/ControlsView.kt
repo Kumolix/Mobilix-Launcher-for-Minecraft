@@ -23,6 +23,8 @@ const val K_SCROLL = 2
 const val K_KEYBOARD = 3
 const val K_HIDE = 4
 const val K_VMOUSE = 5
+/** Поделиться адресом ZeroTier и портом открытого для сети мира (пишет их в чат и копирует). */
+const val K_SHAREIP = 6
 
 class Btn(
     var label: String, var kind: Int, var code: Int,
@@ -48,6 +50,7 @@ private val KEY_CHOICES: List<Triple<String, Int, Int>> = buildList {
     add(Triple("Экранная клавиатура", K_KEYBOARD, 0))
     add(Triple("Скрыть/показать кнопки", K_HIDE, 0))
     add(Triple("Виртуальная мышь вкл/выкл", K_VMOUSE, 0))
+    add(Triple("Поделиться IP (ZeroTier)", K_SHAREIP, 0))
     add(Triple("Колесо вверх", K_SCROLL, 1))
     add(Triple("Колесо вниз", K_SCROLL, -1))
     add(Triple("Пробел", K_KEY, 32)); add(Triple("Esc", K_KEY, 256)); add(Triple("Enter", K_KEY, 257))
@@ -163,7 +166,8 @@ class ControlsView(ctx: Context) : View(ctx) {
         buttons.add(Btn("⌨", K_KEYBOARD, 0, 0.12f, 0.07f, 40, 40))
         k("Чат", 'T'.code, 0.19f, 0.07f, 40); k("F5", 294, 0.26f, 0.07f, 40)
         k("II", 256, 0.50f, 0.07f, 44)
-        buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.61f, 0.07f, 40, 40))
+        buttons.add(Btn("↘", K_SHAREIP, 0, 0.61f, 0.07f, 40, 40))
+        buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.68f, 0.07f, 40, 40))
         k("Бросить", 'Q'.code, 0.88f, 0.07f, 40)
         // хотбар по центру, инвентарь справа от него
         for (i in 1..9) k(i.toString(), 48 + i, 0.5f + (i - 5) * 0.043f, 0.94f, 36)
@@ -188,7 +192,8 @@ class ControlsView(ctx: Context) : View(ctx) {
         // верхний ряд
         buttons.add(Btn("⌨", K_KEYBOARD, 0, 0.12f, 0.07f, 40, 40)); k("F3", 292, 0.33f, 0.07f, 40)
         buttons.add(Btn("GUI", K_HIDE, 0, 0.035f, 0.09f, 40, 40))
-        buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.61f, 0.07f, 40, 40))
+        buttons.add(Btn("↘", K_SHAREIP, 0, 0.61f, 0.07f, 40, 40))
+        buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.68f, 0.07f, 40, 40))
         k("F5", 294, 0.26f, 0.07f, 40); k("Чат", 'T'.code, 0.19f, 0.07f, 40); k("Esc", 256, 0.40f, 0.07f, 40)
         k("Инв.", 'E'.code, 0.47f, 0.07f, 40); k("Бросить", 'Q'.code, 0.54f, 0.07f, 40)
         // хотбар
@@ -200,7 +205,7 @@ class ControlsView(ctx: Context) : View(ctx) {
         try {
             val a = JSONArray()
             buttons.forEach { a.put(it.toJson()) }
-            file.writeText(JSONObject().put("v", 6).put("sens", sens.toDouble()).put("vm", vm).put("buttons", a).toString())
+            file.writeText(JSONObject().put("v", 7).put("sens", sens.toDouble()).put("vm", vm).put("buttons", a).toString())
         } catch (_: Throwable) {
         }
     }
@@ -227,6 +232,16 @@ class ControlsView(ctx: Context) : View(ctx) {
                 if (ver < 5) { buttons.firstOrNull { it.kind == K_KEY && it.code == 341 && it.label == "Бег" }?.toggle = true; save() }
                 if (ver < 6) {
                     if (buttons.none { it.kind == K_VMOUSE }) buttons.add(Btn("Мышь", K_VMOUSE, 0, 0.61f, 0.07f, 40, 40))
+                    save()
+                }
+                if (ver < 7) {
+                    // кнопка «Поделиться IP» встаёт перед мышью, мышь сдвигается правее (только если она стояла на месте по умолчанию)
+                    if (buttons.none { it.kind == K_SHAREIP }) {
+                        buttons.firstOrNull { it.kind == K_VMOUSE && it.cx == 0.61f && it.cy == 0.07f }?.let {
+                            it.cx = 0.68f
+                            buttons.add(Btn("↘", K_SHAREIP, 0, 0.61f, 0.07f, 40, 40))
+                        }
+                    }
                     save()
                 }
                 if (buttons.isNotEmpty()) return
@@ -430,6 +445,7 @@ class ControlsView(ctx: Context) : View(ctx) {
         if (b.kind == K_HIDE) { if (down && !editing) { hidden = !hidden; invalidate() }; return }
         if (b.kind == K_KEYBOARD) { if (down && !editing) toggleKeyboard(); return }
         if (b.kind == K_VMOUSE) { if (down && !editing) setVm(!vm); return }
+        if (b.kind == K_SHAREIP) { if (down && !editing) onShareIp?.invoke(); return }
         if (b.extra.isEmpty()) { fireOne(b.kind, b.code, down); return }
         // комбинация: нажимаем по порядку, отпускаем в обратном
         val all = listOf(intArrayOf(b.kind, b.code)) + b.extra
@@ -438,6 +454,7 @@ class ControlsView(ctx: Context) : View(ctx) {
 
     /** Вызывается, если Esc (в Bedrock — «II») удерживать 5 секунд: вход/выход из режима раскладки. */
     var onHoldEsc: (() -> Unit)? = null
+    var onShareIp: (() -> Unit)? = null
     private var escHold: Runnable? = null
 
     private fun press(b: Btn, down: Boolean) {
@@ -618,7 +635,7 @@ class ControlsView(ctx: Context) : View(ctx) {
                     b.kind = k; b.code = c; b.extra.clear()
                     if (b.label == "?" || b.label.isEmpty()) b.label = if (n.length <= 3) n else n.take(5)
                     picked = true
-                } else if (b.extra.size < 4 && k != K_KEYBOARD && k != K_HIDE && k != K_VMOUSE) {
+                } else if (b.extra.size < 4 && k != K_KEYBOARD && k != K_HIDE && k != K_VMOUSE && k != K_SHAREIP) {
                     b.extra.add(intArrayOf(k, c))
                 }
                 refresh(); invalidate(); save()
