@@ -1,4 +1,4 @@
-draft: 1.9.8
+version: 1.9.8
 What's new
 - Online over LAN: ZeroTier is built into the launcher (no extra app): collapsible cards (turn on, connected networks, my networks via ZeroTier Central with a Legacy-account token, connection); auto-join / auto-authorize; only the status, the on/off button and the "online" counters refresh on the page (no rebuilding); friends' IPs can be copied; in game a ↘ "Share IP" control button and the [ZeroTier] IP: line in chat
 - Launcher updates (Settings → Launcher): Off / Notify / Download
