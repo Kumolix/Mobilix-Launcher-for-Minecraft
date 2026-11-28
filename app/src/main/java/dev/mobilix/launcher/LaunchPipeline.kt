@@ -451,7 +451,8 @@ private fun MainActivity.prepareRuntime(p: LaunchPlan) {
     // Берём полный набор 3.4.3: минорные версии 3.4.x совместимы по JNI
     val nativesVer = if (lwjglVer.startsWith("3.4")) "3.4.3" else lwjglVer
     if (nativesVer != lwjglVer) log("LWJGL: для игры $lwjglVer берём нативные библиотеки $nativesVer")
-    val lwjglPath = ensureLwjgl(nativesVer)
+    // 26.1/26.2 (LWJGL 3.4.x): сначала набор из yuyi2439/AndroidLWJGL, при отсутствии нужной версии — остальные источники как раньше
+    val lwjglPath = ensureLwjgl(nativesVer, if (lwjglVer.startsWith("3.4")) "yuyi2439/AndroidLWJGL" else null)
     // В наборе 3.4.x свой libopenal.so зависит от libc++_shared.so, которой нет в системе. В APK есть собственный libopenal.so
     // (c++_static), поэтому лишний убираем: игра подхватит библиотеку из папки приложения
     if (lwjglPath != null && File(applicationInfo.nativeLibraryDir, "libopenal.so").exists()) {

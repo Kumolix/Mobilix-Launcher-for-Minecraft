@@ -105,7 +105,7 @@ internal fun MainActivity.ensureMobileGlues(): String? {
 // ---------- LWJGL под Android ----------
 
 /** Возвращает значение для -Dorg.lwjgl.librarypath или null, если библиотеки получить не удалось. */
-internal fun MainActivity.ensureLwjgl(version: String): String? {
+internal fun MainActivity.ensureLwjgl(version: String, preferRepo: String? = null): String? {
     if (version.isEmpty()) {
         log("Версия LWJGL не определена, пропуск.")
         return null
@@ -114,7 +114,7 @@ internal fun MainActivity.ensureLwjgl(version: String): String? {
     fun hasMain() = dir.exists() && dir.walkTopDown().any { it.isFile && it.name == "liblwjgl.so" }
     // нативные библиотеки должны точно совпадать с jar игры (3.2.2 для 1.17–1.18, 3.3.x для остальных)
     val stamp = File(dir, ".mobilix-lwjgl")
-    val want = if (isArm64) version else "pojav"
+    val want = if (isArm64) version + (if (preferRepo != null) "@" + preferRepo.substringBefore("/") else "") else "pojav"
     val have = try { stamp.readText().trim() } catch (e: Exception) { "" }
     if (hasMain() && have != want) {
         log("LWJGL: установлена другая версия ('" + (have.ifEmpty { "?" }) + "'), нужна '$want', переустановка")
@@ -122,7 +122,7 @@ internal fun MainActivity.ensureLwjgl(version: String): String? {
     }
     if (!hasMain()) {
         log("Установка LWJGL $version для Android...")
-        val archive = (if (isArm64) downloadLwjgl(version) else downloadPojavLwjgl()) ?: return null
+        val archive = (if (isArm64) downloadLwjgl(version, preferRepo) else downloadPojavLwjgl()) ?: return null
         dir.deleteRecursively()
         dir.mkdirs()
         try {
@@ -155,10 +155,10 @@ internal fun MainActivity.ensureLwjgl(version: String): String? {
     return libs.map { it.parentFile!!.path }.distinct().joinToString(":")
 }
 
-internal fun MainActivity.downloadLwjgl(version: String): File? {
+internal fun MainActivity.downloadLwjgl(version: String, preferRepo: String? = null): File? {
     val archiveRe = Regex("(?i).*\\.(zip|tar\\.xz|tar\\.gz)$")
     val skipRe = Regex("(?i)src|source|sha|sums")
-    for (repo in LWJGL_REPOS) {
+    for (repo in (if (preferRepo != null) listOf(preferRepo) + LWJGL_REPOS.filter { it != preferRepo } else LWJGL_REPOS)) {
         try {
             log("Источник LWJGL: $repo")
             val json = JSONArray(fetchText("https://api.github.com/repos/$repo/releases?per_page=30"))

@@ -354,7 +354,7 @@ class MainActivity : Activity() {
                 background = sel(if (hi) Th.altBg else Th.chip); isClickable = true
                 setOnClickListener { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {} }
             }
-            val ic: View = if (icon != null) ImageView(this).apply { setImageDrawable(asset(icon, icon == "site.png")); scaleType = ImageView.ScaleType.FIT_CENTER }
+            val ic: View = if (icon != null) ImageView(this).apply { setImageDrawable(asset(icon, false)); scaleType = ImageView.ScaleType.FIT_CENTER }
                 else PixelIcon(this, PixelIcon.SHIELD, PixelIcon.SHIELD_PAL)
             row.addView(ic, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(16) })
             val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -365,7 +365,7 @@ class MainActivity : Activity() {
             col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72)).apply { bottomMargin = dp(12) })
         }
         val upd = if (updateVer != null) tr("● Вышло обновление $updateVer", "● Update $updateVer available") else null
-        link("site.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Web",
+        link("web.png", tr("Сайт", "Website"), upd ?: "kumolix.github.io/Mobilix-Web",
             "https://kumolix.github.io/Mobilix-Web/", upd != null)
         link("github.png", "GitHub • Android", upd ?: "Kumolix/Mobilix-Launcher-for-Minecraft",
             "https://github.com/Kumolix/Mobilix-Launcher-for-Minecraft", upd != null)

@@ -184,13 +184,20 @@ private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
             row.addView(TextView(this).apply { text = name.ifEmpty { tr("Сеть", "Network") }; textSize = 15f; setTextColor(Th.text) })
             val cnt = TextView(this).apply { text = id; textSize = 12f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE }
             row.addView(cnt)
-            Thread {   // счётчик считаем по списку участников: поле сети отстаёт
-                try {
-                    val ms = JSONArray(ZtCentral.call(token, "GET", "/network/$id/member"))
-                    var on = 0; for (q in 0 until ms.length()) if (ztOnline(ms.getJSONObject(q))) on++
-                    runOnUiThread { cnt.text = id + "  ·  " + tr("онлайн ", "online ") + on + tr(" из ", " of ") + ms.length() }
-                } catch (_: Exception) {}
-            }.start()
+            var lastLoad = 0L
+            fun loadCount() {   // счётчик считаем по списку участников: поле сети отстаёт
+                lastLoad = System.currentTimeMillis()
+                Thread {
+                    try {
+                        val ms = JSONArray(ZtCentral.call(token, "GET", "/network/$id/member"))
+                        var on = 0; for (q in 0 until ms.length()) if (ztOnline(ms.getJSONObject(q))) on++
+                        val t = id + "  ·  " + tr("онлайн ", "online ") + on + tr(" из ", " of ") + ms.length()
+                        runOnUiThread { if (cnt.text.toString() != t) cnt.text = t }
+                    } catch (_: Exception) {}
+                }.start()
+            }
+            loadCount()
+            ztLive.add { if (cnt.isAttachedToWindow && System.currentTimeMillis() - lastLoad > 12000) loadCount() }
             val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, 0) }
             fun act(t: String, col: Int, f: () -> Unit) = r2.addView(TextView(this).apply { text = t; setTextColor(col); textSize = 13f; setPadding(0, dp(4), dp(18), dp(4)); setOnClickListener { f() } })
             act(tr("Участники", "Members"), Th.accent) { ztMembers(token, id, name) }
@@ -225,7 +232,11 @@ private fun MainActivity.ztCentralCard(c: LinearLayout, refresh: () -> Unit) {
 private fun MainActivity.ztNets(): JSONArray = try { JSONArray(prefs.getString("ztNets", "[]")) } catch (_: Exception) { JSONArray() }
 
 /** Страница «Сеть»: установка ZeroTier One, мой адрес, сохранённые сети. */
+/** Обновлялки видимых надписей текущей страницы ZeroTier (вызываются по таймеру без пересборки страницы). */
+private val ztLive = ArrayList<() -> Unit>()
+
 internal fun MainActivity.netPage(): View {
+    ztLive.clear()
     val sv = ScrollView(this)
     val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(28)) }
     sv.addView(col)
@@ -260,22 +271,50 @@ internal fun MainActivity.netPage(): View {
     if (ZtManager.libOk(this)) {
         fun later() { sv.postDelayed({ refresh() }, 1500) }
         val running = ZtManager.enabled
-        val st = fold("0", if (running) "ZeroTier" else tr("Включить ZeroTier", "Turn ZeroTier on"))
-        val err = ZtManager.error
-        st.addView(TextView(this).apply {
-            text = when { err != null -> "✕ " + err; ZtManager.online() -> "● " + tr("Узел ZeroTier в сети", "ZeroTier node online"); running -> "… " + tr("Запуск узла", "Starting node"); else -> "○ " + tr("Узел выключен", "Node is off") }
-            textSize = 13f; setTextColor(if (ZtManager.online()) Th.accent else Th.dim); typeface = Typeface.DEFAULT_BOLD
-        })
-        ZtManager.nodeId()?.let { id ->
-            st.addView(TextView(this).apply { text = id; textSize = 22f; setTextColor(Th.text); typeface = Typeface.create("monospace", Typeface.BOLD); setPadding(0, dp(6), 0, 0) })
-            body(st, tr("ID вашего узла (его видно в кабинете ZeroTier в списке участников).", "Your node ID (shown in the ZeroTier dashboard member list)."))
+        val st = fold("0", "ZeroTier")
+        // Живое обновление: страница не пересобирается, меняются только текст статуса, кнопка вкл/выкл и число «онлайн» в сетях
+        val statusTv = TextView(this).apply { textSize = 13f; typeface = Typeface.DEFAULT_BOLD }
+        fun paintStatus() {
+            val err = ZtManager.error; val on = ZtManager.online(); val run = ZtManager.enabled
+            statusTv.text = when { err != null -> "✕ " + err; on -> "● " + tr("Узел ZeroTier в сети", "ZeroTier node online"); run -> "… " + tr("Запуск узла", "Starting node"); else -> "○ " + tr("Узел выключен", "Node is off") }
+            statusTv.setTextColor(if (on) Th.accent else Th.dim)
         }
-        if (running) st.addView(TextView(this).apply {
-            text = (if (ZtManager.events.isEmpty()) tr("событий пока нет", "no events yet") else ZtManager.events.joinToString("\n"))
-            textSize = 10.5f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE; setPadding(0, dp(8), 0, 0)
-        })
-        if (!running) btn(st, tr("Включить ZeroTier", "Turn ZeroTier on")) { ZtManager.start(this); later() }
-        else btn(st, tr("Выключить", "Turn off"), false) { ZtManager.stop(this); refresh() }
+        paintStatus()
+        st.addView(statusTv)
+        val idBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val idTv = TextView(this).apply { textSize = 22f; setTextColor(Th.text); typeface = Typeface.create("monospace", Typeface.BOLD); setPadding(0, dp(6), 0, 0) }
+        idBox.addView(idTv)
+        body(idBox, tr("ID вашего узла (его видно в кабинете ZeroTier в списке участников).", "Your node ID (shown in the ZeroTier dashboard member list)."))
+        st.addView(idBox)
+        fun paintId() { val id = ZtManager.nodeId(); if (id != null) { if (idTv.text.toString() != id) idTv.text = id; idBox.visibility = View.VISIBLE } else idBox.visibility = View.GONE }
+        paintId()
+        val evTv = TextView(this).apply { textSize = 10.5f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE; setPadding(0, dp(8), 0, 0) }
+        fun paintEvents() {
+            evTv.text = (if (ZtManager.events.isEmpty()) tr("событий пока нет", "no events yet") else ZtManager.events.joinToString("\n"))
+            evTv.visibility = if (ZtManager.enabled) View.VISIBLE else View.GONE
+        }
+        paintEvents()
+        st.addView(evTv)
+        val toggle = Button(this).apply {
+            isAllCaps = false
+            setOnClickListener {
+                if (!ZtManager.enabled) { ZtManager.start(this@netPage) } else ZtManager.stop(this@netPage)
+                sv.postDelayed({ ztLive.toList().forEach { f -> try { f() } catch (_: Exception) {} } }, 400)
+            }
+        }
+        var lastRun = !running
+        fun paintToggle() {
+            val run = ZtManager.enabled
+            if (run == lastRun) return
+            lastRun = run
+            toggle.text = if (run) tr("Выключить", "Turn off") else tr("Включить ZeroTier", "Turn ZeroTier on")
+            toggle.setTextColor(if (run) Th.chipText else android.graphics.Color.WHITE)
+            toggle.background = sel(if (run) Th.chip else Th.act)
+            paintEvents()
+        }
+        paintToggle()
+        st.addView(toggle, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46)).apply { topMargin = dp(12) })
+        ztLive.add { paintStatus(); paintId(); paintToggle() }
         btn(st, tr("Обновить", "Refresh"), false) { refresh() }
 
         val nets = ztNets()
@@ -289,10 +328,14 @@ internal fun MainActivity.netPage(): View {
             val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); background = rr(Th.chip, 14) }
             row.addView(TextView(this).apply { text = o.optString("name").ifEmpty { tr("Сеть", "Network") }; textSize = 15f; setTextColor(Th.text) })
             row.addView(TextView(this).apply { text = id; textSize = 12f; setTextColor(Th.dim); typeface = Typeface.MONOSPACE })
-            row.addView(TextView(this).apply {
-                text = when { ip != null -> "● " + tr("подключено, ваш адрес ", "connected, your address ") + ip; joined -> "… " + tr("ждём разрешения хозяина", "waiting for owner approval"); else -> "○ " + tr("не подключено", "not connected") }
-                textSize = 13f; setTextColor(if (ip != null) Th.accent else Th.dim); setPadding(0, dp(4), 0, 0)
-            })
+            val rowSt = TextView(this).apply { textSize = 13f; setPadding(0, dp(4), 0, 0) }
+            fun paintRow() {
+                val ipn = ZtManager.ip(id); val jn = ZtManager.joined(this@netPage, id)
+                rowSt.text = when { ipn != null -> "● " + tr("подключено, ваш адрес ", "connected, your address ") + ipn; jn -> "… " + tr("ждём разрешения хозяина", "waiting for owner approval"); else -> "○ " + tr("не подключено", "not connected") }
+                rowSt.setTextColor(if (ipn != null) Th.accent else Th.dim)
+            }
+            paintRow(); ztLive.add { paintRow() }
+            row.addView(rowSt)
             val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(6), 0, 0) }
             fun act(t: String, col: Int, f: () -> Unit) = r2.addView(TextView(this).apply { text = t; setTextColor(col); textSize = 13f; setPadding(0, dp(4), dp(18), dp(4)); setOnClickListener { f() } })
             if (joined) act(tr("Отключить", "Leave"), Th.accent) { ZtManager.leave(this, id); refresh() }
@@ -351,15 +394,9 @@ internal fun MainActivity.netPage(): View {
             override fun run() {
                 if (!sv.isAttachedToWindow) return
                 if (ZtManager.enabled && tok.isNotEmpty()) Thread { for (k in 0 until nets.length()) { val id = nets.getJSONObject(k).optString("id"); if (ZtManager.joined(this@netPage, id) && ZtManager.ip(id) == null) ZtManager.authorizeSelf(tok, id) } }.start()
-                // страница перерисовывается только если изменился показанный текст (статус, адреса, события), положение прокрутки сохраняется:
-                // раньше она пересобиралась каждые 10 секунд целиком, и меню «дёргалось»
-                if (sv.findFocus() is EditText) { sv.postDelayed(this, 5000); return }
-                val fresh = netPage()
-                if (fresh is ScrollView && ztSig(fresh) != ztSig(sv)) {
-                    val y = sv.scrollY
-                    fresh.post { fresh.scrollTo(0, y) }
-                    openPage(tr("Онлайн по LAN", "Online over LAN"), fresh, animate = false)
-                } else sv.postDelayed(this, 5000)
+                // страница не пересобирается: обновляются только статус, вкл/выкл и число «онлайн»
+                if (sv.findFocus() !is EditText) ztLive.toList().forEach { f -> try { f() } catch (_: Exception) {} }
+                sv.postDelayed(this, 5000)
             }
         }, 5000)
         return sv
@@ -447,16 +484,4 @@ internal fun MainActivity.netPage(): View {
     body(hc, tr("1. В кабинете создайте сеть и скопируйте её ID.\n2. В ZeroTier One добавьте сеть по ID и включите её; в кабинете отметьте устройство галочкой Auth.\n3. Друзья делают то же самое.\n4. В Minecraft откройте мир для сети. В игре кнопка ↘ вверху по центру делится вашим адресом и портом.",
         "1. Create a network in the dashboard and copy its ID.\n2. Add the network by ID in ZeroTier One and switch it on; tick Auth for the device in the dashboard.\n3. Friends do the same.\n4. In Minecraft open the world to LAN. The ↘ button at the top centre of the game shares your address and port."))
     return sv
-}
-
-/** Подпись видимого текста страницы (без полей ввода): по ней понимаем, изменилось ли что-то на экране. */
-private fun ztSig(v: View): String {
-    val b = StringBuilder()
-    fun walk(x: View) {
-        if (x is EditText) return
-        if (x is TextView) b.append(x.text).append('\u0001')
-        if (x is ViewGroup) for (i in 0 until x.childCount) walk(x.getChildAt(i))
-    }
-    walk(v)
-    return b.toString()
 }
