@@ -354,7 +354,7 @@ class MainActivity : Activity() {
                 background = sel(if (hi) Th.altBg else Th.chip); isClickable = true
                 setOnClickListener { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) } catch (_: Exception) {} }
             }
-            val ic: View = if (icon != null) ImageView(this).apply { setImageDrawable(asset(icon, false)); scaleType = ImageView.ScaleType.FIT_CENTER }
+            val ic: View = if (icon != null) ImageView(this).apply { setImageDrawable(asset(icon, icon == "web.png")); scaleType = ImageView.ScaleType.FIT_CENTER }
                 else PixelIcon(this, PixelIcon.SHIELD, PixelIcon.SHIELD_PAL)
             row.addView(ic, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(16) })
             val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -884,6 +884,41 @@ class MainActivity : Activity() {
         return null
     }
 
+    /**
+     * Fabric: «Mod X requires any 0.9.x version of mod Y, but only the wrong version is present».
+     * Ставит версию Y, подходящую под условие. Если такой версии под вашу игру нет, отключает мод X, который её требует.
+     */
+    private fun replaceByRule(rep: CrashDoctor.Report, depId: String, pred: String, requirerId: String): String? {
+        val old = rep.mods.firstOrNull { it.id == depId } ?: return null
+        val ld = loaderOfProfile(selectedProfile())
+        val g = "?game_versions=" + java.net.URLEncoder.encode("[\"${curBase()}\"]", "UTF-8") + "&loaders=" + java.net.URLEncoder.encode(JSONArray(loaderCats(ld)).toString(), "UTF-8")
+        val vers = try { JSONArray(apiGet("/project/$depId/version$g")) } catch (_: Throwable) { return null }
+        for (i in 0 until minOf(vers.length(), 40)) {
+            val vo = vers.getJSONObject(i)
+            // номер версии в Modrinth бывает «0.9.0+mc26.1.2» или «mc26.1.2-0.9.0-fabric»: подходит, если условию отвечает любая числовая часть
+            val vn = vo.optString("version_number")
+            if (!(CrashDoctor.satisfies(vn, pred) || Regex("\\d+(?:\\.\\d+)+").findAll(vn).any { CrashDoctor.satisfies(it.value, pred) })) continue
+            val files = vo.getJSONArray("files")
+            if (files.length() == 0) continue
+            var f = files.getJSONObject(0)
+            for (k in 0 until files.length()) if (files.getJSONObject(k).optBoolean("primary")) f = files.getJSONObject(k)
+            if (f.getString("filename") == old.file.name) continue
+            val tmp = File(cacheDir, "rule_$i.jar")
+            try {
+                if (!download(f.getString("url"), tmp, f.optJSONObject("hashes")?.optString("sha1")?.ifEmpty { null })) continue
+                val dest = File(old.file.parentFile, f.getString("filename"))
+                val oldName = old.file.name
+                old.file.delete()
+                tmp.copyTo(dest, overwrite = true)
+                return old.name + ": " + oldName + " → " + dest.name + " (" + tr("нужна версия $pred", "required version $pred") + ")"
+            } finally { tmp.delete() }
+        }
+        val req = rep.mods.firstOrNull { it.id == requirerId } ?: return null
+        val off = CrashDoctor.disable(rep, listOf(req))
+        return if (off.isEmpty()) null
+        else tr("Отключён: ", "Disabled: ") + off.joinToString(", ") + tr(" (для вашей игры нет ${old.name} версии $pred)", " (no ${old.name} $pred exists for your game version)")
+    }
+
     /** Докачивает недостающие моды-зависимости с Modrinth под текущую версию и загрузчик. Вызывается в фоновом потоке. Возвращает (установлено, не удалось). */
     private fun installMissingDeps(ids: List<String>, gd: File): Pair<List<String>, List<String>> {
         val ok = ArrayList<String>(); val bad = ArrayList<String>()
@@ -956,6 +991,7 @@ class MainActivity : Activity() {
             sb.append(tr("Подозрительные моды:", "Suspect mods:")).append('\n')
             rep.suspects.forEach { sb.append("• ").append(it.mod.name).append(" — ").append(it.why).append('\n') }
         } else sb.append(tr("Виновный мод не определён.", "No culprit mod was identified.")).append('\n')
+        rep.replace.forEach { (did, pred, req) -> sb.append('\n').append(tr("Несовместимые версии: ", "Incompatible versions: ")).append(rep.mods.firstOrNull { it.id == req }?.name ?: req.ifEmpty { "?" }).append(tr(" требует ", " requires ")).append(rep.mods.firstOrNull { it.id == did }?.name ?: did).append(" ").append(pred).append('\n') }
         if (rep.missing.isNotEmpty()) sb.append('\n').append(tr("Не хватает модов-зависимостей: ", "Missing dependency mods: ")).append(rep.missing.joinToString(", ")).append('\n')
         rep.notes.forEach { sb.append('\n').append(it) }
         if (rep.hasRenderMod && prefs.getInt("renderPreset", 2) == 0)
@@ -963,7 +999,7 @@ class MainActivity : Activity() {
         val d = MobDialog(this).setTitle(tr("Вылет игры", "Game crash")).setMessage(sb.toString())
             .setNegativeButton(tr("Закрыть", "Close"), null)
             .setNeutralButton(tr("Вручную", "Manually")) { _, _ -> crashManual(rep, rep.suspects.map { it.mod.id }.toMutableSet()) }
-        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
+        if (rep.suspects.isNotEmpty() || rep.missing.isNotEmpty() || rep.updates.isNotEmpty() || rep.replace.isNotEmpty()) d.setPositiveButton(tr("Исправить автоматически", "Fix automatically")) { _, _ ->
             val off = if (rep.suspects.isNotEmpty()) CrashDoctor.disable(rep, rep.suspects.map { it.mod }) else emptyList()
             Toast.makeText(this, tr("Исправляю…", "Fixing…"), Toast.LENGTH_SHORT).show()
             Thread {
@@ -987,6 +1023,12 @@ class MainActivity : Activity() {
                             upBad.add(old.name + " (" + tr("нужна версия ≥ $need, для вашей версии игры её нет, а подходящую старую версию $breaker подобрать не удалось", "need version ≥ $need, none for your game version, and no matching older $breaker was found") + ")")
                         }
                     }
+                }
+                // версия мода не подходит тому, кто её требует (Iris просит Sodium 0.9.x): ставим нужную версию, иначе отключаем «требующего»
+                for ((did, pred, req) in rep.replace) {
+                    val r = try { replaceByRule(rep, did, pred, req) } catch (_: Throwable) { null }
+                    if (r != null) upOk.add(r)
+                    else upBad.add((rep.mods.firstOrNull { it.id == did }?.name ?: did) + " (" + tr("нужна версия $pred, подобрать не удалось", "need version $pred, could not find one") + ")")
                 }
                 // зависимости считаем заново, уже без отключённых модов
                 val need = (CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)) + rep.missing.filter { m -> off.isEmpty() || CrashDoctor.missingDeps(CrashDoctor.enabledMods(rep.gameDir)).contains(m) }).distinct()

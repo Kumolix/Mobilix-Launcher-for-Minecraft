@@ -19,6 +19,7 @@ object CrashDoctor {
         val hasRenderMod: Boolean,
         val missing: List<String> = emptyList(),   // id модов-зависимостей, которых нет в сборке
         val updates: List<Triple<String, String, String>> = emptyList(),   // (id устаревшего мода, минимальная версия, id мода, который её требует)
+        val replace: List<Triple<String, String, String>> = emptyList(),   // (id мода с неподходящей версией, условие Fabric на версию («0.9.x», «>=1.2»), id мода, который её требует)
     )
     class Detected(val gameDir: File, val start: Long, val kind: String)
 
@@ -149,6 +150,15 @@ object CrashDoctor {
         val updates = LinkedHashMap<String, Pair<String, String>>()
         val incompat = Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?is incompatible with any version before (\\S+?)!? of mod '([^']+)' \\(([^)]+)\\)")
         incompat.findAll(text).forEach { m -> if (byId.containsKey(m.groupValues[5])) updates[m.groupValues[5]] = m.groupValues[3].trimEnd('!', '.') to m.groupValues[2] }
+        // 1c. «Mod 'Iris' (iris) 1.11.4 requires any 0.9.x version of mod 'Sodium' (sodium), but only the wrong version is present: 0.8.9» — заменить нужно Sodium, а не Iris
+        val replace = LinkedHashMap<String, Pair<String, String>>()
+        Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?requires (?:any (\\S+) version|version ([^\\n]+?)) of mod '([^']+)' \\(([^)]+)\\), but only the wrong version").findAll(text).forEach { m ->
+            val dep = m.groupValues[6]
+            val pred = m.groupValues[3].ifEmpty { m.groupValues[4].trim().let { t -> if (t.endsWith(" or later")) ">=" + t.removeSuffix(" or later").trim() else t } }
+            if (byId.containsKey(dep) && pred.isNotEmpty()) replace[dep] = pred to m.groupValues[2]
+        }
+        // запасной вариант: готовое решение Fabric «Replace mod 'Sodium' (sodium) 0.8.9 with any 0.9.x version»
+        Regex("Replace mod '([^']+)' \\(([^)]+)\\) \\S+ with any (\\S+) version").findAll(text).forEach { m -> if (byId.containsKey(m.groupValues[2]) && !replace.containsKey(m.groupValues[2])) replace[m.groupValues[2]] = m.groupValues[3] to "" }
         // «Fix: … Remove mod 'Iris' (iris)» — решение, которое предлагает сам Fabric (запасной вариант)
         Regex("Remove mod '([^']+)' \\(([^)]+)\\)").findAll(text).forEach { m -> if (!updates.containsKey(m.groupValues[2])) add(m.groupValues[2], tr("Fabric предлагает убрать этот мод (несовместим с другими)", "Fabric suggests removing this mod (incompatible with others)")) }
         // 2. Ошибки зависимостей Fabric: «Mod 'X' (id) requires/conflicts/breaks …»
@@ -176,10 +186,11 @@ object CrashDoctor {
         if (reason.isEmpty() && (!javaError || d.kind != "crash")) {
             renderMods.forEach { add(it.id, tr("рендер-мод: на мобильном рендере часто роняет игру без ошибки в логе", "render mod: often crashes the game on the mobile renderer with no log error")) }
         }
-        val suspects = reason.entries.filter { !updates.containsKey(it.key) }.map { Suspect(byId[it.key]!!, it.value) }
+        val replacers = replace.values.map { it.second }.toSet()
+        val suspects = reason.entries.filter { !updates.containsKey(it.key) && !replace.containsKey(it.key) && it.key !in replacers }.map { Suspect(byId[it.key]!!, it.value) }
         val missing = LinkedHashSet<String>(missingDeps(mods))
         Regex("[Mm]od '([^']+)' \\(([^)]+)\\)[^\\n]*?which is missing").findAll(text).forEach { m -> if (m.groupValues[2] !in BUILTIN) missing.add(m.groupValues[2]) }
-        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList(), updates.entries.map { Triple(it.key, it.value.first, it.value.second) })
+        return Report(gd, mods, suspects, notes.distinct().take(5), !javaError, renderMods.isNotEmpty(), missing.toList(), updates.entries.map { Triple(it.key, it.value.first, it.value.second) }, replace.entries.map { Triple(it.key, it.value.first, it.value.second) })
     }
 
     /** Отключает моды (переименование в .disabled) вместе с модами, которые от них зависят. Возвращает названия отключённых. */
