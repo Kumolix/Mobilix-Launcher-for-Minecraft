@@ -2674,13 +2674,14 @@ class MainActivity : Activity() {
     }
     /** Категории Modrinth для загрузчика: Quilt запускает и моды Fabric. */
     internal fun loaderCats(l: String) = if (l == "quilt") listOf("quilt", "fabric") else listOf(l)
-    internal fun kindLabel(kind: String, mc: String) = when (kind) { "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; "quilt" -> "Quilt $mc"; "neoforge" -> "NeoForge $mc"; else -> mc }
+    internal fun kindLabel(kind: String, mc: String) = when (kind) { "corelix" -> "Corelix $mc"; "fabric" -> "Fabric $mc"; "forge" -> "Forge $mc"; "quilt" -> "Quilt $mc"; "neoforge" -> "NeoForge $mc"; else -> mc }
 
     /** Установленный профиль нужного типа для версии игры, либо null. */
     internal fun findProfile(kind: String, mc: String): String? {
         val ids = installedProfiles()
         return when (kind) {
             "vanilla" -> ids.firstOrNull { it == mc && File(dataRoot(), "versions/$it/$it.jar").exists() }
+            "corelix" -> ids.firstOrNull { it == corelixProfileId(mc) }
             "fabric" -> ids.firstOrNull { it.startsWith("fabric-loader-") && it.endsWith("-$mc") }
             "quilt" -> ids.firstOrNull { it.startsWith("quilt-loader-") && it.endsWith("-$mc") }
             "neoforge" -> ids.firstOrNull { it.startsWith("neoforge-") && (neoMc(it.removePrefix("neoforge-")) == mc) }
@@ -2712,6 +2713,7 @@ class MainActivity : Activity() {
         box.addView(sv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val vanilla = ArrayList<String>(); val fabric = ArrayList<String>(); val forge = ArrayList<String>()
+        val corelix = ArrayList<String>()   // отдельный загрузчик выше Vanilla
         val quilt = ArrayList<String>(); val neoforge = ArrayList<String>()
         var loader = "all"
         val root = getExternalFilesDir(null) ?: filesDir
@@ -2761,6 +2763,7 @@ class MainActivity : Activity() {
                     list.addView(View(this).apply { setBackgroundColor(Th.line2) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)))
                 }
             }
+            section("Corelix", corelix, "corelix")
             section("Vanilla", vanilla, "vanilla"); section("Fabric", fabric, "fabric"); section("Quilt", quilt, "quilt"); section("Forge", forge, "forge"); section("NeoForge", neoforge, "neoforge")
             if (loader == "all" || loader == "downloaded") {
                 val mine = installedProfiles().filter { q.isEmpty() || it.contains(q) || prettyProfile(it).contains(q) }
@@ -2795,7 +2798,7 @@ class MainActivity : Activity() {
         }
 
         // три кнопки в один ряд, без прокрутки: «Все», «Выбрать загрузчик» (как «Импорт»), «Скачанные»
-        val loaderNames = listOf("vanilla" to "Vanilla", "fabric" to "Fabric", "quilt" to "Quilt", "forge" to "Forge", "neoforge" to "NeoForge")
+        val loaderNames = listOf("corelix" to "Corelix", "vanilla" to "Vanilla", "fabric" to "Fabric", "quilt" to "Quilt", "forge" to "Forge", "neoforge" to "NeoForge")
         val allBtn = TextView(this).apply { text = tr("Все", "All"); textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true }
         val dlBtn = TextView(this).apply { text = tr("Скачанные", "Downloaded"); textSize = 14f; setTextColor(Th.chipText); gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true }
         val pickBtn = TextView(this).apply { textSize = 14f; gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8)); isClickable = true; maxLines = 1 }
@@ -2840,7 +2843,10 @@ class MainActivity : Activity() {
                     else if (o.getString("type") == "old_alpha" && id.startsWith("c0.")) van.add(id)   // Minecraft Classic
                     if (id == "1.0") cut = true   // 1.0–1.5.2 запускаются через слой без окна AWT (OldMain)
                 }
-                runOnUiThread { vanilla.addAll(van); loaded = true; render() }
+                val cxOk = corelixSupported()
+                runOnUiThread { vanilla.addAll(van); corelix.addAll(van.filter { it in cxOk }); loaded = true; render() }
+                // кеш Corelix: если релиз ещё не скачан, подтягиваем его заранее (и заодно список поддерживаемых версий)
+                if (!corelixCached()) Thread { ensureCorelix(); val now = corelixSupported(); if (now != cxOk) runOnUiThread { corelix.clear(); corelix.addAll(vanilla.filter { it in now }); render() } }.start()
             } catch (e: Throwable) {
                 log("Список версий: $e")
                 runOnUiThread { loaded = true; render() }
@@ -3163,6 +3169,7 @@ class MainActivity : Activity() {
     internal fun prettyProfile(id: String): String = when {
         id.startsWith("quilt-loader-") -> "Quilt " + id.substringAfterLast("-") + " (" + id.removePrefix("quilt-loader-").substringBeforeLast("-") + ")"
         id.startsWith("neoforge-") -> "NeoForge " + (neoMc(id.removePrefix("neoforge-")) ?: "") + " (" + id.removePrefix("neoforge-") + ")"
+        id.startsWith("corelix-") -> "Corelix " + id.removePrefix("corelix-")
         id.startsWith("fabric-loader-") -> "Fabric " + id.substringAfterLast("-") + " (" + id.removePrefix("fabric-loader-").substringBeforeLast("-") + ")"
         id.contains("-forge-") -> "Forge " + id.substringBefore("-forge-") + " (" + id.substringAfter("-forge-") + ")"
         Regex("^[\\d.]+-forge[\\d.]+-.+").matches(id) -> "Forge " + id.substringBefore("-forge") + " (" + id.substringAfter("-forge").removePrefix(id.substringBefore("-forge")).removePrefix("-") + ")"

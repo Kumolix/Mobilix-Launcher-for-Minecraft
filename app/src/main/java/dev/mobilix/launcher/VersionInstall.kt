@@ -54,6 +54,7 @@ import org.json.JSONObject
 // Функции вынесены из MainActivity как расширения без изменения логики.
 
 internal fun MainActivity.profileKindMc(p: String): Pair<String, String> = when {
+    p.startsWith("corelix-") -> "corelix" to p.removePrefix("corelix-")
     p.startsWith("fabric-loader-") -> "fabric" to p.substringAfterLast("-")
     p.startsWith("quilt-loader-") -> "quilt" to p.substringAfterLast("-")
     p.startsWith("neoforge-") -> "neoforge" to (neoMc(p.removePrefix("neoforge-")) ?: p)
@@ -135,6 +136,16 @@ internal fun MainActivity.installProfile(kind: String, mc: String, done: () -> U
             logFile = File(root, "launcher.log").also { it.writeText("") }
             var id = mc
             when (kind) {
+                "corelix" -> {
+                    if (mc !in corelixSupported()) throw RuntimeException("Corelix не поддерживает $mc")
+                    id = corelixProfileId(mc)
+                    val prof = JSONObject().put("id", id).put("inheritsFrom", mc).put("type", "release")
+                        .put("mainClass", "net.minecraft.client.main.Main").put("libraries", JSONArray())
+                        .put("arguments", JSONObject().put("jvm", JSONArray()).put("game", JSONArray()))
+                    val f = File(root, "versions/$id/$id.json"); f.parentFile?.mkdirs(); f.writeText(prof.toString())
+                    prepareAndRun(id, false)
+                    ensureCorelix()   // заранее скачиваем загрузчик, чтобы первый запуск не ждал
+                }
                 "fabric" -> {
                     log("Fabric $mc: поиск загрузчика…")
                     val ls = JSONArray(fetchText("https://meta.fabricmc.net/v2/versions/loader/$mc"))
